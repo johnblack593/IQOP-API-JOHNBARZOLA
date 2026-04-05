@@ -1,0 +1,28 @@
+# Python overrides
+*.py[cod]
+__pycache__/
+*.egg-info/
+
+# Tests & Coverage
+.pytest_cache/
+.coverage
+coverage.xml
+tests/__pycache__/
+*.log
+
+# Build & Dist
+build/
+dist/
+
+# Env & Config
+venv/
+.env
+
+# IDEs
+.vscode/
+/.vs
+.idea
+
+# Custom test scripts
+test.py
+scripts/
