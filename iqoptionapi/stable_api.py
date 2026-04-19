@@ -6,6 +6,8 @@ import threading
 import time
 import json
 from iqoptionapi.logger import get_logger
+from iqoptionapi.reconnect import ReconnectManager, MaxReconnectAttemptsError
+from iqoptionapi.idempotency import IdempotencyRegistry
 from iqoptionapi.security import CredentialStore, generate_user_agent
 import logging
 import operator
@@ -32,6 +34,8 @@ class IQ_Option:
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
         self._credential_store = CredentialStore(email, password)
+        self._reconnect_manager = ReconnectManager()
+        self._idempotency = IdempotencyRegistry()
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
@@ -93,6 +97,9 @@ class IQ_Option:
                              cookies=self.SESSION_COOKIE)
 
         check, reason = self.api.connect(self._credential_store.consume())
+        if check:
+            self._reconnect_manager.reset()
+            self._idempotency.purge_expired()
 
         if check == True:
             # -------------reconnect subscribe_candle
@@ -265,14 +272,24 @@ class IQ_Option:
                     self.api.get_api_option_init_all()
                     break
                 except Exception as e:
-                    get_logger(__name__).error('**error** get_all_init need reconnect')
-                    self.connect()
-                    time.sleep(5)
+                    get_logger(__name__).error('get_all_init error: %s', e)
+                    try:
+                        self._reconnect_manager.wait()
+                        self.connect()
+                    except MaxReconnectAttemptsError:
+                        get_logger(__name__).critical("get_all_init: reconnection attempts exhausted. Aborting.")
+                        raise
             start = time.time()
             while True:
                 time.sleep(0.05)
                 if time.time() - start > 30:
-                    get_logger(__name__).error('**warning** get_all_init late 30 sec')
+                    get_logger(__name__).error('get_all_init_v2 error: late 30 sec')
+                    try:
+                        self._reconnect_manager.wait()
+                        self.connect()
+                    except MaxReconnectAttemptsError:
+                        get_logger(__name__).critical("get_all_init_v2: reconnection attempts exhausted. Aborting.")
+                        raise
                     break
                 try:
                     if self.api.api_option_init_all_result != None:
@@ -565,8 +582,13 @@ class IQ_Option:
                 if self.api.candles.candles_data != None:
                     break
             except Exception as e:
-                get_logger(__name__).error('**error** get_candles need reconnect: %s', e)
-                self.connect()
+                get_logger(__name__).error('get_candles error: %s', e)
+                try:
+                    self._reconnect_manager.wait()
+                    self.connect()
+                except MaxReconnectAttemptsError:
+                    get_logger(__name__).critical("get_candles: reconnection attempts exhausted. Aborting.")
+                    raise
 
         return self.api.candles.candles_data
 
@@ -653,8 +675,13 @@ class IQ_Option:
 
                 self.api.subscribe(OP_code.ACTIVES[ACTIVE], size)
             except Exception as e:
-                get_logger(__name__).error('**error** start_candles_stream reconnect')
-                self.connect()
+                get_logger(__name__).error('start_candles_one_stream error: %s', e)
+                try:
+                    self._reconnect_manager.wait()
+                    self.connect()
+                except MaxReconnectAttemptsError:
+                    get_logger(__name__).critical("start_candles_one_stream: reconnection attempts exhausted. Aborting.")
+                    raise
             time.sleep(1)
 
     def stop_candles_one_stream(self, ACTIVE, size):
@@ -686,9 +713,13 @@ class IQ_Option:
             try:
                 self.api.subscribe_all_size(OP_code.ACTIVES[ACTIVE])
             except Exception as e:
-                get_logger(__name__).error(
-                    '**error** start_candles_all_size_stream reconnect')
-                self.connect()
+                get_logger(__name__).error('start_candles_all_size_stream error: %s', e)
+                try:
+                    self._reconnect_manager.wait()
+                    self.connect()
+                except MaxReconnectAttemptsError:
+                    get_logger(__name__).critical("start_candles_all_size_stream: reconnection attempts exhausted. Aborting.")
+                    raise
             time.sleep(1)
 
     def stop_candles_all_size_stream(self, ACTIVE):
@@ -973,6 +1004,11 @@ class IQ_Option:
         return self.api.result, self.api.buy_multi_option[req_id]["id"]
 
     def buy(self, price, ACTIVES, ACTION, expirations):
+        request_id = self._idempotency.register()
+        get_logger(__name__).info(
+            "buy(): request_id=%s | asset=%s | action=%s | amount=%s",
+            request_id, ACTIVES, ACTION, price
+        )
         self.api.buy_multi_option = {}
         self.api.buy_successful = None
         # req_id = "buy"
@@ -986,12 +1022,19 @@ class IQ_Option:
         while self.api.result == None or id == None:
             time.sleep(0.05)
             if self.api.buy_multi_option.get(req_id, {}).get("message"):
-                    return False, self.api.buy_multi_option[req_id]["message"]
+                self._idempotency.fail(request_id)
+                return False, self.api.buy_multi_option[req_id]["message"]
             id = self.api.buy_multi_option.get(req_id, {}).get("id")
             if time.time() - start_t >= 5:
+                self._idempotency.fail(request_id)
+                get_logger(__name__).critical(
+                    "buy() TIMEOUT: request_id=%s — order may or may not exist on server. "
+                    "Check open positions manually before retrying.", request_id
+                )
                 get_logger(__name__).error('**warning** buy late 5 sec')
                 return False, None
 
+        self._idempotency.confirm(request_id, id)
         return self.api.result, self.api.buy_multi_option[req_id]["id"]
 
     def sell_option(self, options_ids):
@@ -1338,6 +1381,11 @@ class IQ_Option:
 
                   use_trail_stop=False, auto_margin_call=False,
                   use_token_for_commission=False):
+        request_id = self._idempotency.register()
+        get_logger(__name__).info(
+            "buy_order(): request_id=%s | instrument_id=%s | side=%s | amount=%s",
+            request_id, instrument_id, side, amount
+        )
         self.api.buy_order_id = None
         self.api.buy_order(
             instrument_type=instrument_type, instrument_id=instrument_id,
@@ -1353,9 +1401,15 @@ class IQ_Option:
         while self.api.buy_order_id == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
+                self._idempotency.fail(request_id)
+                get_logger(__name__).critical(
+                    "buy_order() TIMEOUT: request_id=%s — order may or may not exist on server. "
+                    "Check open positions manually before retrying.", request_id
+                )
                 get_logger(__name__).warning('Timeout (15s) waiting for buy_order_id')
-                break
+                return False, None
             pass
+
         check, data = self.get_order(self.api.buy_order_id)
         while data["status"] == "pending_new":
             time.sleep(0.05)
@@ -1364,11 +1418,13 @@ class IQ_Option:
 
         if check:
             if data["status"] != "rejected":
+                self._idempotency.confirm(request_id, self.api.buy_order_id)
                 return True, self.api.buy_order_id
             else:
+                self._idempotency.fail(request_id)
                 return False, data["reject_status"]
         else:
-
+            self._idempotency.fail(request_id)
             return False, None
 
     def change_auto_margin_call(self, ID_Name, ID, auto_margin_call):

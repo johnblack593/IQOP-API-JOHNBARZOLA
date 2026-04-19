@@ -1,6 +1,8 @@
 """Module for IQ option websocket."""
 
 import json
+import threading
+import logging
 from iqoptionapi.logger import get_logger
 import websocket
 from iqoptionapi.ws.received.technical_indicators import technical_indicators
@@ -125,7 +127,6 @@ class WebsocketClient(object):
         :param api: The instance of :class:`IQOptionAPI
             <iqoptionapi.api.IQOptionAPI>`.
         """
-        import threading
         self.api = api
         self.dict_lock = threading.Lock()
         self.wss = websocket.WebSocketApp(
@@ -202,12 +203,7 @@ class WebsocketClient(object):
         logger.debug("Websocket connection closed.")
         self.api.check_websocket_if_connect = 0
         
-        # [KILL-SWITCH] Release all pending threads
-        for attr in dir(self.api):
-            if attr.endswith('_event') and hasattr(getattr(self.api, attr), 'set'):
-                getattr(self.api, attr).set()
-        
-        # [KILL-SWITCH] Release all pending threads
+        # [KILL-SWITCH] Release all pending threading.Event objects on disconnect
         for attr in dir(self.api):
             if attr.endswith('_event') and hasattr(getattr(self.api, attr), 'set'):
                 getattr(self.api, attr).set()
