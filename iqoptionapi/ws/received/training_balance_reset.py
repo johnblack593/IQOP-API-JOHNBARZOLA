@@ -7,3 +7,5 @@ def training_balance_reset(api, message):
         if not is_success and "successfully" in message["msg"].get("message", ""):
             is_success = True
         api.training_balance_reset_request = is_success
+        if hasattr(api, 'training_balance_reset_request_event'):
+            api.training_balance_reset_request_event.set()
