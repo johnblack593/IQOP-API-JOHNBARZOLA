@@ -1,7 +1,7 @@
 """Module for IQ option websocket."""
 
 import json
-import logging
+from iqoptionapi.logger import get_logger
 import websocket
 from iqoptionapi.ws.received.technical_indicators import technical_indicators
 from iqoptionapi.ws.received.time_sync import time_sync
@@ -102,7 +102,7 @@ class WebsocketClient(object):
     def on_message(self, wss, message):  # pylint: disable=unused-argument
         """Method to process websocket messages."""
         self.api.ssl_Mutual_exclusion = True
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.debug(message)
 
         message = json.loads(str(message))
@@ -169,20 +169,20 @@ class WebsocketClient(object):
 
     def on_error(self, wss, error):  # pylint: disable=unused-argument
         """Method to process websocket errors."""
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.error(error)
         self.api.websocket_error_reason = str(error)
         self.api.check_websocket_if_error = True
 
     def on_open(self, wss):  # pylint: disable=unused-argument
         """Method to process websocket open."""
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.debug("Websocket client connected.")
         self.api.check_websocket_if_connect = 1
 
     def on_close(self, wss, close_status_code, close_msg):  # pylint: disable=unused-argument
         """Method to process websocket close."""
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.debug("Websocket connection closed.")
         self.api.check_websocket_if_connect = 0
         

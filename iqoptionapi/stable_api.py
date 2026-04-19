@@ -5,6 +5,8 @@ import iqoptionapi.country_id as Country
 import threading
 import time
 import json
+from iqoptionapi.logger import get_logger
+from iqoptionapi.security import CredentialStore, generate_user_agent
 import logging
 import operator
 from collections import defaultdict
@@ -29,7 +31,7 @@ class IQ_Option:
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
-        self.password = password
+        self._credential_store = CredentialStore(email, password)
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
@@ -41,7 +43,7 @@ class IQ_Option:
         self.get_realtime_strike_list_temp_data = {}
         self.get_realtime_strike_list_temp_expiration = 0
         self.SESSION_HEADER = {
-            "User-Agent": r"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36"}
+            "User-Agent": generate_user_agent()}
         self.SESSION_COOKIE = {}
         #
         # --start
@@ -76,7 +78,7 @@ class IQ_Option:
                 pass
 
         self.api = IQOptionAPI(
-            "iqoption.com", self.email, self.password)
+            "iqoption.com", self.email)
         check = None
 
         # 2FA--
@@ -90,7 +92,7 @@ class IQ_Option:
         self.api.set_session(headers=self.SESSION_HEADER,
                              cookies=self.SESSION_COOKIE)
 
-        check, reason = self.api.connect()
+        check, reason = self.api.connect(self._credential_store.consume())
 
         if check == True:
             # -------------reconnect subscribe_candle
@@ -129,9 +131,9 @@ class IQ_Option:
             # Auto-update asset catalogs on successful connection
             try:
                 self.update_ACTIVES_OPCODE()
-                logging.getLogger(__name__).info("Live Asset Catalogs (Binary, Crypto, Forex, CFD) successfully synchronized.")
+                get_logger(__name__).info("Live Asset Catalogs (Binary, Crypto, Forex, CFD) successfully synchronized.")
             except Exception as e:
-                logging.getLogger(__name__).warning("Failed to auto-update asset catalogs: %s", e)
+                get_logger(__name__).warning("Failed to auto-update asset catalogs: %s", e)
 
             # self.get_balance_id()
             return True, None
@@ -193,7 +195,7 @@ class IQ_Option:
             is_ready = self.api.financial_information_event.wait(timeout=30)
             if not is_ready:
                 import logging
-                logging.getLogger(__name__).error("Timeout waiting for financial information.")
+                get_logger(__name__).error("Timeout waiting for financial information.")
                 return None
         return self.api.financial_information
 
@@ -208,7 +210,7 @@ class IQ_Option:
         while self.api.leaderboard_deals_client == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for leaderboard_deals_client')
+                get_logger(__name__).warning('Timeout (15s) waiting for leaderboard_deals_client')
                 break
             pass
         return self.api.leaderboard_deals_client
@@ -228,10 +230,10 @@ class IQ_Option:
             if hasattr(self.api, 'instruments_event'):
                 is_ready = self.api.instruments_event.wait(timeout=10)
                 if not is_ready:
-                    logging.getLogger(__name__).warning("Timeout waiting for instruments of type: %s", type)
+                    get_logger(__name__).warning("Timeout waiting for instruments of type: %s", type)
                     return {"instruments": []} # Return empty list gracefully instead of None
         except Exception as e:
-                logging.getLogger(__name__).error('**error** api.get_instruments need reconnect: %s', e)
+                get_logger(__name__).error('**error** api.get_instruments need reconnect: %s', e)
                 # self.connect() # Removed aggressive recursive connect
         return getattr(self.api, 'instruments', {"instruments": []})
 
@@ -264,21 +266,21 @@ class IQ_Option:
                     self.api.get_api_option_init_all()
                     break
                 except Exception as e:
-                    logging.error('**error** get_all_init need reconnect')
+                    get_logger(__name__).error('**error** get_all_init need reconnect')
                     self.connect()
                     time.sleep(5)
             start = time.time()
             while True:
                 time.sleep(0.05)
                 if time.time() - start > 30:
-                    logging.error('**warning** get_all_init late 30 sec')
+                    get_logger(__name__).error('**warning** get_all_init late 30 sec')
                     break
                 try:
                     if self.api.api_option_init_all_result != None:
                         break
                 except (KeyError, TypeError) as e:
                     import logging
-                    logging.getLogger(__name__).error("Data extraction error: %s", e)
+                    get_logger(__name__).error("Data extraction error: %s", e)
             if getattr(self.api, "api_option_init_all_result", {}).get("isSuccessful") == True:
                     return self.api.api_option_init_all_result
 
@@ -293,7 +295,7 @@ class IQ_Option:
         while self.api.api_option_init_all_result_v2 == None:
             time.sleep(0.05)
             if time.time() - start_t >= 30:
-                logging.error('**warning** get_all_init_v2 late 30 sec')
+                get_logger(__name__).error('**warning** get_all_init_v2 late 30 sec')
                 return None
         return self.api.api_option_init_all_result_v2
 
@@ -409,7 +411,7 @@ class IQ_Option:
             is_ready = self.api.profile_msg_event.wait(timeout=30)
             if not is_ready:
                 import logging
-                logging.getLogger(__name__).error("Timeout waiting for profile ansyc.")
+                get_logger(__name__).error("Timeout waiting for profile ansyc.")
                 return None
         return self.api.profile.msg
 
@@ -424,7 +426,7 @@ class IQ_Option:
                 if respon["isSuccessful"] == True:
                     return respon
             except Exception as e:
-                logging.error('**error** get_profile try reconnect')
+                get_logger(__name__).error('**error** get_profile try reconnect')
                 self.connect()"""
 
     def get_currency(self):
@@ -445,7 +447,7 @@ class IQ_Option:
                 self.api.profile.balance = respon["result"]["balance"]
                 break
             except Exception as e:
-                logging.error('**error** get_balance()')
+                get_logger(__name__).error('**error** get_balance()')
 
             time.sleep(self.suspend)
         return self.api.profile.balance"""
@@ -467,7 +469,7 @@ class IQ_Option:
             is_ready = self.api.balances_raw_event.wait(timeout=30)
             if not is_ready:
                 import logging
-                logging.getLogger(__name__).error("Timeout waiting for balances_raw.")
+                get_logger(__name__).error("Timeout waiting for balances_raw.")
                 return None
         return self.api.balances_raw
 
@@ -491,7 +493,7 @@ class IQ_Option:
         while self.api.training_balance_reset_request == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for training_balance_reset_request')
+                get_logger(__name__).warning('Timeout (15s) waiting for training_balance_reset_request')
                 break
             pass
         return self.api.training_balance_reset_request
@@ -543,7 +545,7 @@ class IQ_Option:
             set_id(tournament_id)
 
         else:
-            logging.error("ERROR doesn't have this mode")
+            get_logger(__name__).error("ERROR doesn't have this mode")
             exit(1)
 
     # ________________________________________________________________________
@@ -556,7 +558,7 @@ class IQ_Option:
             time.sleep(0.05)
             try:
                 if ACTIVES not in OP_code.ACTIVES:
-                    print('Asset {} not found on consts'.format(ACTIVES))
+                    get_logger(__name__).info('Asset {} not found on consts'.format(ACTIVES))
                     break
                 self.api.getcandles(
                     OP_code.ACTIVES[ACTIVES], interval, count, endtime)
@@ -567,7 +569,7 @@ class IQ_Option:
                 if self.api.candles.candles_data != None:
                     break
             except Exception as e:
-                logging.getLogger(__name__).error('**error** get_candles need reconnect: %s', e)
+                get_logger(__name__).error('**error** get_candles need reconnect: %s', e)
                 self.connect()
 
         return self.api.candles.candles_data
@@ -591,7 +593,7 @@ class IQ_Option:
             self.start_candles_one_stream(ACTIVE, size)
 
         else:
-            logging.error(
+            get_logger(__name__).error(
                 '**error** start_candles_stream please input right size')
 
     def stop_candles_stream(self, ACTIVE, size):
@@ -600,7 +602,7 @@ class IQ_Option:
         elif size in self.size:
             self.stop_candles_one_stream(ACTIVE, size)
         else:
-            logging.error(
+            get_logger(__name__).error(
                 '**error** start_candles_stream please input right size')
 
     def get_realtime_candles(self, ACTIVE, size):
@@ -608,18 +610,18 @@ class IQ_Option:
             try:
                 return self.api.real_time_candles[ACTIVE]
             except Exception as e:
-                logging.error(
+                get_logger(__name__).error(
                     '**error** get_realtime_candles() size="all" can not get candle')
                 return False
         elif size in self.size:
             try:
                 return self.api.real_time_candles[ACTIVE][size]
             except Exception as e:
-                logging.error(
+                get_logger(__name__).error(
                     '**error** get_realtime_candles() size=' + str(size) + ' can not get candle')
                 return False
         else:
-            logging.error(
+            get_logger(__name__).error(
                 '**error** get_realtime_candles() please input right "size"')
 
     def get_all_realtime_candles(self):
@@ -646,7 +648,7 @@ class IQ_Option:
         while True:
             time.sleep(0.05)
             if time.time() - start > 20:
-                logging.error(
+                get_logger(__name__).error(
                     '**error** start_candles_one_stream late for 20 sec')
                 return False
             if self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) == True:
@@ -655,7 +657,7 @@ class IQ_Option:
 
                 self.api.subscribe(OP_code.ACTIVES[ACTIVE], size)
             except Exception as e:
-                logging.error('**error** start_candles_stream reconnect')
+                get_logger(__name__).error('**error** start_candles_stream reconnect')
                 self.connect()
             time.sleep(1)
 
@@ -680,7 +682,7 @@ class IQ_Option:
         while True:
             time.sleep(0.05)
             if time.time() - start > 20:
-                logging.error('**error** fail ' + ACTIVE +
+                get_logger(__name__).error('**error** fail ' + ACTIVE +
                               ' start_candles_all_size_stream late for 10 sec')
                 return False
             if self.api.candle_generated_all_size_check.get(str(ACTIVE)) == True:
@@ -688,7 +690,7 @@ class IQ_Option:
             try:
                 self.api.subscribe_all_size(OP_code.ACTIVES[ACTIVE])
             except Exception as e:
-                logging.error(
+                get_logger(__name__).error(
                     '**error** start_candles_all_size_stream reconnect')
                 self.connect()
             time.sleep(1)
@@ -772,7 +774,7 @@ class IQ_Option:
         while self.api.technical_indicators.get(request_id) == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for technical_indicators')
+                get_logger(__name__).warning('Timeout (15s) waiting for technical_indicators')
                 break
             pass
         return self.api.technical_indicators[request_id]
@@ -789,7 +791,7 @@ class IQ_Option:
         while order_id not in self.api.order_binary:
             time.sleep(0.05)
             if time.time() - _ts >= 7200:
-                logging.getLogger(__name__).warning('Timeout (120 min) waiting for order_id to close in binary options')
+                get_logger(__name__).warning('Timeout (120 min) waiting for order_id to close in binary options')
                 return None
         your_order = self.api.order_binary.pop(order_id, None)
         return your_order
@@ -800,7 +802,7 @@ class IQ_Option:
         while True:
             time.sleep(0.05)
             if time.time() - _ts >= 7200:
-                logging.getLogger(__name__).warning('Timeout (120 min) waiting for check_win')
+                get_logger(__name__).warning('Timeout (120 min) waiting for check_win')
                 break
             try:
                 listinfodata_dict = self.api.listinfodata.get(id_number)
@@ -816,7 +818,7 @@ class IQ_Option:
         while True:
             time.sleep(0.05)
             if time.time() - _ts >= 7200:
-                logging.getLogger(__name__).warning('Timeout (120 min) waiting for check_win_v2')
+                get_logger(__name__).warning('Timeout (120 min) waiting for check_win_v2')
                 return None
             check, data = self.get_betinfo(id_number)
             if check and data and "result" in data and "data" in data["result"]:
@@ -825,7 +827,7 @@ class IQ_Option:
                     try:
                         return data["result"]["data"][str(id_number)]["profit"] - data["result"]["data"][str(id_number)]["deposit"]
                     except (KeyError, TypeError) as e:
-                        logging.getLogger(__name__).error("Data extraction error: %s", e)
+                        get_logger(__name__).error("Data extraction error: %s", e)
             time.sleep(polling_time)
 
         
@@ -834,7 +836,7 @@ class IQ_Option:
         while True:
             time.sleep(0.05)
             if time.time() - _ts >= 7200:
-                logging.getLogger(__name__).warning('Timeout (120 min) waiting for check_win_v4')
+                get_logger(__name__).warning('Timeout (120 min) waiting for check_win_v4')
                 return None, None
             if self.api.socket_option_closed.get(id_number) != None:
                     break
@@ -846,7 +848,7 @@ class IQ_Option:
         while True:
             time.sleep(0.05)
             if time.time() - _ts >= 7200:
-                logging.getLogger(__name__).warning('Timeout (120 min) waiting for check_win_v3')
+                get_logger(__name__).warning('Timeout (120 min) waiting for check_win_v3')
                 return None, None
             result = self.get_optioninfo_v2(10)
             if result and result.get('msg') and result['msg'].get('closed_options'):
@@ -871,13 +873,13 @@ class IQ_Option:
         try:
             self.api.get_betinfo(id_number)
         except Exception as e:
-            logging.error('**error** def get_betinfo  self.api.get_betinfo reconnect')
+            get_logger(__name__).error('**error** def get_betinfo  self.api.get_betinfo reconnect')
             return False, None
             
         is_ready = self.api.game_betinfo_event.wait(timeout=10)
         
         if not is_ready:
-            logging.getLogger(__name__).warning('**error** get_betinfo time out')
+            get_logger(__name__).warning('**error** get_betinfo time out')
             return False, None
             
         return self.api.game_betinfo.isSuccessful, self.api.game_betinfo.dict
@@ -889,7 +891,7 @@ class IQ_Option:
         while self.api.api_game_getoptions_result == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for api_game_getoptions_result')
+                get_logger(__name__).warning('Timeout (15s) waiting for api_game_getoptions_result')
                 break
             pass
 
@@ -902,7 +904,7 @@ class IQ_Option:
         while self.api.get_options_v2_data == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for get_options_v2_data')
+                get_logger(__name__).warning('Timeout (15s) waiting for get_options_v2_data')
                 break
             pass
 
@@ -932,13 +934,13 @@ class IQ_Option:
 
             return buy_id
         else:
-            logging.error('buy_multi error please input all same len')
+            get_logger(__name__).error('buy_multi error please input all same len')
 
     def get_remaning(self, duration):
         for remaning in get_remaning_time(self.api.timesync.server_timestamp):
             if remaning[0] == duration:
                 return remaning[1]
-        logging.error('get_remaning(self,duration) ERROR duration')
+        get_logger(__name__).error('get_remaning(self,duration) ERROR duration')
         return "ERROR duration"
 
     def buy_by_raw_expirations(self, price, active, direction, option, expired):
@@ -956,18 +958,18 @@ class IQ_Option:
         while self.api.result == None or id == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for result')
+                get_logger(__name__).warning('Timeout (15s) waiting for result')
                 break
             try:
                 if "message" in self.api.buy_multi_option[req_id].keys():
-                    logging.error(
+                    get_logger(__name__).error(
                         '**warning** buy' + str(self.api.buy_multi_option[req_id]["message"]))
                     return False, self.api.buy_multi_option[req_id]["message"]
             except Exception:
                 pass
             id = self.api.buy_multi_option.get(req_id, {}).get("id")
             if time.time() - start_t >= 5:
-                logging.error('**warning** buy late 5 sec')
+                get_logger(__name__).error('**warning** buy late 5 sec')
                 return False, None
 
         return self.api.result, self.api.buy_multi_option[req_id]["id"]
@@ -989,7 +991,7 @@ class IQ_Option:
                     return False, self.api.buy_multi_option[req_id]["message"]
             id = self.api.buy_multi_option.get(req_id, {}).get("id")
             if time.time() - start_t >= 5:
-                logging.error('**warning** buy late 5 sec')
+                get_logger(__name__).error('**warning** buy late 5 sec')
                 return False, None
 
         return self.api.result, self.api.buy_multi_option[req_id]["id"]
@@ -1005,7 +1007,7 @@ class IQ_Option:
             is_ready = self.api.sold_options_respond_event.wait(timeout=30)
             if not is_ready:
                 import logging
-                logging.getLogger(__name__).error("Timeout waiting for sell_option response.")
+                get_logger(__name__).error("Timeout waiting for sell_option response.")
                 return None
                 
         return self.api.sold_options_respond
@@ -1017,7 +1019,7 @@ class IQ_Option:
         while self.api.sold_digital_options_respond == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for sold_digital_options_respond')
+                get_logger(__name__).warning('Timeout (15s) waiting for sold_digital_options_respond')
                 break
             pass
         return self.api.sold_digital_options_respond
@@ -1030,7 +1032,7 @@ class IQ_Option:
         while self.api.underlying_list_data == None:
             time.sleep(0.05)
             if time.time() - start_t >= 30:
-                logging.error(
+                get_logger(__name__).error(
                     '**warning** get_digital_underlying_list_data late 30 sec')
                 return None
 
@@ -1044,7 +1046,7 @@ class IQ_Option:
         while self.api.strike_list == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for strike_list')
+                get_logger(__name__).warning('Timeout (15s) waiting for strike_list')
                 break
             pass
         try:
@@ -1055,7 +1057,7 @@ class IQ_Option:
                 ans[("%.6f" % (float(data["value"]) * 10e-7))] = temp
         except (KeyError, TypeError) as e:
             import logging
-            logging.getLogger(__name__).error('**error** get_strike_list read problem: %s', e)
+            get_logger(__name__).error('**error** get_strike_list read problem: %s', e)
             return getattr(self.api, 'strike_list', None), None
         return self.api.strike_list, ans
 
@@ -1109,7 +1111,7 @@ class IQ_Option:
                     ans[price_key] = side_data
                 except (KeyError, TypeError) as e:
                     import logging
-                    logging.getLogger(__name__).error("Data extraction error: %s", e)
+                    get_logger(__name__).error("Data extraction error: %s", e)
 
         return ans
 
@@ -1132,7 +1134,7 @@ class IQ_Option:
         elif action == 'call':
             action = 'C'
         else:
-            logging.error('buy_digital_spot active error')
+            get_logger(__name__).error('buy_digital_spot active error')
             return -1, None
         # doEURUSD201907191250PT5MPSPT
         timestamp = int(self.api.timesync.server_timestamp)
@@ -1160,7 +1162,7 @@ class IQ_Option:
         while self.api.digital_option_placed_id.get(request_id) == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for digital_option_placed_id')
+                get_logger(__name__).warning('Timeout (15s) waiting for digital_option_placed_id')
                 break
             pass
         digital_order_id = self.api.digital_option_placed_id.get(request_id)
@@ -1195,7 +1197,7 @@ class IQ_Option:
         elif position["instrument_id"].find("MCSPT"):
             z = True
         else:
-            logging.error(
+            get_logger(__name__).error(
                 'get_digital_spot_profit_after_sale position error' + str(position["instrument_id"]))
 
         ACTIVES = position['raw_event']['instrument_underlying']
@@ -1277,7 +1279,7 @@ class IQ_Option:
         while self.api.digital_option_placed_id == None:
             time.sleep(0.05)
             if time.time() - start_t > 30:
-                logging.error('buy_digital loss digital_option_placed_id')
+                get_logger(__name__).error('buy_digital loss digital_option_placed_id')
                 return False, None
         return True, self.api.digital_option_placed_id
 
@@ -1293,7 +1295,7 @@ class IQ_Option:
         while self.api.result == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for result')
+                get_logger(__name__).warning('Timeout (15s) waiting for result')
                 break
             pass
         return self.api.result
@@ -1356,7 +1358,7 @@ class IQ_Option:
         while self.api.buy_order_id == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for buy_order_id')
+                get_logger(__name__).warning('Timeout (15s) waiting for buy_order_id')
                 break
             pass
         check, data = self.get_order(self.api.buy_order_id)
@@ -1381,7 +1383,7 @@ class IQ_Option:
         while self.api.auto_margin_call_changed_respond == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for auto_margin_call_changed_respond')
+                get_logger(__name__).warning('Timeout (15s) waiting for auto_margin_call_changed_respond')
                 break
             pass
         if self.api.auto_margin_call_changed_respond["status"] == 2000:
@@ -1401,7 +1403,7 @@ class IQ_Option:
         elif ID_Name == "order_id":
             ID = order_id
         else:
-            logging.error('change_order input error ID_Name')
+            get_logger(__name__).error('change_order input error ID_Name')
 
         if check:
             self.api.tpsl_changed_respond = None
@@ -1416,7 +1418,7 @@ class IQ_Option:
             while self.api.tpsl_changed_respond == None:
                 time.sleep(0.05)
                 if time.time() - _ts >= 15:
-                    logging.getLogger(__name__).warning('Timeout (15s) waiting for tpsl_changed_respond')
+                    get_logger(__name__).warning('Timeout (15s) waiting for tpsl_changed_respond')
                     break
                 pass
             if self.api.tpsl_changed_respond["status"] == 2000:
@@ -1424,7 +1426,7 @@ class IQ_Option:
             else:
                 return False, self.api.tpsl_changed_respond
         else:
-            logging.error('change_order fail to get position_id')
+            get_logger(__name__).error('change_order fail to get position_id')
             return False, None
 
     def get_async_order(self, buy_order_id):
@@ -1442,7 +1444,7 @@ class IQ_Option:
             is_ready = self.api.order_data_event.wait(timeout=30)
             if not is_ready:
                 import logging
-                logging.getLogger(__name__).error("Timeout waiting for get_order.")
+                get_logger(__name__).error("Timeout waiting for get_order.")
                 return False, None
                 
         if self.api.order_data and self.api.order_data.get("status") == 2000:
@@ -1457,7 +1459,7 @@ class IQ_Option:
         while self.api.deferred_orders == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for deferred_orders')
+                get_logger(__name__).warning('Timeout (15s) waiting for deferred_orders')
                 break
             pass
         if self.api.deferred_orders["status"] == 2000:
@@ -1477,7 +1479,7 @@ class IQ_Option:
             is_ready = self.api.positions_event.wait(timeout=30)
             if not is_ready:
                 import logging
-                logging.getLogger(__name__).error("Timeout waiting for get_positions.")
+                get_logger(__name__).error("Timeout waiting for get_positions.")
                 return False, None
                 
         if self.api.positions and self.api.positions.get("status") == 2000:
@@ -1494,7 +1496,7 @@ class IQ_Option:
         while self.api.position == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for position')
+                get_logger(__name__).warning('Timeout (15s) waiting for position')
                 break
             pass
         if self.api.position["status"] == 2000:
@@ -1511,7 +1513,7 @@ class IQ_Option:
         while self.api.position == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for position')
+                get_logger(__name__).warning('Timeout (15s) waiting for position')
                 break
             pass
         return self.api.position
@@ -1528,7 +1530,7 @@ class IQ_Option:
         while self.api.position == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for position')
+                get_logger(__name__).warning('Timeout (15s) waiting for position')
                 break
             pass
         return self.api.position
@@ -1540,7 +1542,7 @@ class IQ_Option:
         while self.api.position_history == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for position_history')
+                get_logger(__name__).warning('Timeout (15s) waiting for position_history')
                 break
             pass
 
@@ -1558,7 +1560,7 @@ class IQ_Option:
         while self.api.position_history_v2 == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for position_history_v2')
+                get_logger(__name__).warning('Timeout (15s) waiting for position_history_v2')
                 break
             pass
 
@@ -1578,7 +1580,7 @@ class IQ_Option:
         while self.api.available_leverages == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for available_leverages')
+                get_logger(__name__).warning('Timeout (15s) waiting for available_leverages')
                 break
             pass
         if self.api.available_leverages["status"] == 2000:
@@ -1593,7 +1595,7 @@ class IQ_Option:
         while self.api.order_canceled == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for order_canceled')
+                get_logger(__name__).warning('Timeout (15s) waiting for order_canceled')
                 break
             pass
         if self.api.order_canceled["status"] == 2000:
@@ -1610,7 +1612,7 @@ class IQ_Option:
             while self.api.close_position_data == None:
                 time.sleep(0.05)
                 if time.time() - _ts >= 15:
-                    logging.getLogger(__name__).warning('Timeout (15s) waiting for close_position_data')
+                    get_logger(__name__).warning('Timeout (15s) waiting for close_position_data')
                     break
                 pass
             if self.api.close_position_data["status"] == 2000:
@@ -1625,7 +1627,7 @@ class IQ_Option:
         while self.get_async_order(position_id) == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for get_async_order(position_id)')
+                get_logger(__name__).warning('Timeout (15s) waiting for get_async_order(position_id)')
                 break
             pass
         position_changed = self.get_async_order(position_id)
@@ -1634,7 +1636,7 @@ class IQ_Option:
         while self.api.close_position_data == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for close_position_data')
+                get_logger(__name__).warning('Timeout (15s) waiting for close_position_data')
                 break
             pass
         if self.api.close_position_data["status"] == 2000:
@@ -1649,7 +1651,7 @@ class IQ_Option:
         while self.api.overnight_fee == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for overnight_fee')
+                get_logger(__name__).warning('Timeout (15s) waiting for overnight_fee')
                 break
             pass
         if self.api.overnight_fee["status"] == 2000:
@@ -1719,7 +1721,7 @@ class IQ_Option:
         while self.api.user_profile_client == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for user_profile_client')
+                get_logger(__name__).warning('Timeout (15s) waiting for user_profile_client')
                 break
             pass
 
@@ -1745,7 +1747,7 @@ class IQ_Option:
         while self.api.users_availability == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
-                logging.getLogger(__name__).warning('Timeout (15s) waiting for users_availability')
+                get_logger(__name__).warning('Timeout (15s) waiting for users_availability')
                 break
             self.api.Get_Users_Availability(user_id)
             time.sleep(0.2)
@@ -1778,7 +1780,7 @@ class IQ_Option:
         elif action == 'call':
             action = 'C'
         else:
-            logging.error('buy_digital_spot_v2 active error')
+            get_logger(__name__).error('buy_digital_spot_v2 active error')
             return -1, None
 
         timestamp = int(self.api.timesync.server_timestamp)
@@ -1802,7 +1804,7 @@ class IQ_Option:
         instrument_id = "do" + active_id + "A" + \
             date_formated[:8] + "D" + date_formated[8:] + \
             "00T" + str(duration) + "M" + action + "SPT"
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         logger.info(instrument_id)
         request_id = self.api.place_digital_option_v2(instrument_id, active_id, amount)
 

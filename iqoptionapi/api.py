@@ -1,7 +1,6 @@
 """Module for IQ Option API."""
 
-import json
-import logging
+from iqoptionapi.logger import get_logger
 import time
 import threading
 import requests
@@ -151,7 +150,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     # ------------------
     digital_payout = None
 
-    def __init__(self, host, username, password, proxies=None):
+    def __init__(self, host, username, proxies=None):
         """
         :param str host: The hostname or ip address of a IQ Option server.
         :param str username: The username of a IQ Option server.
@@ -165,7 +164,6 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.session.verify = True
         self.session.trust_env = False
         self.username = username
-        self.password = password
         self.token_login2fa = None
         self.token_sms = None
         self.proxies = proxies
@@ -254,7 +252,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
         :returns: The instance of :class:`Response <requests.Response>`.
         """
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         url = self.prepare_http_url(resource)
 
         logger.debug(url)
@@ -285,7 +283,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
         :returns: The instance of :class:`Response <requests.Response>`.
         """
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
 
         logger.debug(method + ": " + url + " headers: " + str(self.session.headers) +
                      " cookies:  " + str(self.session.cookies.get_dict()))
@@ -322,7 +320,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         :param dict msg: The websocket request msg.
         """
 
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
 
         data = json.dumps(dict(name=name,
                                msg=msg, request_id=request_id))
@@ -559,7 +557,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         # Main name:"unsubscribeMessage"/"subscribeMessage"/"sendMessage"(only for portfolio.get-positions")
         # name:"portfolio.order-changed"/"portfolio.get-positions"/"portfolio.position-changed"
         # instrument_type="cfd"/"forex"/"crypto"/"digital-option"/"turbo-option"/"binary-option"
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
         M_name = Main_Name
         request_id = str(request_id)
         if name == "portfolio.order-changed":
@@ -856,7 +854,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                     
                 time.sleep(0.05)  # CRITICAL: Prevent GIL Deadlock while waiting
             except Exception as e:
-                logging.getLogger(__name__).error("Websocket check error: %s", e)
+                get_logger(__name__).error("Websocket check error: %s", e)
                 return False, str(e)
 
     # @tokensms.setter
@@ -869,17 +867,17 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         token_2fa = response.json()['token']
         self.token_login2fa = token_2fa
 
-    def get_ssid(self):
+    def get_ssid(self, password):
         response = None
         try:
             if self.token_login2fa is None:
                 response = self.login(
-                    self.username, self.password)  # pylint: disable=not-callable
+                    self.username, password)  # pylint: disable=not-callable
             else:
                 response = self.login_2fa(
-                    self.username, self.password, self.token_login2fa)
+                    self.username, password, self.token_login2fa)
         except Exception as e:
-            logger = logging.getLogger(__name__)
+            logger = get_logger(__name__)
             logger.error(e)
             return e
         return response
@@ -894,7 +892,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         else:
             return True
 
-    def connect(self):
+    def connect(self, password):
 
         self.ssl_Mutual_exclusion = False
         self.ssl_Mutual_exclusion_write = False
@@ -902,9 +900,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         try:
             self.close()
         except websocket.WebSocketException as e:
-            logging.getLogger(__name__).error("WebSocket close failed: %s", e)
+            get_logger(__name__).error("WebSocket close failed: %s", e)
         except Exception as e:
-            logging.getLogger(__name__).error("Connection close failed: %s", e)
+            get_logger(__name__).error("Connection close failed: %s", e)
         check_websocket, websocket_reason = self.start_websocket()
 
         if check_websocket == False:
@@ -917,7 +915,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
             if check_ssid == False:
                 # ssdi time out need reget,if sent error ssid,the weksocket will close by iqoption server
-                response = self.get_ssid()
+                response = self.get_ssid(password)
                 try:
                     self.SSID = response.cookies["ssid"]
                 except Exception as e:
@@ -928,7 +926,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
         # the ssid is None need get ssid
         else:
-            response = self.get_ssid()
+            response = self.get_ssid(password)
             try:
                 self.SSID = response.cookies["ssid"]
             except Exception as e:
