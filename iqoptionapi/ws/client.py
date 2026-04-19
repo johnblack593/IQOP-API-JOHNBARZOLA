@@ -59,6 +59,64 @@ from iqoptionapi.ws.received.client_price_generated import client_price_generate
 from iqoptionapi.ws.received.users_availability import users_availability
 
 
+
+_MESSAGE_ROUTER: dict = {
+    'api_game_betinfo_result': [api_game_betinfo_result],
+    'api_game_getoptions_result': [api_game_getoptions_result],
+    'api_option_init_all_result': [api_option_init_all_result],
+    'auto-margin-call-changed': [auto_margin_call_changed],
+    'available-leverages': [available_leverages],
+    'balances': [balances],
+    'balance-changed': [balance_changed],
+    'buyComplete': [buy_complete],
+    'candles': [candles],
+    'candle-generated': [lambda api, msg: candle_generated_realtime(api, msg, api.websocket_client.dict_queue_add)],
+    'candles-generated': [lambda api, msg: candle_generated_v2(api, msg, api.websocket_client.dict_queue_add)],
+    'client-price-generated': [client_price_generated],
+    'commission-changed': [commission_changed],
+    'deferred-orders': [deferred_orders],
+    'digital-option-placed': [lambda api, msg: digital_option_placed(api, msg, api.websocket_client.api_dict_clean)],
+    'financial-information': [financial_information],
+    'heartbeat': [heartbeat],
+    'history-positions': [history_positions],
+    'initialization-data': [initialization_data],
+    'instruments': [instruments],
+    'instrument-quotes-generated': [instrument_quotes_generated],
+    'leaderboard-deals-client': [leaderboard_deals_client],
+    'leaderboard-userinfo-deals-client': [leaderboard_userinfo_deals_client],
+    'listInfoData': [list_info_data],
+    'live-deal': [live_deal],
+    'live-deal-binary-option-placed': [live_deal_binary_option_placed],
+    'live-deal-digital-option': [live_deal_digital_option],
+    'option': [option],
+    'option-closed': [option_closed],
+    'option-opened': [option_opened],
+    'order': [order],
+    'order-canceled': [order_canceled],
+    'order-placed-temp': [order_placed_temp], # order_placed_temp: called once — duplicate removed (audit SPRINT-02)
+    'overnight-fee': [overnight_fee],
+    'position': [position],
+    'positions': [positions],
+    'position-changed': [position_changed],
+    'position-closed': [position_closed],
+    'position-history': [position_history],
+    'profile': [profile],
+    'result': [result],
+    'socket-option-closed': [socket_option_closed],
+    'socket-option-opened': [socket_option_opened],
+    'sold-options': [sold_options],
+    'strike-list': [strike_list],
+    'technical-indicators': [lambda api, msg: technical_indicators(api, msg, api.websocket_client.api_dict_clean)],
+    'timeSync': [time_sync],
+    'top-assets-updated': [top_assets_updated],
+    'tpsl-changed': [tpsl_changed],
+    'traders-mood-changed': [traders_mood_changed],
+    'training-balance-reset': [training_balance_reset],
+    'underlying-list': [underlying_list],
+    'users-availability': [users_availability],
+    'user-profile-client': [user_profile_client]
+}
+
 class WebsocketClient(object):
     """Class for work with IQ option websocket."""
 
@@ -101,71 +159,29 @@ class WebsocketClient(object):
 
     def on_message(self, wss, message):  # pylint: disable=unused-argument
         """Method to process websocket messages."""
-        self.api.ssl_Mutual_exclusion = True
         logger = get_logger(__name__)
-        logger.debug(message)
+        with self.api._ws_lock:
+            try:
+                logger.debug("WS message received: %s chars", len(message))
+                msg_name = None
+                try:
+                    parsed = json.loads(str(message))
+                    msg_name = parsed.get("name")
+                except (json.JSONDecodeError, AttributeError):
+                    logger.warning("Unparseable WS message received, skipping router dispatch")
+                    parsed = None
 
-        message = json.loads(str(message))
+                if msg_name and msg_name in _MESSAGE_ROUTER:
+                    for handler in _MESSAGE_ROUTER[msg_name]:
+                        try:
+                            handler(self.api, parsed)
+                        except Exception as e:
+                            logger.error("Handler error for message '%s': %s", msg_name, e, exc_info=True)
+                elif parsed is not None:
+                    logger.debug("No handler registered for message name: %s", msg_name)
 
-
-        technical_indicators(self.api, message, self.api_dict_clean)
-        time_sync(self.api, message)
-        heartbeat(self.api, message)
-        balances(self.api, message)
-        profile(self.api, message)
-        balance_changed(self.api, message)
-        candles(self.api, message)
-        buy_complete(self.api, message)
-        option(self.api, message)
-        position_history(self.api, message)
-        list_info_data(self.api, message)
-        candle_generated_realtime(self.api, message, self.dict_queue_add)
-        candle_generated_v2(self.api, message, self.dict_queue_add)
-        commission_changed(self.api, message)
-        socket_option_opened(self.api, message)
-        api_option_init_all_result(self.api, message)
-        initialization_data(self.api, message)
-        underlying_list(self.api, message)
-        instruments(self.api, message)
-        financial_information(self.api, message)
-        position_changed(self.api, message)
-        option_opened(self.api, message)
-        option_closed(self.api, message)
-        top_assets_updated(self.api, message)
-        strike_list(self.api, message)
-        api_game_betinfo_result(self.api, message)
-        traders_mood_changed(self.api, message)
-         # ------for forex&cfd&crypto..
-        order_placed_temp(self.api, message)
-        order(self.api, message)
-        position(self.api, message)
-        positions(self.api, message)
-        order_placed_temp(self.api, message)
-        deferred_orders(self.api, message)
-        history_positions(self.api, message)
-        available_leverages(self.api, message)
-        order_canceled(self.api, message)
-        position_closed(self.api, message)
-        overnight_fee(self.api, message)
-        api_game_getoptions_result(self.api, message)
-        sold_options(self.api, message)
-        tpsl_changed(self.api, message)
-        auto_margin_call_changed(self.api, message)
-        digital_option_placed(self.api, message, self.api_dict_clean)
-        result(self.api, message)
-        instrument_quotes_generated(self.api, message)
-        training_balance_reset(self.api, message)
-        socket_option_closed(self.api, message)
-        live_deal_binary_option_placed(self.api, message)
-        live_deal_digital_option(self.api, message)
-        leaderboard_deals_client(self.api, message)
-        live_deal(self.api, message)
-        user_profile_client(self.api, message)
-        leaderboard_userinfo_deals_client(self.api, message)
-        users_availability(self.api, message)
-        client_price_generated(self.api, message)
-
-        self.api.ssl_Mutual_exclusion = False
+            except Exception as e:
+                logger.error("Critical error in on_message dispatch: %s", e, exc_info=True)
 
     def on_error(self, wss, error):  # pylint: disable=unused-argument
         """Method to process websocket errors."""

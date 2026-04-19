@@ -194,7 +194,6 @@ class IQ_Option:
         if hasattr(self.api, 'financial_information_event'):
             is_ready = self.api.financial_information_event.wait(timeout=30)
             if not is_ready:
-                import logging
                 get_logger(__name__).error("Timeout waiting for financial information.")
                 return None
         return self.api.financial_information
@@ -279,7 +278,6 @@ class IQ_Option:
                     if self.api.api_option_init_all_result != None:
                         break
                 except (KeyError, TypeError) as e:
-                    import logging
                     get_logger(__name__).error("Data extraction error: %s", e)
             if getattr(self.api, "api_option_init_all_result", {}).get("isSuccessful") == True:
                     return self.api.api_option_init_all_result
@@ -410,7 +408,6 @@ class IQ_Option:
             self.api.profile_msg_event.clear()
             is_ready = self.api.profile_msg_event.wait(timeout=30)
             if not is_ready:
-                import logging
                 get_logger(__name__).error("Timeout waiting for profile ansyc.")
                 return None
         return self.api.profile.msg
@@ -468,7 +465,6 @@ class IQ_Option:
         if hasattr(self.api, 'balances_raw_event'):
             is_ready = self.api.balances_raw_event.wait(timeout=30)
             if not is_ready:
-                import logging
                 get_logger(__name__).error("Timeout waiting for balances_raw.")
                 return None
         return self.api.balances_raw
@@ -798,6 +794,7 @@ class IQ_Option:
 
     def check_win(self, id_number):
         # 'win':win money 'equal':no win no loose   'loose':loose money
+        listinfodata_dict = None
         _ts = time.time()
         while True:
             time.sleep(0.05)
@@ -811,7 +808,9 @@ class IQ_Option:
             except Exception:
                 pass
         self.api.listinfodata.delete(id_number)
-        return listinfodata_dict["win"] if "listinfodata_dict" in locals() and listinfodata_dict else None
+        if listinfodata_dict is not None:
+            return listinfodata_dict.get("win", None)
+        return None
 
     def check_win_v2(self, id_number, polling_time):
         _ts = time.time()
@@ -863,7 +862,6 @@ class IQ_Option:
 
     def get_betinfo(self, id_number):
         # INPUT:int
-        import threading
         if not hasattr(self.api, "game_betinfo_event"):
             self.api.game_betinfo_event = threading.Event()
             
@@ -1006,7 +1004,6 @@ class IQ_Option:
         if hasattr(self.api, 'sold_options_respond_event'):
             is_ready = self.api.sold_options_respond_event.wait(timeout=30)
             if not is_ready:
-                import logging
                 get_logger(__name__).error("Timeout waiting for sell_option response.")
                 return None
                 
@@ -1056,7 +1053,6 @@ class IQ_Option:
                 temp["put"] = data["put"]["id"]
                 ans[("%.6f" % (float(data["value"]) * 10e-7))] = temp
         except (KeyError, TypeError) as e:
-            import logging
             get_logger(__name__).error('**error** get_strike_list read problem: %s', e)
             return getattr(self.api, 'strike_list', None), None
         return self.api.strike_list, ans
@@ -1110,7 +1106,6 @@ class IQ_Option:
                         side_data[side_key] = detail_data
                     ans[price_key] = side_data
                 except (KeyError, TypeError) as e:
-                    import logging
                     get_logger(__name__).error("Data extraction error: %s", e)
 
         return ans
@@ -1443,7 +1438,6 @@ class IQ_Option:
         if hasattr(self.api, 'order_data_event'):
             is_ready = self.api.order_data_event.wait(timeout=30)
             if not is_ready:
-                import logging
                 get_logger(__name__).error("Timeout waiting for get_order.")
                 return False, None
                 
@@ -1478,7 +1472,6 @@ class IQ_Option:
         if hasattr(self.api, 'positions_event'):
             is_ready = self.api.positions_event.wait(timeout=30)
             if not is_ready:
-                import logging
                 get_logger(__name__).error("Timeout waiting for get_positions.")
                 return False, None
                 

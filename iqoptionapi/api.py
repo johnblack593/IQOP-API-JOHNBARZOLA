@@ -176,8 +176,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
         # Globals mitigation
         self.check_websocket_if_connect = None
-        self.ssl_Mutual_exclusion = False
-        self.ssl_Mutual_exclusion_write = False
+        self._ws_lock = threading.Lock()
         self.SSID = None
         self.check_websocket_if_error = False
         self.websocket_error_reason = None
@@ -325,12 +324,8 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         data = json.dumps(dict(name=name,
                                msg=msg, request_id=request_id))
 
-        while (self.ssl_Mutual_exclusion or self.ssl_Mutual_exclusion_write) and no_force_send:
-            pass
-        self.ssl_Mutual_exclusion_write = True
         self.websocket.send(data)
         logger.debug(data)
-        self.ssl_Mutual_exclusion_write = False
 
     @property
     def logout(self):
@@ -893,9 +888,6 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             return True
 
     def connect(self, password):
-
-        self.ssl_Mutual_exclusion = False
-        self.ssl_Mutual_exclusion_write = False
         """Method for connection to IQ Option API."""
         try:
             self.close()
