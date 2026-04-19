@@ -1,3 +1,0 @@
-fix(reliability): exponential backoff, order idempotency guard, debt cleanup
-
-fix(fiabilidad): backoff exponencial en reconexión, guard de idempotencia en órdenes, deuda técnica resuelta

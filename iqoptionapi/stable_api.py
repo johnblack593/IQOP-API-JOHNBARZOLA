@@ -9,12 +9,14 @@ from iqoptionapi.logger import get_logger
 from iqoptionapi.reconnect import ReconnectManager, MaxReconnectAttemptsError
 from iqoptionapi.idempotency import IdempotencyRegistry
 from iqoptionapi.security import CredentialStore, generate_user_agent
+from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
+from iqoptionapi.http.session import close_shared_session
+import iqoptionapi
 import logging
 import operator
 from collections import defaultdict
 from collections import deque
 from iqoptionapi.expiration import get_expiration_time, get_remaning_time
-from iqoptionapi.version_control import api_version
 from datetime import datetime, timedelta
 from random import randint
 
@@ -27,7 +29,7 @@ def nested_dict(n, type):
 
 
 class IQ_Option:
-    __version__ = api_version
+    __version__ = iqoptionapi.__version__
 
     def __init__(self, email, password, active_account_type="PRACTICE"):
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
@@ -36,6 +38,7 @@ class IQ_Option:
         self._credential_store = CredentialStore(email, password)
         self._reconnect_manager = ReconnectManager()
         self._idempotency = IdempotencyRegistry()
+        self._rate_limiter = TokenBucket(capacity=5.0, refill_rate=0.5, block=False)
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
@@ -73,6 +76,15 @@ class IQ_Option:
     def set_session(self, header, cookie):
         self.SESSION_HEADER = header
         self.SESSION_COOKIE = cookie
+
+    def close(self):
+        """Gracefully close WebSocket and HTTP session."""
+        try:
+            self.api.close()
+        except Exception:
+            pass
+        close_shared_session()
+        get_logger(__name__).info("IQ_Option instance closed cleanly.")
 
     def connect(self, sms_code=None):
         if hasattr(self, 'api') and hasattr(self.api, 'websocket_client'):
@@ -209,16 +221,13 @@ class IQ_Option:
         self.api.leaderboard_deals_client = None
 
         country_id = Country.ID[country]
+        self.api.leaderboard_deals_client_event.clear()
         self.api.Get_Leader_Board(country_id, user_country_id, from_position, to_position,
                                   near_traders_country_count, near_traders_count, top_country_count, top_count, top_type)
 
-        _ts = time.time()
-        while self.api.leaderboard_deals_client == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for leaderboard_deals_client')
-                break
-            pass
+        is_ready = self.api.leaderboard_deals_client_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for leaderboard_deals_client')
         return self.api.leaderboard_deals_client
 
     def get_instruments(self, type):
@@ -501,14 +510,11 @@ class IQ_Option:
 
     def reset_practice_balance(self):
         self.api.training_balance_reset_request = None
+        self.api.training_balance_reset_request_event.clear()
         self.api.reset_training_balance()
-        _ts = time.time()
-        while self.api.training_balance_reset_request == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for training_balance_reset_request')
-                break
-            pass
+        is_ready = self.api.training_balance_reset_request_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for training_balance_reset_request')
         return self.api.training_balance_reset_request
 
     def position_change_all(self, Main_Name, user_balance_id):
@@ -1004,6 +1010,13 @@ class IQ_Option:
         return self.api.result, self.api.buy_multi_option[req_id]["id"]
 
     def buy(self, price, ACTIVES, ACTION, expirations):
+        try:
+            self._rate_limiter.consume()
+        except RateLimitExceededError:
+            get_logger(__name__).error(
+                "buy() BLOCKED by rate limiter — asset=%s action=%s", ACTIVES, ACTION
+            )
+            return False, None
         request_id = self._idempotency.register()
         get_logger(__name__).info(
             "buy(): request_id=%s | asset=%s | action=%s | amount=%s",
@@ -1381,6 +1394,13 @@ class IQ_Option:
 
                   use_trail_stop=False, auto_margin_call=False,
                   use_token_for_commission=False):
+        try:
+            self._rate_limiter.consume()
+        except RateLimitExceededError:
+            get_logger(__name__).error(
+                "buy_order() BLOCKED by rate limiter — instrument=%s side=%s", instrument_id, side
+            )
+            return False, None
         request_id = self._idempotency.register()
         get_logger(__name__).info(
             "buy_order(): request_id=%s | instrument_id=%s | side=%s | amount=%s",

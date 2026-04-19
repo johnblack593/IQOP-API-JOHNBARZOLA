@@ -1,6 +1,6 @@
-"""Module for IQ Option API."""
-
 from iqoptionapi.logger import get_logger
+from iqoptionapi.http.session import get_shared_session
+import json
 import time
 import threading
 import requests
@@ -160,8 +160,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.https_url = "https://{host}/api".format(host=host)
         self.wss_url = "wss://{host}/echo/websocket".format(host=host)
         self.websocket_client = None
-        self.session = requests.Session()
-        self.session.verify = True
+        self.session = get_shared_session()
         self.session.trust_env = False
         self.username = username
         self.token_login2fa = None
