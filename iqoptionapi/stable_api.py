@@ -327,7 +327,11 @@ class IQ_Option:
         digital_data = []
         for _ in range(3):
             data = self.get_digital_underlying_list_data()
-            digital_data = data.get("underlying", []) if isinstance(data, dict) else []
+            if isinstance(data, dict) and "underlying" in data:
+                digital_data = data.get("underlying", [])
+            elif isinstance(data, list):
+                digital_data = data
+            
             if digital_data:
                 break
             time.sleep(2)
@@ -351,7 +355,13 @@ class IQ_Option:
             ins_data = []
             for _ in range(3):
                 result = self.get_instruments(instruments_type)
-                ins_data = result.get("instruments", []) if isinstance(result, dict) else []
+                if isinstance(result, dict) and "instruments" in result:
+                    ins_data = result.get("instruments", [])
+                elif isinstance(result, list):
+                    ins_data = result
+                elif hasattr(result, "get"):
+                    ins_data = result.get("instruments", [])
+                
                 if ins_data:
                     break
                 time.sleep(2)
