@@ -1,7 +1,7 @@
 import time
-from examples.practice_suite.config import PRACTICE_ASSET_BINARY
+from tests.practice_suite.config import PRACTICE_ASSET_BINARY
 from iqoptionapi.stable_api import IQ_Option
-from examples.practice_suite.report import TestResult, ReportCollector
+from tests.practice_suite.report import TestResult, ReportCollector
 
 SUITE_NAME = "D_Candles"
 
@@ -25,11 +25,11 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
 
     if not is_open:
         msg = f"SKIPPED — asset closed ({asset})"
-        collector.record(TestResult(SUITE_NAME, "D-01: Get candles 60s", True, detail=msg))
-        collector.record(TestResult(SUITE_NAME, "D-02: Get candles 300s", True, detail=msg))
-        collector.record(TestResult(SUITE_NAME, "D-03: Get candles 3600s", True, detail=msg))
-        collector.record(TestResult(SUITE_NAME, "D-04: Candle data integrity", True, detail=msg))
-        collector.record(TestResult(SUITE_NAME, "D-05: Realtime subscription", True, detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-01: Get candles 60s", "PASSED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-02: Get candles 300s", "PASSED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-03: Get candles 3600s", "PASSED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-04: Candle data integrity", "PASSED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-05: Realtime subscription", "PASSED", detail=msg))
         return
 
     # Test D-01: Get candles 60s
@@ -41,27 +41,27 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         assert len(candles_60) > 0, "No candles returned"
         for key in ["open", "close", "min", "max", "volume"]:
             assert key in candles_60[0], f"Missing key {key}"
-        collector.record(TestResult(SUITE_NAME, "D-01: Get candles 60s", True, detail=f"Count: {len(candles_60)}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-01: Get candles 60s", "PASSED", detail=f"Count: {len(candles_60)}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "D-01: Get candles 60s", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-01: Get candles 60s", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test D-02: Get candles 300s
     start = time.time()
     try:
         c = api.get_candles(asset, 300, 10, time.time())
         assert isinstance(c, list) and len(c) > 0, "Failed to get 300s candles"
-        collector.record(TestResult(SUITE_NAME, "D-02: Get candles 300s", True, detail=f"Count: {len(c)}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-02: Get candles 300s", "PASSED", detail=f"Count: {len(c)}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "D-02: Get candles 300s", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-02: Get candles 300s", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test D-03: Get candles 3600s
     start = time.time()
     try:
         c = api.get_candles(asset, 3600, 10, time.time())
         assert isinstance(c, list) and len(c) > 0, "Failed to get 3600s candles"
-        collector.record(TestResult(SUITE_NAME, "D-03: Get candles 3600s", True, detail=f"Count: {len(c)}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-03: Get candles 3600s", "PASSED", detail=f"Count: {len(c)}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "D-03: Get candles 3600s", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-03: Get candles 3600s", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test D-04: Candle data integrity
     start = time.time()
@@ -76,9 +76,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             assert c_max >= c_open and c_max >= c_close, f"max={c_max} is not >= open={c_open} and close={c_close}"
             passed_count += 1
             
-        collector.record(TestResult(SUITE_NAME, "D-04: Candle data integrity", True, detail=f"{passed_count} verified", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-04: Candle data integrity", "PASSED", detail=f"{passed_count} verified", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "D-04: Candle data integrity", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-04: Candle data integrity", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test D-05: Realtime subscription
     start = time.time()
@@ -90,10 +90,10 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
 
         assert rt_candles is not None, "get_realtime_candles returned None"
         assert isinstance(rt_candles, dict), "realtime candles should be a dict"
-        collector.record(TestResult(SUITE_NAME, "D-05: Realtime subscription", True, detail=f"Received streaming blocks: {len(rt_candles) if rt_candles else 0}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-05: Realtime subscription", "PASSED", detail=f"Received streaming blocks: {len(rt_candles) if rt_candles else 0}", duration=time.time() - start))
     except Exception as e:
         # cleanup just in case
         try: api.stop_candles_stream(asset, 60)
         except: pass
-        collector.record(TestResult(SUITE_NAME, "D-05: Realtime subscription", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "D-05: Realtime subscription", "FAILED", detail=str(e), duration=time.time() - start))
 

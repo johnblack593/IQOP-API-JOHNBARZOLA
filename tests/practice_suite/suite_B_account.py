@@ -1,6 +1,6 @@
 import time
 from iqoptionapi.stable_api import IQ_Option
-from examples.practice_suite.report import TestResult, ReportCollector
+from tests.practice_suite.report import TestResult, ReportCollector
 
 SUITE_NAME = "B_Account"
 
@@ -12,9 +12,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         assert profile is not None, "Profile returned None"
         assert isinstance(profile, dict), "Profile is not a dict"
         assert "balance" in profile or "balances" in profile, "No balance info found in profile dict"
-        collector.record(TestResult(SUITE_NAME, "B-01: Profile retrieval", True, duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-01: Profile retrieval", "PASSED", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "B-01: Profile retrieval", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-01: Profile retrieval", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test B-02: Balance retrieval
     start = time.time()
@@ -22,9 +22,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         balance = api.get_balance()
         assert isinstance(balance, (float, int)), f"Balance is not numeric: {type(balance)}"
         assert balance >= 0, f"Balance is negative: {balance}"
-        collector.record(TestResult(SUITE_NAME, "B-02: Balance retrieval", True, detail=f"Balance: {balance}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-02: Balance retrieval", "PASSED", detail=f"Balance: {balance}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "B-02: Balance retrieval", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-02: Balance retrieval", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test B-03: Balance type
     start = time.time()
@@ -42,9 +42,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             mode = api.get_balance_mode() # default assumption
 
         assert mode == "PRACTICE", f"Balance type is not PRACTICE: {mode}"
-        collector.record(TestResult(SUITE_NAME, "B-03: Balance type", True, detail=f"Type: {mode}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-03: Balance type", "PASSED", detail=f"Type: {mode}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "B-03: Balance type", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-03: Balance type", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test B-04: Practice balance reset
     start = time.time()
@@ -58,9 +58,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         # We also need to let it settle if it asynchronously applies so we wait briefly
         time.sleep(1)
 
-        collector.record(TestResult(SUITE_NAME, "B-04: Practice balance reset", True, detail=f"Post-reset: {balance_after}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-04: Practice balance reset", "PASSED", detail=f"Post-reset: {balance_after}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "B-04: Practice balance reset", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-04: Practice balance reset", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test B-05: Country list
     start = time.time()
@@ -75,7 +75,7 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             countries = list(Country.ID.keys())
         
         assert isinstance(countries, (list, dict, tuple)) and len(countries) > 0, "Countries list was empty or invalid"
-        collector.record(TestResult(SUITE_NAME, "B-05: Country list", True, detail=f"{len(countries)} countries found", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-05: Country list", "PASSED", detail=f"{len(countries)} countries found", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "B-05: Country list", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "B-05: Country list", "FAILED", detail=str(e), duration=time.time() - start))
 
