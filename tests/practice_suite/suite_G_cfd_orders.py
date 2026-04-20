@@ -35,7 +35,19 @@ def get_available_cfd_asset(api: IQ_Option) -> str:
             for asset_name, info in ot.get(cfd_type, {}).items():
                 if isinstance(info, dict) and info.get("open") is True:
                     return asset_name
-                    
+        # Debugging inject for SPRINT-11
+        try:
+            cfd_keys = list(ot.get("cfd", {}).keys())
+            forex_keys = list(ot.get("forex", {}).keys())
+            print(f"\n[DEBUG CFD] Found {len(cfd_keys)} CFD assets. Sample: {cfd_keys[:5]}")
+            if cfd_keys:
+                print(f"[DEBUG CFD] Example '{cfd_keys[0]}': {ot['cfd'][cfd_keys[0]]}")
+            print(f"[DEBUG FOREX] Found {len(forex_keys)} forex assets. Sample: {forex_keys[:5]}")
+            if forex_keys:
+                print(f"[DEBUG FOREX] Example '{forex_keys[0]}': {ot['forex'][forex_keys[0]]}")
+        except Exception as e:
+            print(f"[DEBUG CFD] Error extracting debug: {e}")
+            
     except Exception as e:
         logger.error(f"Error fetching open CFD assets: {e}")
         

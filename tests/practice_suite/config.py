@@ -64,6 +64,17 @@ def get_available_binary_asset(api: IQ_Option, instrument_type: str = "binary") 
                 if isinstance(info, dict) and info.get("open") is True:
                     return asset_name
 
+        # Debugging inject for SPRINT-11
+        if instrument_type == "digital":
+            try:
+                digital_keys = list(ot.get("digital", {}).keys())
+                print(f"\n[DEBUG DIGITAL] Found {len(digital_keys)} digital assets. Sample 5: {digital_keys[:5]}")
+                if digital_keys:
+                    first_k = digital_keys[0]
+                    print(f"[DEBUG DIGITAL] Example structure '{first_k}': {ot['digital'][first_k]}")
+            except Exception as e:
+                print(f"[DEBUG DIGITAL] Error extracting debug: {e}")
+
     except Exception as e:
         import logging
         logging.error(f"Error fetching open {instrument_type} assets: {e}")
