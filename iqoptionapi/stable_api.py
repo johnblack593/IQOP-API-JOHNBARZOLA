@@ -35,6 +35,7 @@ class IQ_Option:
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
+        self._password = password # Harding 3A: will be cleared in connect()
         self._credential_store = CredentialStore(email, password)
         self._reconnect_manager = ReconnectManager()
         self._idempotency = IdempotencyRegistry()
@@ -108,6 +109,7 @@ class IQ_Option:
 
         check, reason = self.api.connect(self._credential_store.consume())
         if check:
+            self._password = None # Harding 3A: clear password from memory post-auth
             self._reconnect_manager.reset()
             self._idempotency.purge_expired()
 

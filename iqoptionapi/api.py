@@ -206,27 +206,6 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.game_betinfo_isSuccessful_event = threading.Event()
         self.api_option_init_all_result_v2_event = threading.Event()
         self.candles_event = threading.Event()
-        
-        # --- NEW CONCURRENCY EVENTS ---
-        self.financial_information_event = threading.Event()
-        self.leaderboard_deals_client_event = threading.Event()
-        self.profile_msg_event = threading.Event()
-        self.balances_raw_event = threading.Event()
-        self.training_balance_reset_request_event = threading.Event()
-        self.api_game_getoptions_result_event = threading.Event()
-        self.get_options_v2_data_event = threading.Event()
-        self.underlying_list_data_event = threading.Event()
-        self.strike_list_event = threading.Event()
-        self.digital_option_placed_id_event = threading.Event()
-        self.order_data_event = threading.Event()
-        self.deferred_orders_event = threading.Event()
-        self.positions_event = threading.Event()
-        self.position_event = threading.Event()
-        self.sold_options_respond_event = threading.Event()
-        self.sold_digital_options_respond_event = threading.Event()
-        self.game_betinfo_isSuccessful_event = threading.Event()
-        self.api_option_init_all_result_v2_event = threading.Event()
-        self.candles_event = threading.Event()
 
     def prepare_http_url(self, resource):
         """Construct http url from resource url.
