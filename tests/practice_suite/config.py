@@ -25,3 +25,44 @@ PRACTICE_TIMEOUT = int(os.getenv("PRACTICE_TIMEOUT", "120"))
 
 # Shared API instance state
 api_instance: Optional[IQ_Option] = None
+
+def get_available_binary_asset(api: IQ_Option, instrument_type: str = "binary") -> Optional[str]:
+    """
+    Returns the name of the first available asset for binary/turbo/digital.
+    Priority list forces weekend OTCs to the front, then true M-F majors.
+    """
+    priority = [
+        "EURUSD-OTC", "GBPUSD-OTC", "AUDUSD-OTC",
+        "EURUSD", "GBPUSD", "AUDUSD", "USDJPY"
+    ]
+    open_assets = []
+    try:
+        ot = api.get_all_open_time()
+        
+        # Binary / turbo / digital categorization
+        types_to_check = [instrument_type]
+        if instrument_type == "binary":
+            types_to_check = ["binary", "turbo", "otc"]
+            
+        for t in types_to_check:
+            if t in ot:
+                for aid, adata in ot[t].get("actives", {}).items():
+                    name = str(adata.get("name", ""))
+                    if "." in name:
+                        name = name.split(".")[1]
+                    if adata.get("open", False):
+                        if name not in open_assets:
+                            open_assets.append(name)
+                            
+        for p in priority:
+            if p in open_assets:
+                return p
+                
+        if open_assets:
+            return open_assets[0]
+            
+    except Exception as e:
+        import logging
+        logging.error(f"Error fetching open {instrument_type} assets: {e}")
+        
+    return None

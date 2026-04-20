@@ -23,21 +23,23 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
     try:
         assert open_times is not None, "open_times was not retrieved in C-01"
         asset_found = False
+        categories = list(open_times.keys()) if open_times else []
+        
         status_msg = f"{PRACTICE_ASSET_BINARY} not found"
         
-        for option_type in ["binary", "turbo"]:
+        for option_type in ["binary", "turbo", "otc"]:
             if option_type in open_times:
                 for active_id, active_data in open_times[option_type]["actives"].items():
                     name = str(active_data.get("name", "")).split(".")[1] if "." in str(active_data.get("name", "")) else active_data.get("name", "")
                     if name == PRACTICE_ASSET_BINARY or str(active_id) == PRACTICE_ASSET_BINARY:
                         asset_found = True
                         is_open = active_data.get("open", False)
-                        status_msg = f"Found in {option_type} - Open: {is_open}"
+                        status_msg = f"Found in {option_type} - Open: {is_open}. Categories: {categories}"
                         break
                 if asset_found: break
 
         if not asset_found:
-            status_msg = f"{PRACTICE_ASSET_BINARY} not listed in binary/turbo actives"
+            status_msg = f"{PRACTICE_ASSET_BINARY} not listed in binary/turbo actives. Categories: {categories}"
             
         collector.record(TestResult(SUITE_NAME, "C-02: Active asset resolution", "PASSED", detail=status_msg, duration=time.time() - start))
     except Exception as e:
@@ -70,3 +72,23 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             collector.record(TestResult(SUITE_NAME, "C-04: Digital strikes", "FAILED", detail="Method get_digital_underlying_list_data not found", duration=time.time() - start))
     except Exception as e:
         collector.record(TestResult(SUITE_NAME, "C-04: Digital strikes", "FAILED", detail=str(e), duration=time.time() - start))
+
+    # Test C-05: OTC availability check
+    start = time.time()
+    try:
+        otc_found = False
+        if open_times is not None:
+            for t in ["binary", "turbo", "otc"]:
+                if t in open_times:
+                    for aid, adata in open_times[t].get("actives", {}).items():
+                        if "-OTC" in str(adata.get("name", "")).upper():
+                            otc_found = True
+                            break
+                if otc_found: break
+
+        if otc_found:
+            collector.record(TestResult(SUITE_NAME, "C-05: OTC availability check", "PASSED", detail="OTC assets active", duration=time.time() - start))
+        else:
+            collector.record(TestResult(SUITE_NAME, "C-05: OTC availability check", "SKIPPED", detail="SKIPPED_NO_MARKET \u2014 No OTC assets listed", duration=time.time() - start))
+    except Exception as e:
+        collector.record(TestResult(SUITE_NAME, "C-05: OTC availability check", "FAILED", detail=str(e), duration=time.time() - start))
