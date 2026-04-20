@@ -1,7 +1,7 @@
 import time
-from examples.practice_suite.config import PRACTICE_ASSET_DIGITAL, PRACTICE_AMOUNT
+from tests.practice_suite.config import PRACTICE_ASSET_DIGITAL, PRACTICE_AMOUNT
 from iqoptionapi.stable_api import IQ_Option
-from examples.practice_suite.report import TestResult, ReportCollector
+from tests.practice_suite.report import TestResult, ReportCollector
 
 SUITE_NAME = "F_Digital"
 
@@ -24,16 +24,16 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
 
         if not is_open:
             msg = f"SKIPPED — asset closed ({asset})"
-            collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", True, detail=msg))
-            collector.record(TestResult(SUITE_NAME, "F-02: Buy digital spot — CALL", True, detail=msg))
-            collector.record(TestResult(SUITE_NAME, "F-03: Buy digital spot — PUT", True, detail=msg))
-            collector.record(TestResult(SUITE_NAME, "F-04: check_win_v4 digital — CALL", True, detail=msg))
-            collector.record(TestResult(SUITE_NAME, "F-05: check_win_v4 digital — PUT", True, detail=msg))
+            collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", "PASSED", detail=msg))
+            collector.record(TestResult(SUITE_NAME, "F-02: Buy digital spot — CALL", "PASSED", detail=msg))
+            collector.record(TestResult(SUITE_NAME, "F-03: Buy digital spot — PUT", "PASSED", detail=msg))
+            collector.record(TestResult(SUITE_NAME, "F-04: check_win_v4 digital — CALL", "PASSED", detail=msg))
+            collector.record(TestResult(SUITE_NAME, "F-05: check_win_v4 digital — PUT", "PASSED", detail=msg))
             return
         
-        collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", True, detail=f"Open: {is_open}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", "PASSED", detail=f"Open: {is_open}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", "FAILED", detail=str(e), duration=time.time() - start))
         return
 
     # Let TokenBucket refill
@@ -47,9 +47,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         assert check, f"Digital buy failed: {order_id}"
         assert order_id is not None, "Order ID is None"
         f02_order_id = order_id
-        collector.record(TestResult(SUITE_NAME, "F-02: Buy digital spot — CALL", True, detail=f"ID: {order_id}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-02: Buy digital spot — CALL", "PASSED", detail=f"ID: {order_id}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "F-02: Buy digital spot — CALL", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-02: Buy digital spot — CALL", "FAILED", detail=str(e), duration=time.time() - start))
 
     time.sleep(2)
 
@@ -61,9 +61,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         assert check, f"Digital buy failed: {order_id}"
         assert order_id is not None, "Order ID is None"
         f03_order_id = order_id
-        collector.record(TestResult(SUITE_NAME, "F-03: Buy digital spot — PUT", True, detail=f"ID: {order_id}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-03: Buy digital spot — PUT", "PASSED", detail=f"ID: {order_id}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "F-03: Buy digital spot — PUT", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-03: Buy digital spot — PUT", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Wait for expirations (digital orders require waiting)
     time.sleep(2)
@@ -75,9 +75,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             raise ValueError("f02_order_id is None")
         result = api.check_win_v4(f02_order_id)
         assert result is not None, "check_win_v4 returned None"
-        collector.record(TestResult(SUITE_NAME, "F-04: check_win_v4 digital — CALL", True, detail=f"Outcome: {result}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-04: check_win_v4 digital — CALL", "PASSED", detail=f"Outcome: {result}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "F-04: check_win_v4 digital — CALL", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-04: check_win_v4 digital — CALL", "FAILED", detail=str(e), duration=time.time() - start))
 
     # Test F-05: check_win_v4 digital — PUT
     start = time.time()
@@ -86,6 +86,6 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             raise ValueError("f03_order_id is None")
         result = api.check_win_v4(f03_order_id)
         assert result is not None, "check_win_v4 returned None"
-        collector.record(TestResult(SUITE_NAME, "F-05: check_win_v4 digital — PUT", True, detail=f"Outcome: {result}", duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-05: check_win_v4 digital — PUT", "PASSED", detail=f"Outcome: {result}", duration=time.time() - start))
     except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "F-05: check_win_v4 digital — PUT", False, detail=str(e), duration=time.time() - start))
+        collector.record(TestResult(SUITE_NAME, "F-05: check_win_v4 digital — PUT", "FAILED", detail=str(e), duration=time.time() - start))

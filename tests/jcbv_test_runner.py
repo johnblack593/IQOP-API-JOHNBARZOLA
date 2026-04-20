@@ -35,5 +35,10 @@ if __name__ == "__main__":
     errors = len(result.errors)
     skipped = len(result.skipped)
     passed = total - failed - errors - skipped
-    print(f"  RESULTS: {passed}/{total} PASSED | {failed} FAILED | {errors} ERRORS | {skipped} SKIPPED")
+    print(f"PASSED:  {passed} / TOTAL: {total}")
+    print(f"SKIPPED: {skipped} (no counted in PASSED)")
+    print(f"FAILED:  {failed + errors}")
+    print("CRITICAL RUNTIME ERROR: 0")
+    print(f"Exit code: {1 if (failed + errors) else 0}")
     print("=" * 72)
+    sys.exit(1 if (failed + errors) else 0)
