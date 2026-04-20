@@ -324,15 +324,23 @@ class IQ_Option:
 
     def __get_digital_open(self):
         # for digital options
-        data = self.get_digital_underlying_list_data()
-        digital_data = data.get("underlying", []) if data else []
+        digital_data = []
+        for _ in range(3):
+            data = self.get_digital_underlying_list_data()
+            digital_data = data.get("underlying", []) if isinstance(data, dict) else []
+            if digital_data:
+                break
+            time.sleep(2)
+            
         for digital in digital_data:
-            name = digital["underlying"]
-            schedule = digital["schedule"]
+            name = digital.get("underlying")
+            if not name:
+                continue
+            schedule = digital.get("schedule", [])
             self.OPEN_TIME["digital"][name]["open"] = False
             for schedule_time in schedule:
-                start = schedule_time["open"]
-                end = schedule_time["close"]
+                start = schedule_time.get("open", 0)
+                end = schedule_time.get("close", 0)
                 if start < time.time() < end:
                     self.OPEN_TIME["digital"][name]["open"] = True
 
@@ -340,14 +348,23 @@ class IQ_Option:
         # Crypto and etc pairs
         instrument_list = ["cfd", "forex", "crypto"]
         for instruments_type in instrument_list:
-            ins_data = self.get_instruments(instruments_type)["instruments"]
+            ins_data = []
+            for _ in range(3):
+                result = self.get_instruments(instruments_type)
+                ins_data = result.get("instruments", []) if isinstance(result, dict) else []
+                if ins_data:
+                    break
+                time.sleep(2)
+                
             for detail in ins_data:
-                name = detail["name"]
-                schedule = detail["schedule"]
+                name = detail.get("name")
+                if not name:
+                    continue
+                schedule = detail.get("schedule", [])
                 self.OPEN_TIME[instruments_type][name]["open"] = False
                 for schedule_time in schedule:
-                    start = schedule_time["open"]
-                    end = schedule_time["close"]
+                    start = schedule_time.get("open", 0)
+                    end = schedule_time.get("close", 0)
                     if start < time.time() < end:
                         self.OPEN_TIME[instruments_type][name]["open"] = True
 
