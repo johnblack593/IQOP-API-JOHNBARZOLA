@@ -1437,6 +1437,91 @@ class IQ_Option:
     # ----------------------------------------------------------
     # -----------------BUY_for__Forex__&&__stock(cfd)__&&__ctrpto
 
+    # ── CFD/Forex/Crypto order capability detection ──
+    # Some user groups (e.g. user_group_id:191) have place-order-temp
+    # silently disabled server-side. This flag caches the probe result.
+    _cfd_order_capable = None  # None=untested, True/False=tested
+
+    def check_cfd_order_capability(self, force=False):
+        """
+        Probes whether the server accepts place-order-temp messages.
+        Returns True if CFD/Forex orders are supported, False otherwise.
+        Result is cached after first call.
+        """
+        if self._cfd_order_capable is not None and not force:
+            return self._cfd_order_capable
+
+        get_logger(__name__).info("Probing CFD order capability...")
+
+        # Use well-known OTC pairs from ACTIVES (always open, no need for
+        # slow get_all_open_time() call)
+        _PROBE_CANDIDATES = [
+            ("forex", "EURUSD-OTC"), ("forex", "USDJPY-OTC"),
+            ("forex", "GBPUSD-OTC"), ("cfd", "APPLE-OTC"),
+            ("crypto", "BTCUSD-OTC"),
+        ]
+        test_asset = None
+        test_type = None
+        for cat, name in _PROBE_CANDIDATES:
+            if name in OP_code.ACTIVES:
+                test_asset = name
+                test_type = cat
+                break
+
+        if not test_asset:
+            # Fallback: use any ACTIVES entry with OTC suffix
+            for name in OP_code.ACTIVES:
+                if "OTC" in name:
+                    test_asset = name
+                    test_type = "forex"
+                    break
+
+        if not test_asset:
+            get_logger(__name__).warning("No OTC assets in ACTIVES to probe CFD capability")
+            self._cfd_order_capable = False
+            return False
+
+        # Send a minimal order and wait for ANY response (3s timeout)
+        self.api.buy_order_id = None
+        try:
+            self.api.buy_order(
+                instrument_type=test_type, instrument_id=test_asset,
+                side="buy", amount=1, leverage=1,
+                type="market", limit_price=None, stop_price=None,
+                stop_lose_value=None, stop_lose_kind=None,
+                take_profit_value=None, take_profit_kind=None,
+                use_trail_stop=False, auto_margin_call=False,
+                use_token_for_commission=False
+            )
+        except Exception as e:
+            get_logger(__name__).warning("CFD probe send failed: %s", e)
+            self._cfd_order_capable = False
+            return False
+
+        # Fast timeout: 3s instead of 15s
+        _ts = time.time()
+        while self.api.buy_order_id is None:
+            time.sleep(0.05)
+            if time.time() - _ts >= 3:
+                break
+
+        if self.api.buy_order_id is not None:
+            get_logger(__name__).info(
+                "CFD orders SUPPORTED — probe order_id=%s", self.api.buy_order_id)
+            # Close the probe order
+            try:
+                self.close_position(self.api.buy_order_id)
+            except Exception:
+                pass
+            self._cfd_order_capable = True
+        else:
+            get_logger(__name__).warning(
+                "CFD orders NOT SUPPORTED for this account "
+                "(server silently dropped place-order-temp)")
+            self._cfd_order_capable = False
+
+        return self._cfd_order_capable
+
     def buy_order(self,
                   instrument_type, instrument_id,
                   side, amount, leverage,
@@ -1475,6 +1560,10 @@ class IQ_Option:
         if type == "stop" and stop_price is None:
             return False, "INVALID_PARAMS: stop_price cannot be None for stop orders"
 
+        # Fast-fail if we already know orders are unsupported
+        if self._cfd_order_capable is False:
+            return False, "CFD_NOT_SUPPORTED: place-order-temp disabled for this account"
+
         try:
             self._rate_limiter.consume()
         except RateLimitExceededError:
@@ -1503,12 +1592,16 @@ class IQ_Option:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
                 self._idempotency.fail(request_id)
+                # Mark as incapable if this is likely a server restriction
+                if self._cfd_order_capable is None:
+                    get_logger(__name__).warning(
+                        "buy_order() first-call timeout — marking CFD as unsupported")
+                    self._cfd_order_capable = False
                 get_logger(__name__).critical(
                     "buy_order() TIMEOUT: request_id=%s — order may or may not exist on server. "
                     "Check open positions manually before retrying.", request_id
                 )
-                get_logger(__name__).warning('Timeout (15s) waiting for buy_order_id')
-                return False, None
+                return False, "TIMEOUT: server did not respond to place-order-temp"
             pass
 
         check, data = self.get_order(self.api.buy_order_id)
@@ -1520,6 +1613,9 @@ class IQ_Option:
         if check:
             if data["status"] != "rejected":
                 self._idempotency.confirm(request_id, self.api.buy_order_id)
+                # Mark as capable on success
+                if self._cfd_order_capable is None:
+                    self._cfd_order_capable = True
                 return True, self.api.buy_order_id
             else:
                 self._idempotency.fail(request_id)
