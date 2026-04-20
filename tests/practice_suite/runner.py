@@ -12,6 +12,7 @@ from tests.practice_suite import suite_F_digital_options
 from tests.practice_suite import suite_G_cfd_orders
 from tests.practice_suite import suite_H_reconnect
 from tests.practice_suite import suite_I_cleanup
+from tests.practice_suite import suite_K_edge_cases
 from tests.practice_suite import suite_J_blitz
 
 def main():
@@ -60,6 +61,7 @@ def main():
             suite_F_digital_options,
             suite_G_cfd_orders,
             suite_H_reconnect,
+            suite_K_edge_cases,
             suite_J_blitz,
             suite_I_cleanup,
         ]

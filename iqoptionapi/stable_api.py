@@ -53,9 +53,7 @@ class IQ_Option:
             "User-Agent": generate_user_agent()}
         self.SESSION_COOKIE = {}
         #
-        # --start
-        # self.connect()
-        # this auto function delay too long
+
 
     # --------------------------------------------------------------------------
 
@@ -127,25 +125,6 @@ class IQ_Option:
             self.order_changed_all("subscribeMessage")
             self.api.setOptions(1, True)
 
-            """
-            self.api.subscribe_position_changed(
-                "position-changed", "multi-option", 2)
-
-            self.api.subscribe_position_changed(
-                "trading-fx-option.position-changed", "fx-option", 3)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "crypto", 4)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "forex", 5)
-
-            self.api.subscribe_position_changed(
-                "digital-options.position-changed", "digital-option", 6)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "cfd", 7)
-            """
 
             # Auto-update asset catalogs on successful connection
             try:
@@ -154,7 +133,7 @@ class IQ_Option:
             except Exception as e:
                 get_logger(__name__).warning("Failed to auto-update asset catalogs: %s", e)
 
-            # self.get_balance_id()
+
             return True, None
         else:
             if json.loads(reason)['code'] == 'verify':
@@ -323,8 +302,6 @@ class IQ_Option:
                 return None
         return self.api.api_option_init_all_result_v2
 
-        # return OP_code.ACTIVES
-
     # ------- chek if binary/digit/cfd/stock... if open or not
 
     def __get_binary_open(self):
@@ -457,19 +434,6 @@ class IQ_Option:
                 return None
         return self.api.profile.msg
 
-    """def get_profile(self):
-        while True:
-            time.sleep(0.05)
-            try:
-
-                respon = self.api.getprofile().json()
-                time.sleep(self.suspend)
-
-                if respon["isSuccessful"] == True:
-                    return respon
-            except Exception as e:
-                get_logger(__name__).error('**error** get_profile try reconnect')
-                self.connect()"""
 
     def get_currency(self):
         balances_raw = self.get_balances()
@@ -480,19 +444,6 @@ class IQ_Option:
     def get_balance_id(self):
         return self.api.balance_id
 
-    """ def get_balance(self):
-        self.api.profile.balance = None
-        while True:
-            time.sleep(0.05)
-            try:
-                respon = self.get_profile()
-                self.api.profile.balance = respon["result"]["balance"]
-                break
-            except Exception as e:
-                get_logger(__name__).error('**error** get_balance()')
-
-            time.sleep(self.suspend)
-        return self.api.profile.balance"""
 
     def get_balance(self):
 
@@ -789,7 +740,7 @@ class IQ_Option:
     # -----------------traders_mood----------------------
 
     def start_mood_stream(self, ACTIVES, instrument="turbo-option"):
-        if ACTIVES in self.subscribe_mood == False:
+        if ACTIVES not in self.subscribe_mood:
             self.subscribe_mood.append(ACTIVES)
 
         while True:
@@ -803,7 +754,7 @@ class IQ_Option:
                 time.sleep(5)
 
     def stop_mood_stream(self, ACTIVES, instrument="turbo-option"):
-        if ACTIVES in self.subscribe_mood == True:
+        if ACTIVES in self.subscribe_mood:
             del self.subscribe_mood[ACTIVES]
         self.api.unsubscribe_Traders_mood(OP_code.ACTIVES[ACTIVES], instrument)
 
@@ -1085,15 +1036,14 @@ class IQ_Option:
         return self.api.sold_options_respond
 
     def sell_digital_option(self, options_ids):
-        self.api.sell_digital_option(options_ids)
         self.api.sold_digital_options_respond = None
+        self.api.sell_digital_option(options_ids)
         _ts = time.time()
         while self.api.sold_digital_options_respond == None:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
                 get_logger(__name__).warning('Timeout (15s) waiting for sold_digital_options_respond')
                 break
-            pass
         return self.api.sold_digital_options_respond
 # __________________for Digital___________________
 
@@ -1194,6 +1144,10 @@ class IQ_Option:
 
     
     def buy_digital_spot(self, active, amount, action, duration):
+        """
+        DEPRECATED: Use buy_digital_spot_v2() instead. This method uses
+        the legacy instrument_id format which may be rejected by the server.
+        """
         # Expiration time need to be formatted like this: YYYYMMDDHHII
         # And need to be on GMT time
 
@@ -1262,9 +1216,9 @@ class IQ_Option:
         position = self.get_async_order(position_id)["position-changed"]["msg"]
         # doEURUSD201911040628PT1MPSPT
         # z mean check if call or not
-        if position["instrument_id"].find("MPSPT"):
+        if "MPSPT" in position["instrument_id"]:
             z = False
-        elif position["instrument_id"].find("MCSPT"):
+        elif "MCSPT" in position["instrument_id"]:
             z = True
         else:
             get_logger(__name__).error(
@@ -1413,6 +1367,34 @@ class IQ_Option:
 
                   use_trail_stop=False, auto_margin_call=False,
                   use_token_for_commission=False):
+        """
+        Places a new order with optional SL/TP capabilities.
+        
+        Args:
+            stop_lose_kind / take_profit_kind accepted values:
+              "percent"  -> value is percentage (e.g. 50.0 means 50%)
+              "price"    -> value is absolute asset price
+              "pnl"      -> value is amount in USD of profit/loss
+        
+        Example:
+            buy_order(..., stop_lose_kind="percent", stop_lose_value=50.0,
+                           take_profit_kind="percent", take_profit_value=100.0)
+        """
+        if amount <= 0:
+            return False, "INVALID_PARAMS: amount must be > 0"
+        if side not in ("buy", "sell"):
+            return False, f"INVALID_PARAMS: invalid side '{side}'"
+        if type not in ("market", "limit", "stop"):
+            return False, f"INVALID_PARAMS: invalid type '{type}'"
+        if stop_lose_kind is not None and (stop_lose_value is None or stop_lose_value <= 0):
+            return False, "INVALID_PARAMS: stop_lose_value must be > 0 when stop_lose_kind is set"
+        if take_profit_kind is not None and (take_profit_value is None or take_profit_value <= 0):
+            return False, "INVALID_PARAMS: take_profit_value must be > 0 when take_profit_kind is set"
+        if type == "limit" and limit_price is None:
+            return False, "INVALID_PARAMS: limit_price cannot be None for limit orders"
+        if type == "stop" and stop_price is None:
+            return False, "INVALID_PARAMS: stop_price cannot be None for stop orders"
+
         try:
             self._rate_limiter.consume()
         except RateLimitExceededError:
@@ -1485,6 +1467,26 @@ class IQ_Option:
                      stop_lose_kind, stop_lose_value,
                      take_profit_kind, take_profit_value,
                      use_trail_stop, auto_margin_call):
+        """
+        Changes SL/TP of an existing order or position.
+        
+        Args:
+            stop_lose_kind / take_profit_kind accepted values:
+              "percent"  -> value is percentage (e.g. 50.0 means 50%)
+              "price"    -> value is absolute asset price
+              "pnl"      -> value is amount in USD of profit/loss
+        
+        Example:
+            change_order(..., stop_lose_kind="percent", stop_lose_value=50.0,
+                              take_profit_kind="percent", take_profit_value=100.0)
+        """
+        if stop_lose_kind is not None and (stop_lose_value is None or stop_lose_value <= 0):
+            return False, "INVALID_PARAMS: stop_lose_value must be > 0 when stop_lose_kind is set"
+        if take_profit_kind is not None and (take_profit_value is None or take_profit_value <= 0):
+            return False, "INVALID_PARAMS: take_profit_value must be > 0 when take_profit_kind is set"
+        if stop_lose_kind is None and take_profit_kind is None:
+            get_logger(__name__).warning("change_order called with both SL and TP as None")
+
         check = True
         if ID_Name == "position_id":
             check, order_data = self.get_order(order_id)
@@ -1764,27 +1766,15 @@ class IQ_Option:
     def subscribe_live_deal(self, name, active, _type, buffersize):
         active_id = OP_code.ACTIVES[active]
         self.api.Subscribe_Live_Deal(name, active_id, _type)
-        """
-        self.api.live_deal_data[name][active][_type]=deque(list(),buffersize)
 
-
-        while len(self.api.live_deal_data[name][active][_type])==0:
-            time.sleep(0.05)
-            self.api.Subscribe_Live_Deal(name,active_id,_type)
-            time.sleep(1)
-        """
-
-    def unscribe_live_deal(self, name, active, _type):
+    def unsubscribe_live_deal(self, name, active, _type):
         active_id = OP_code.ACTIVES[active]
         self.api.Unscribe_Live_Deal(name, active_id, _type)
-        """
 
-        while len(self.api.live_deal_data[name][active][_type])!=0:
-            time.sleep(0.05)
-            self.api.Unscribe_Live_Deal(name,active_id,_type)
-            del self.api.live_deal_data[name][active][_type]
-            time.sleep(1)
-        """
+    def unscribe_live_deal(self, name, active, _type):
+        get_logger(__name__).warning(
+            "unscribe_live_deal() is deprecated, use unsubscribe_live_deal()")
+        return self.unsubscribe_live_deal(name, active, _type)
 
     def set_digital_live_deal_cb(self, cb):
         self.api.digital_live_deal_cb = cb
@@ -1817,15 +1807,13 @@ class IQ_Option:
 
     def request_leaderboard_userinfo_deals_client(self, user_id, country_id):
         self.api.leaderboard_userinfo_deals_client = None
-
-        while True:
-            time.sleep(0.05)
-            if self.api.leaderboard_userinfo_deals_client.get("isSuccessful") == True:
-                    break
-            self.api.Request_Leaderboard_Userinfo_Deals_Client(
-                user_id, country_id)
-            time.sleep(0.2)
-
+        if hasattr(self.api, 'leaderboard_userinfo_deals_client_event'):
+            self.api.leaderboard_userinfo_deals_client_event.clear()
+        self.api.Request_Leaderboard_Userinfo_Deals_Client(user_id, country_id)
+        if hasattr(self.api, 'leaderboard_userinfo_deals_client_event'):
+            is_ready = self.api.leaderboard_userinfo_deals_client_event.wait(timeout=15)
+            if not is_ready:
+                get_logger(__name__).warning('Timeout (15s) waiting for leaderboard_userinfo')
         return self.api.leaderboard_userinfo_deals_client
 
     def get_users_availability(self, user_id):
@@ -1896,9 +1884,12 @@ class IQ_Option:
         logger.info(instrument_id)
         request_id = self.api.place_digital_option_v2(instrument_id, active_id, amount)
 
+        _ts = time.time()
         while self.api.digital_option_placed_id.get(request_id) is None:
             time.sleep(0.05)
-            pass
+            if time.time() - _ts >= 15:
+                get_logger(__name__).error('Timeout (15s) waiting for digital_option_placed_id')
+                return False, None
 
         digital_order_id = self.api.digital_option_placed_id.get(request_id)
         if isinstance(digital_order_id, int):
