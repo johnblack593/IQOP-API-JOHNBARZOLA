@@ -8,6 +8,7 @@ from tests.practice_suite import suite_B_account
 from tests.practice_suite import suite_C_market_data
 from tests.practice_suite import suite_D_candles
 from tests.practice_suite import suite_E_binary_options
+from tests.practice_suite import suite_L_http_instruments
 from tests.practice_suite import suite_F_digital_options
 from tests.practice_suite import suite_G_cfd_orders
 from tests.practice_suite import suite_H_reconnect
@@ -58,6 +59,7 @@ def main():
             suite_C_market_data,
             suite_D_candles,
             suite_E_binary_options,
+            suite_L_http_instruments,
             suite_F_digital_options,
             suite_G_cfd_orders,
             suite_H_reconnect,

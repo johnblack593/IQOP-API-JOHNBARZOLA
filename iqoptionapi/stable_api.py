@@ -210,26 +210,79 @@ class IQ_Option:
         return self.api.leaderboard_deals_client
 
     def get_instruments(self, type):
-        # type="crypto"/"forex"/"cfd"
+        """
+        Obtiene instrumentos por tipo ("crypto"/"forex"/"cfd").
+        Intenta WS primero; si retorna lista vacía, hace fallback
+        a extracción desde initialization-data (transparente).
+        """
         time.sleep(self.suspend)
         self.api.instruments = None
-        self.api.instruments_event.clear()
-        
+
         try:
             if hasattr(self.api, 'instruments_event'):
                 self.api.instruments_event.clear()
-            
+
             self.api.get_instruments(type)
-            
+
             if hasattr(self.api, 'instruments_event'):
                 is_ready = self.api.instruments_event.wait(timeout=10)
                 if not is_ready:
-                    get_logger(__name__).warning("Timeout waiting for instruments of type: %s", type)
-                    return {"instruments": []} # Return empty list gracefully instead of None
+                    get_logger(__name__).warning(
+                        "WS timeout for instruments type: %s", type)
         except Exception as e:
-                get_logger(__name__).error('**error** api.get_instruments need reconnect: %s', e)
-                # self.connect() # Removed aggressive recursive connect
-        return getattr(self.api, 'instruments', {"instruments": []})
+            get_logger(__name__).error(
+                'get_instruments WS error for type=%s: %s', type, e)
+
+        ws_result = getattr(self.api, 'instruments', {"instruments": []})
+        ws_instruments = []
+        if isinstance(ws_result, dict):
+            ws_instruments = ws_result.get("instruments", [])
+
+        # ── FALLBACK: init-data extraction when WS returns empty ──
+        if not ws_instruments:
+            get_logger(__name__).info(
+                "WS returned empty for type=%s, attempting init-data fallback", type)
+            try:
+                from iqoptionapi.http.instruments import _extract_instruments_from_init
+                # Use CACHED init data (already populated during connect())
+                # Priority: init_v2 (modern) > init_v1 (classic)
+                init_data = getattr(self.api, 'api_option_init_all_result_v2', None)
+                if init_data and isinstance(init_data, dict):
+                    instruments = _extract_instruments_from_init(init_data, type)
+                    if instruments:
+                        get_logger(__name__).info(
+                            "Init-data fallback (v2 cache): %d instruments for type=%s",
+                            len(instruments), type)
+                        return {"instruments": instruments}
+
+                # Try classic init cache
+                init_data_v1 = getattr(self.api, 'api_option_init_all_result', None)
+                if init_data_v1 and isinstance(init_data_v1, dict):
+                    result_data = init_data_v1.get("result", init_data_v1)
+                    instruments = _extract_instruments_from_init(result_data, type)
+                    if instruments:
+                        get_logger(__name__).info(
+                            "Init-data fallback (v1 cache): %d instruments for type=%s",
+                            len(instruments), type)
+                        return {"instruments": instruments}
+
+                # Last resort: fetch fresh init data
+                get_logger(__name__).info(
+                    "No cached init data, fetching fresh for type=%s", type)
+                fresh_init = self.get_all_init_v2()
+                if fresh_init and isinstance(fresh_init, dict):
+                    instruments = _extract_instruments_from_init(fresh_init, type)
+                    if instruments:
+                        get_logger(__name__).info(
+                            "Init-data fallback (fresh): %d instruments for type=%s",
+                            len(instruments), type)
+                        return {"instruments": instruments}
+
+            except Exception as e:
+                get_logger(__name__).error(
+                    "Init-data fallback failed for type=%s: %s", type, e)
+
+        return ws_result if ws_instruments else {"instruments": []}
 
     def instruments_input_to_ACTIVES(self, type):
         instruments = self.get_instruments(type)
