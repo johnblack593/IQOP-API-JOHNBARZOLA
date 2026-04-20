@@ -9,30 +9,33 @@ logger = logging.getLogger(__name__)
 SUITE_NAME = "G_CFD"
 
 def get_available_cfd_asset(api: IQ_Option) -> str:
-    """Returns an open CFD/forex asset name based on priority list or first available, or None if market is closed."""
+    """Returns an open CFD/forex asset name based on priority list or first available, or None if market is closed.
+    
+    The open_time structure is FLAT:
+        open_times[category][asset_name]["open"] = True/False
+    There is NO "actives" subkey.
+    """
     priority = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF"]
-    open_assets = []
     
     try:
         ot = api.get_all_open_time()
+        if not ot:
+            return None
+
         for cfd_type in ["cfd", "forex"]:
-            if cfd_type in ot:
-                for aid, adata in ot[cfd_type].get("actives", {}).items():
-                    name = str(adata.get("name", ""))
-                    if "." in name:
-                        name = name.split(".")[1]
-                    if adata.get("open", False):
-                        open_assets.append(name)
-                        
-        # Check priority loop
-        for p in priority:
-            if p in open_assets:
-                return p
-                
-        # Fallback to first available
-        if open_assets:
-            return open_assets[0]
-            
+            cat_data = ot.get(cfd_type, {})
+            # Priority pass
+            for p in priority:
+                asset_info = cat_data.get(p, {})
+                if isinstance(asset_info, dict) and asset_info.get("open") is True:
+                    return p
+
+        # Fallback — first open asset in cfd or forex
+        for cfd_type in ["cfd", "forex"]:
+            for asset_name, info in ot.get(cfd_type, {}).items():
+                if isinstance(info, dict) and info.get("open") is True:
+                    return asset_name
+                    
     except Exception as e:
         logger.error(f"Error fetching open CFD assets: {e}")
         

@@ -180,6 +180,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.check_websocket_if_error = False
         self.websocket_error_reason = None
         self.balance_id = None
+        self.blitz_instruments = {}
 
         # Events for async logic
         self.balance_id_event = threading.Event()

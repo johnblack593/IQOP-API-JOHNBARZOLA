@@ -26,3 +26,5 @@ venv/
 # Custom test scripts
 test.py
 scripts/
+examples/debug_*.json
+

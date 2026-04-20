@@ -30,39 +30,42 @@ def get_available_binary_asset(api: IQ_Option, instrument_type: str = "binary") 
     """
     Returns the name of the first available asset for binary/turbo/digital.
     Priority list forces weekend OTCs to the front, then true M-F majors.
+
+    The open_time structure is FLAT:
+        open_times[category][asset_name]["open"] = True/False
+    There is NO "actives" subkey.
     """
     priority = [
-        "EURUSD-OTC", "GBPUSD-OTC", "AUDUSD-OTC",
+        "EURUSD-OTC", "GBPUSD-OTC", "AUDUSD-OTC", "XAUUSD-OTC",
         "EURUSD", "GBPUSD", "AUDUSD", "USDJPY"
     ]
-    open_assets = []
+
     try:
         ot = api.get_all_open_time()
-        
-        # Binary / turbo / digital categorization
-        types_to_check = [instrument_type]
-        if instrument_type == "binary":
-            types_to_check = ["binary", "turbo", "otc"]
-            
-        for t in types_to_check:
-            if t in ot:
-                for aid, adata in ot[t].get("actives", {}).items():
-                    name = str(adata.get("name", ""))
-                    if "." in name:
-                        name = name.split(".")[1]
-                    if adata.get("open", False):
-                        if name not in open_assets:
-                            open_assets.append(name)
-                            
-        for p in priority:
-            if p in open_assets:
-                return p
-                
-        if open_assets:
-            return open_assets[0]
-            
+        if not ot:
+            return None
+
+        if instrument_type == "digital":
+            category_keys = ["digital"]
+        else:
+            category_keys = ["binary", "turbo"]
+
+        # Priority pass — check preferred assets first
+        for asset in priority:
+            for cat in category_keys:
+                cat_data = ot.get(cat, {})
+                asset_info = cat_data.get(asset, {})
+                if asset_info.get("open") is True:
+                    return asset
+
+        # Fallback — first open asset in any matching category
+        for cat in category_keys:
+            for asset_name, info in ot.get(cat, {}).items():
+                if isinstance(info, dict) and info.get("open") is True:
+                    return asset_name
+
     except Exception as e:
         import logging
         logging.error(f"Error fetching open {instrument_type} assets: {e}")
-        
+
     return None
