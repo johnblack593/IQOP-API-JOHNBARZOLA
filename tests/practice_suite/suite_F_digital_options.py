@@ -1,12 +1,12 @@
 import time
-from tests.practice_suite.config import PRACTICE_AMOUNT, get_available_binary_asset
+from tests.practice_suite.config import PRACTICE_AMOUNT, get_available_digital_asset
 from iqoptionapi.stable_api import IQ_Option
 from tests.practice_suite.report import TestResult, ReportCollector
 
 SUITE_NAME = "F_Digital"
 
 def run(api: IQ_Option, collector: ReportCollector) -> None:
-    asset = get_available_binary_asset(api, "digital")
+    asset = get_available_digital_asset(api)
     
     if not asset:
         msg = "SKIPPED_NO_MARKET \u2014 No digital asset available"

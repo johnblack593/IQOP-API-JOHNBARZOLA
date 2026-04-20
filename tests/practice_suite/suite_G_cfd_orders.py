@@ -8,53 +8,29 @@ logger = logging.getLogger(__name__)
 
 SUITE_NAME = "G_CFD"
 
-def get_available_cfd_asset(api: IQ_Option) -> str:
-    """Returns an open CFD/forex asset name based on priority list or first available, or None if market is closed.
-    
-    The open_time structure is FLAT:
-        open_times[category][asset_name]["open"] = True/False
-    There is NO "actives" subkey.
-    """
-    priority = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF"]
-    
-    try:
-        ot = api.get_all_open_time()
-        if not ot:
-            return None
+def get_available_cfd_asset(api):
+    CFD_FOREX_PRIORITY = [
+        "EURUSD", "GBPUSD", "AUDUSD", "USDJPY",
+        "USDCAD", "USDCHF", "NZDUSD", "EURJPY",
+    ]
+    open_times = api.get_all_open_time()
 
-        for cfd_type in ["cfd", "forex"]:
-            cat_data = ot.get(cfd_type, {})
-            # Priority pass
-            for p in priority:
-                asset_info = cat_data.get(p, {})
-                if isinstance(asset_info, dict) and asset_info.get("open") is True:
-                    return p
+    for category in ["forex", "cfd"]:
+        cat_data = open_times.get(category, {})
+        for asset in CFD_FOREX_PRIORITY:
+            if cat_data.get(asset, {}).get("open") is True:
+                return category, asset
 
-        # Fallback — first open asset in cfd or forex
-        for cfd_type in ["cfd", "forex"]:
-            for asset_name, info in ot.get(cfd_type, {}).items():
-                if isinstance(info, dict) and info.get("open") is True:
-                    return asset_name
-        # Debugging inject for SPRINT-11
-        try:
-            cfd_keys = list(ot.get("cfd", {}).keys())
-            forex_keys = list(ot.get("forex", {}).keys())
-            print(f"\n[DEBUG CFD] Found {len(cfd_keys)} CFD assets. Sample: {cfd_keys[:5]}")
-            if cfd_keys:
-                print(f"[DEBUG CFD] Example '{cfd_keys[0]}': {ot['cfd'][cfd_keys[0]]}")
-            print(f"[DEBUG FOREX] Found {len(forex_keys)} forex assets. Sample: {forex_keys[:5]}")
-            if forex_keys:
-                print(f"[DEBUG FOREX] Example '{forex_keys[0]}': {ot['forex'][forex_keys[0]]}")
-        except Exception as e:
-            print(f"[DEBUG CFD] Error extracting debug: {e}")
-            
-    except Exception as e:
-        logger.error(f"Error fetching open CFD assets: {e}")
-        
-    return None
+    for category in ["forex", "cfd"]:
+        cat_data = open_times.get(category, {})
+        for asset_name, info in cat_data.items():
+            if info.get("open") is True:
+                return category, asset_name
+
+    return None, None
 
 def run(api: IQ_Option, collector: ReportCollector) -> None:
-    asset = get_available_cfd_asset(api)
+    category, asset = get_available_cfd_asset(api)
     
     if not asset:
         msg = "SKIPPED_NO_MARKET \u2014 No CFD assets available at execution time (weekend/holiday)"
@@ -84,7 +60,7 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         g02_order_id = None
         try:
             check, order_id = api.buy_order(
-                instrument_type="forex",
+                instrument_type=category,
                 instrument_id=asset,
                 side="buy", # "buy" / "call"
                 amount=PRACTICE_AMOUNT,
@@ -180,7 +156,7 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         start = time.time()
         try:
             check, put_order_id = api.buy_order(
-                instrument_type="forex",
+                instrument_type=category,
                 instrument_id=asset,
                 side="sell", # put
                 amount=PRACTICE_AMOUNT,

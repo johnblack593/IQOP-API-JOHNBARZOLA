@@ -62,7 +62,7 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             assert strikes is not None, "get_digital_underlying_list_data returned None"
             
             if isinstance(strikes, dict) and strikes.get("message", "").startswith("Failed on command execution [4300]"):
-                collector.record(TestResult(SUITE_NAME, "C-04: Digital strikes", "SKIPPED", detail="SKIPPED — Endpoint get-digital-underlying V2 obsoleted by broker", duration=time.time() - start))
+                collector.record(TestResult(SUITE_NAME, "C-04: Digital strikes", "SKIPPED", detail="SKIPPED — Digital underlying V2 deprecated by broker (error 4300)", duration=time.time() - start))
             else:
                 if isinstance(strikes, dict) and 'underlying' in strikes:
                     strikes = strikes['underlying']
