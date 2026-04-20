@@ -1,32 +1,26 @@
 import time
-from tests.practice_suite.config import PRACTICE_ASSET_BINARY, PRACTICE_AMOUNT, PRACTICE_TIMEOUT
+from tests.practice_suite.config import PRACTICE_AMOUNT, PRACTICE_TIMEOUT, get_available_binary_asset
 from iqoptionapi.stable_api import IQ_Option
 from iqoptionapi.ratelimit import RateLimitExceededError
 from tests.practice_suite.report import TestResult, ReportCollector
-from tests.practice_suite.suite_D_candles import check_asset_open
 
 SUITE_NAME = "E_Binary"
 
 def run(api: IQ_Option, collector: ReportCollector) -> None:
-    asset = PRACTICE_ASSET_BINARY
+    asset = get_available_binary_asset(api, "binary")
     
+    if not asset:
+        msg = "SKIPPED_NO_MARKET \u2014 No binary/turbo asset available"
+        collector.record(TestResult(SUITE_NAME, "E-01: Asset open check", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "E-02: Buy binary \u2014 CALL", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "E-03: Buy binary \u2014 PUT", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "E-04: check_win_v4 \u2014 CALL result", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "E-05: check_win_v4 \u2014 PUT result", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "E-06: Rate limiter under rapid fire", "SKIPPED", detail=msg))
+        return
     # Test E-01: Asset open check
     start = time.time()
-    try:
-        is_open = check_asset_open(api, asset)
-        if not is_open:
-            msg = f"SKIPPED — asset closed ({asset})"
-            collector.record(TestResult(SUITE_NAME, "E-01: Asset open check", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "E-02: Buy binary — CALL", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "E-03: Buy binary — PUT", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "E-04: check_win_v4 — CALL result", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "E-05: check_win_v4 — PUT result", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "E-06: Rate limiter under rapid fire", "PASSED", detail=msg))
-            return
-        collector.record(TestResult(SUITE_NAME, "E-01: Asset open check", "PASSED", detail=f"Open: {is_open}", duration=time.time() - start))
-    except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "E-01: Asset open check", "FAILED", detail=str(e), duration=time.time() - start))
-        return
+    collector.record(TestResult(SUITE_NAME, "E-01: Asset open check", "PASSED", detail=f"Open: {asset}", duration=time.time() - start))
 
     # Let's ensure token bucket has some tokens before we do tests
     time.sleep(2)

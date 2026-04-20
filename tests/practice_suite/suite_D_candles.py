@@ -1,35 +1,20 @@
 import time
-from tests.practice_suite.config import PRACTICE_ASSET_BINARY
+from tests.practice_suite.config import get_available_binary_asset
 from iqoptionapi.stable_api import IQ_Option
 from tests.practice_suite.report import TestResult, ReportCollector
 
 SUITE_NAME = "D_Candles"
 
-def check_asset_open(api: IQ_Option, asset: str) -> bool:
-    try:
-        binary_data = api.get_all_open_time()
-        for option in ["binary", "turbo"]:
-            if option in binary_data:
-                for active_id in binary_data[option]["actives"]:
-                    active = binary_data[option]["actives"][active_id]
-                    name = str(active["name"]).split(".")[1] if "." in str(active.get("name", "")) else active.get("name", "")
-                    if name == asset:
-                        return active.get("open", False)
-    except:
-        pass
-    return False
-
 def run(api: IQ_Option, collector: ReportCollector) -> None:
-    asset = PRACTICE_ASSET_BINARY
-    is_open = check_asset_open(api, asset)
+    asset = get_available_binary_asset(api, "binary")
 
-    if not is_open:
-        msg = f"SKIPPED — asset closed ({asset})"
-        collector.record(TestResult(SUITE_NAME, "D-01: Get candles 60s", "PASSED", detail=msg))
-        collector.record(TestResult(SUITE_NAME, "D-02: Get candles 300s", "PASSED", detail=msg))
-        collector.record(TestResult(SUITE_NAME, "D-03: Get candles 3600s", "PASSED", detail=msg))
-        collector.record(TestResult(SUITE_NAME, "D-04: Candle data integrity", "PASSED", detail=msg))
-        collector.record(TestResult(SUITE_NAME, "D-05: Realtime subscription", "PASSED", detail=msg))
+    if not asset:
+        msg = "SKIPPED_NO_MARKET \u2014 No binary/turbo asset available"
+        collector.record(TestResult(SUITE_NAME, "D-01: Get candles 60s", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-02: Get candles 300s", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-03: Get candles 3600s", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-04: Candle data integrity", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "D-05: Realtime subscription", "SKIPPED", detail=msg))
         return
 
     # Test D-01: Get candles 60s

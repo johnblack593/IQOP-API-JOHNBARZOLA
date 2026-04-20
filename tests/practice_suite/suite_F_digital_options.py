@@ -1,40 +1,24 @@
 import time
-from tests.practice_suite.config import PRACTICE_ASSET_DIGITAL, PRACTICE_AMOUNT
+from tests.practice_suite.config import PRACTICE_AMOUNT, get_available_binary_asset
 from iqoptionapi.stable_api import IQ_Option
 from tests.practice_suite.report import TestResult, ReportCollector
 
 SUITE_NAME = "F_Digital"
 
 def run(api: IQ_Option, collector: ReportCollector) -> None:
-    asset = PRACTICE_ASSET_DIGITAL
+    asset = get_available_binary_asset(api, "digital")
     
-    # Test F-01: Asset open check
-    start = time.time()
-    try:
-        is_open = False
-        try:
-            ot = api.get_all_open_time()
-            if "digital" in ot:
-                for aid, adata in ot["digital"]["actives"].items():
-                    name = str(adata.get("name", "")).split(".")[1] if "." in str(adata.get("name", "")) else adata.get("name", "")
-                    if name == asset:
-                        is_open = adata.get("open", False)
-                        break
-        except: pass
-
-        if not is_open:
-            msg = f"SKIPPED — asset closed ({asset})"
-            collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "F-02: Buy digital spot — CALL", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "F-03: Buy digital spot — PUT", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "F-04: check_win_v4 digital — CALL", "PASSED", detail=msg))
-            collector.record(TestResult(SUITE_NAME, "F-05: check_win_v4 digital — PUT", "PASSED", detail=msg))
-            return
-        
-        collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", "PASSED", detail=f"Open: {is_open}", duration=time.time() - start))
-    except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", "FAILED", detail=str(e), duration=time.time() - start))
+    if not asset:
+        msg = "SKIPPED_NO_MARKET \u2014 No digital asset available"
+        collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "F-02: Buy digital spot \u2014 CALL", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "F-03: Buy digital spot \u2014 PUT", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "F-04: check_win_v4 digital \u2014 CALL", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "F-05: check_win_v4 digital \u2014 PUT", "SKIPPED", detail=msg))
         return
+        
+    start = time.time()
+    collector.record(TestResult(SUITE_NAME, "F-01: Asset open check", "PASSED", detail=f"Open: {asset}", duration=time.time() - start))
 
     # Let TokenBucket refill
     time.sleep(2)
