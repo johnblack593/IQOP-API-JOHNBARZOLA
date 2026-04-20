@@ -386,6 +386,25 @@ class IQ_Option:
         binary.join(), digital.join(), other.join()
         return self.OPEN_TIME
 
+    def get_blitz_instruments(self):
+        """
+        Returns the catalog of Blitz instruments extracted from the
+        initialization-data WebSocket message. Structure:
+        { "ASSET_NAME": { "id": int, "ticker": str, "enabled": bool,
+                          "is_suspended": bool, "open": bool,
+                          "expirations": [30, 45, ...] } }
+
+        Blitz instruments are NOT available via get_instruments() —
+        the server rejects type="blitz" with error 4000.
+        """
+        blitz = getattr(self.api, 'blitz_instruments', {})
+        if not blitz:
+            # Force refresh from server — initialization-data handler
+            # will populate api.blitz_instruments as a side effect
+            self.get_all_init_v2()
+            blitz = getattr(self.api, 'blitz_instruments', {})
+        return blitz
+
     # --------for binary option detail
 
     def get_binary_option_detail(self):

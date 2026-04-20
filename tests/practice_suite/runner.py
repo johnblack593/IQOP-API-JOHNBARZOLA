@@ -12,6 +12,7 @@ from tests.practice_suite import suite_F_digital_options
 from tests.practice_suite import suite_G_cfd_orders
 from tests.practice_suite import suite_H_reconnect
 from tests.practice_suite import suite_I_cleanup
+from tests.practice_suite import suite_J_blitz
 
 def main():
     print("="*90)
@@ -59,11 +60,15 @@ def main():
             suite_F_digital_options,
             suite_G_cfd_orders,
             suite_H_reconnect,
+            suite_J_blitz,
             suite_I_cleanup,
         ]
         
         print("\nExecuting suites...")
         for suite in suites:
+            # After H_reconnect, config.api_instance may hold a new connection
+            if config.api_instance is not None and config.api_instance is not api:
+                api = config.api_instance
             suite.run(api, collector)
             
     except Exception as e:
