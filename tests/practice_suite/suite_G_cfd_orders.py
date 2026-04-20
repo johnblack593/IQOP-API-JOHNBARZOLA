@@ -15,12 +15,21 @@ def get_available_cfd_asset(api):
     ]
     open_times = api.get_all_open_time()
 
+    # Priority 1: Major forex pairs (non-OTC, most likely to work)
     for category in ["forex", "cfd"]:
         cat_data = open_times.get(category, {})
         for asset in CFD_FOREX_PRIORITY:
             if cat_data.get(asset, {}).get("open") is True:
                 return category, asset
 
+    # Priority 2: Any non-OTC open asset (real market instruments)
+    for category in ["forex", "cfd"]:
+        cat_data = open_times.get(category, {})
+        for asset_name, info in cat_data.items():
+            if info.get("open") is True and "OTC" not in asset_name:
+                return category, asset_name
+
+    # Priority 3: Any OTC open asset (fallback)
     for category in ["forex", "cfd"]:
         cat_data = open_times.get(category, {})
         for asset_name, info in cat_data.items():
@@ -32,14 +41,47 @@ def get_available_cfd_asset(api):
 def run(api: IQ_Option, collector: ReportCollector) -> None:
     category, asset = get_available_cfd_asset(api)
     
+    # ── G-00: CFD order capability probe ──
+    # Detect if the server supports place-order-temp for this account
+    # (user_group_id:191 has this silently disabled server-side)
+    start = time.time()
+    cfd_capable = api.check_cfd_order_capability()
+
+    if not cfd_capable:
+        skip_msg = (
+            "SKIPPED_CFD_DISABLED — Server does not respond to place-order-temp "
+            "for this account (user_group_id restriction). "
+            "CFD/Forex/Crypto order placement is not available."
+        )
+        collector.record(TestResult(
+            SUITE_NAME, "G-00: CFD capability probe", "SKIPPED",
+            detail=skip_msg, duration=time.time() - start
+        ))
+        # Skip all order-dependent tests
+        for test_name in [
+            "G-01: Asset open check",
+            "G-02: Buy CFD order — CALL",
+            "G-03: Get open position",
+            "G-04: Modify SL/TP",
+            "G-05: Close position manually",
+            "G-06: Buy order — PUT side",
+        ]:
+            collector.record(TestResult(SUITE_NAME, test_name, "SKIPPED", detail=skip_msg))
+        return
+
+    collector.record(TestResult(
+        SUITE_NAME, "G-00: CFD capability probe", "PASSED",
+        detail="Server accepts place-order-temp", duration=time.time() - start
+    ))
+    
     if not asset:
-        msg = "SKIPPED_NO_MARKET \u2014 No CFD assets available at execution time (weekend/holiday)"
+        msg = "SKIPPED_NO_MARKET — No CFD assets available at execution time (weekend/holiday)"
         collector.record(TestResult(SUITE_NAME, "G-01: Asset open check", "SKIPPED", detail=msg))
-        collector.record(TestResult(SUITE_NAME, "G-02: Buy CFD order \u2014 CALL", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "G-02: Buy CFD order — CALL", "SKIPPED", detail=msg))
         collector.record(TestResult(SUITE_NAME, "G-03: Get open position", "SKIPPED", detail=msg))
         collector.record(TestResult(SUITE_NAME, "G-04: Modify SL/TP", "SKIPPED", detail=msg))
         collector.record(TestResult(SUITE_NAME, "G-05: Close position manually", "SKIPPED", detail=msg))
-        collector.record(TestResult(SUITE_NAME, "G-06: Buy order \u2014 PUT side", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "G-06: Buy order — PUT side", "SKIPPED", detail=msg))
         return
 
     # Track open positions for finally cleanup
@@ -49,7 +91,7 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         # Test G-01: Asset open check
         start = time.time()
         try:
-            collector.record(TestResult(SUITE_NAME, "G-01: Asset open check", "PASSED", detail=f"Open: {asset}", duration=time.time() - start))
+            collector.record(TestResult(SUITE_NAME, "G-01: Asset open check", "PASSED", detail=f"Open: {asset} ({category})", duration=time.time() - start))
         except Exception as e:
             collector.record(TestResult(SUITE_NAME, "G-01: Asset open check", "FAILED", detail=str(e), duration=time.time() - start))
 
@@ -73,7 +115,7 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
                 take_profit_kind="percent",
                 take_profit_value=10.0
             )
-            assert check, f"CFD buy order failed. check is False."
+            assert check, f"CFD buy order failed: {order_id}"
             assert order_id is not None, "Order ID is None"
             g02_order_id = order_id
             
@@ -86,9 +128,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             else:
                 open_positions.append(g02_order_id) # fallback
                 
-            collector.record(TestResult(SUITE_NAME, "G-02: Buy CFD order \u2014 CALL", "PASSED", detail=f"ID: {g02_order_id}", duration=time.time() - start))
+            collector.record(TestResult(SUITE_NAME, "G-02: Buy CFD order — CALL", "PASSED", detail=f"ID: {g02_order_id}", duration=time.time() - start))
         except Exception as e:
-            collector.record(TestResult(SUITE_NAME, "G-02: Buy CFD order \u2014 CALL", "FAILED", detail=str(e), duration=time.time() - start))
+            collector.record(TestResult(SUITE_NAME, "G-02: Buy CFD order — CALL", "FAILED", detail=str(e), duration=time.time() - start))
 
         time.sleep(2)
 
@@ -190,9 +232,9 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
                  assert c_data.get("status") == "closed" or c_data.get("position_status") == "closed", "Failed to close PUT order immediately"
                  open_positions.remove(put_pos_id)
             
-            collector.record(TestResult(SUITE_NAME, "G-06: Buy order \u2014 PUT side", "PASSED", detail=f"ID: {put_order_id} opened & closed", duration=time.time() - start))
+            collector.record(TestResult(SUITE_NAME, "G-06: Buy order — PUT side", "PASSED", detail=f"ID: {put_order_id} opened & closed", duration=time.time() - start))
         except Exception as e:
-            collector.record(TestResult(SUITE_NAME, "G-06: Buy order \u2014 PUT side", "FAILED", detail=str(e), duration=time.time() - start))
+            collector.record(TestResult(SUITE_NAME, "G-06: Buy order — PUT side", "FAILED", detail=str(e), duration=time.time() - start))
 
     finally:
         # CLEANUP: Ensure any remaining tracked positions do not linger and bleed practice balance
