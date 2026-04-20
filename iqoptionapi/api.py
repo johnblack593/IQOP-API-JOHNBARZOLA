@@ -182,7 +182,6 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.balance_id = None
 
         # Events for async logic
-        import threading
         self.balance_id_event = threading.Event()
         self.instruments_event = threading.Event()
         
