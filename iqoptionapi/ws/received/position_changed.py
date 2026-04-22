@@ -8,3 +8,6 @@ def position_changed(api, message):
             api.order_async[int(message["msg"]["external_id"])][message["name"]] = message
         else:
             api.position_changed = message
+        
+        ev = getattr(api, "position_changed_event", None)
+        if ev: ev.set()

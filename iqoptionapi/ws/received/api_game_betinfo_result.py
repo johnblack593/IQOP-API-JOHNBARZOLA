@@ -7,5 +7,5 @@ def api_game_betinfo_result(api, message):
         api.game_betinfo.isSuccessful = msg.get("isSuccessful", True)  
         api.game_betinfo.dict = msg
         
-        if hasattr(api, "game_betinfo_event"):
-            api.game_betinfo_event.set()
+        ev = getattr(api, "game_betinfo_event", None)
+        if ev: ev.set()

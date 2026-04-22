@@ -11,3 +11,5 @@ def digital_option_placed(api, message, api_dict_clean):
                 "code": "error_place_digital_order",
                 "message": message["msg"]["message"]
             }
+        ev = getattr(api, "digital_option_placed_id_event", None)
+        if ev: ev.set()

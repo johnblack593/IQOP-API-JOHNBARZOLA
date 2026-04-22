@@ -5,3 +5,6 @@ def option_closed(api, message):
         api.order_async[int(message["msg"]["option_id"])][message["name"]] = message
         if message["microserviceName"] == "binary-options":
             api.order_binary[message["msg"]["option_id"]] = message['msg']
+        
+        ev = getattr(api, "option_closed_event", None)
+        if ev: ev.set()

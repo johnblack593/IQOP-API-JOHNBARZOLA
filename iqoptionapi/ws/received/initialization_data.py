@@ -3,6 +3,8 @@
 def initialization_data(api, message):
     if message["name"] == "initialization-data":
         api.api_option_init_all_result_v2 = message["msg"]
+        ev = getattr(api, "api_option_init_all_result_v2_event", None)
+        if ev: ev.set()
 
         # Extract Blitz instrument catalog (not available via get_instruments)
         blitz_raw = message["msg"].get("blitz", {})
