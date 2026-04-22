@@ -6,6 +6,9 @@ Prevents runaway bots from flooding the API with orders.
 import threading
 import time
 from iqoptionapi.logger import get_logger
+from iqoptionapi.config import (
+    RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL
+)
 
 logger = get_logger(__name__)
 
@@ -28,8 +31,8 @@ class TokenBucket:
         block         — if True, wait for a token instead of raising
     """
 
-    def __init__(self, capacity: float = 5.0,
-                 refill_rate: float = 0.5,
+    def __init__(self, capacity: float = RATE_LIMIT_CAPACITY,
+                 refill_rate: float = RATE_LIMIT_REFILL,
                  block: bool = False):
         self._capacity    = capacity
         self._tokens      = capacity
