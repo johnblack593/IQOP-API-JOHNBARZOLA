@@ -29,6 +29,10 @@ TIMEOUT_THREAD_JOIN: float = 5.0  # para api.py close() BUG-WS-01
 POLLING_FAST: float = 0.05   # 50ms — eventos de datos WS
 POLLING_SLOW: float = 0.5    # 500ms — operaciones lentas
 
+# MIGRACIÓN: estos valores se eliminan cuando todos los spin-loops
+# sean migrados a threading.Event.wait(). Ver S1-02 tracking.
+_SPINLOOP_METHODS_REMAINING: int = 25   # trackeando deuda técnica restante
+
 # --- Rate limiting ---
 RATE_LIMIT_CAPACITY: float = 5.0    # tokens máximos en bucket
 RATE_LIMIT_REFILL: float = 0.5      # tokens por segundo

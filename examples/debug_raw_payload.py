@@ -49,11 +49,44 @@ for category in categories:
 print("Capturing more WS messages for 10 seconds...")
 time.sleep(10)
 
-with open("examples/debug_ws_messages.json", "w") as f:
-    json.dump(raw_messages, f, indent=2)
+# --- SECCIÓN 4: Mapeo de threading.Event vs mensajes WS ---
+print("\n=== EVENTS MAP ===")
+events_in_api = [attr for attr in dir(api.api) if attr.endswith('_event')]
+print(f"threading.Event existentes en api.api: {events_in_api}")
 
-unique_names = list(set([m.get("name") for m in raw_messages if isinstance(m, dict)]))
-print(f"WS messages captured: {len(raw_messages)}")
-print(f"Unique names: {unique_names}")
+# Verificar cuáles ya tienen handlers en _MESSAGE_ROUTER
+from iqoptionapi.ws.client import _MESSAGE_ROUTER
+print(f"\nMensajes con handler registrado: {sorted(_MESSAGE_ROUTER.keys())}")
+print(f"\nMensajes SIN handler (capturados en WS pero no en router):")
+unique_captured = set([m.get("name") for m in raw_messages if isinstance(m, dict)])
+for name in unique_captured:
+    if name and name not in _MESSAGE_ROUTER:
+        print(f"  [MISSING HANDLER] {name}")
+
+# --- SECCIÓN 5: Verificar spin-loops candidatos ---
+print("\n=== SPIN-LOOP CANDIDATES ===")
+# Estos son los métodos con spin-loops identificados.
+# Verificar que sus eventos WS siguen activos en el servidor.
+candidates = {
+    "get_candles":          "candles",
+    "get_all_init":         "api_option_init_all_result",
+    "get_all_init_v2":      "initialization-data",
+    "get_profile":          "profile",
+    "get_technical_indicators": "technical-indicators",
+    "get_digital_underlying": "underlying-list",
+    "reset_practice_balance": "training-balance-reset",
+    "get_user_profile_client": "user-profile-client",
+    "get_users_availability":  "users-availability",
+    "get_order":            "order",
+    "get_positions":        "positions",
+    "get_position":         "position",
+    "get_history_positions":"history-positions",
+    "get_position_history": "position-history",
+}
+for method, ws_name in candidates.items():
+    captured = ws_name in unique_captured
+    in_router = ws_name in _MESSAGE_ROUTER
+    status = "[OK]" if (captured or in_router) else "[NO] NOT FOUND"
+    print(f"  {status} {method}() -> WS '{ws_name}'")
 
 api.close()

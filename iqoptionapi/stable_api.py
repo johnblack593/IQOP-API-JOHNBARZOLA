@@ -10,6 +10,10 @@ from iqoptionapi.reconnect import ReconnectManager, MaxReconnectAttemptsError
 from iqoptionapi.idempotency import IdempotencyRegistry
 from iqoptionapi.security import CredentialStore, generate_user_agent
 from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
+from iqoptionapi.config import (
+    TIMEOUT_WS_DATA, TIMEOUT_CANDLE_STREAM, TIMEOUT_SSID_AUTH,
+    TIMEOUT_BALANCE_RESET, POLLING_FAST
+)
 from iqoptionapi.http.session import close_shared_session
 import iqoptionapi
 import logging
@@ -303,59 +307,53 @@ class IQ_Option:
                 OP_code.ACTIVES[(init_info["result"][dirr]
                                  ["actives"][i]["name"]).split(".")[1]] = int(i)
 
-    # _________________________self.api.get_api_option_init_all() wss______________________
-    def get_all_init(self):
-
-        while True:
-            time.sleep(0.05)
+    # _________________________self.api.get_api_option_init_all() wss______________    def get_all_init(self):
+        if hasattr(self.api, 'api_option_init_all_result_event'):
             self.api.api_option_init_all_result = None
-            while True:
-                time.sleep(0.05)
-                try:
-                    self.api.get_api_option_init_all()
-                    break
-                except Exception as e:
-                    get_logger(__name__).error('get_all_init error: %s', e)
-                    try:
-                        self._reconnect_manager.wait()
-                        self.connect()
-                    except MaxReconnectAttemptsError:
-                        get_logger(__name__).critical("get_all_init: reconnection attempts exhausted. Aborting.")
-                        raise
+            self.api.api_option_init_all_result_event.clear()
+            self.api.get_api_option_init_all()
+            is_ready = self.api.api_option_init_all_result_event.wait(timeout=TIMEOUT_ALL_INIT)
+            if not is_ready or self.api.api_option_init_all_result is None:
+                get_logger(__name__).warning("Timeout or disconnect: api_option_init_all_result unavailable")
+                return None
+            return self.api.api_option_init_all_result
+        else:
+            # Fallback legacy spin-loop
+            self.api.api_option_init_all_result = None
+            self.api.get_api_option_init_all()
             start = time.time()
-            while True:
-                time.sleep(0.05)
-                if time.time() - start > 30:
-                    get_logger(__name__).error('get_all_init_v2 error: late 30 sec')
-                    try:
-                        self._reconnect_manager.wait()
-                        self.connect()
-                    except MaxReconnectAttemptsError:
-                        get_logger(__name__).critical("get_all_init_v2: reconnection attempts exhausted. Aborting.")
-                        raise
-                    break
-                try:
-                    if self.api.api_option_init_all_result != None:
-                        break
-                except (KeyError, TypeError) as e:
-                    get_logger(__name__).error("Data extraction error: %s", e)
-            if getattr(self.api, "api_option_init_all_result", {}).get("isSuccessful") == True:
-                    return self.api.api_option_init_all_result
+            while self.api.api_option_init_all_result is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_ALL_INIT:
+                    get_logger(__name__).warning("Legacy spin timeout: api_option_init_all_result")
+                    return None
+            return self.api.api_option_init_all_result
 
     def get_all_init_v2(self):
-        self.api.api_option_init_all_result_v2 = None
-
-        if self.check_connect() == False:
-            self.connect()
-
-        self.api.get_api_option_init_all_v2()
-        start_t = time.time()
-        while self.api.api_option_init_all_result_v2 == None:
-            time.sleep(0.05)
-            if time.time() - start_t >= 30:
-                get_logger(__name__).error('**warning** get_all_init_v2 late 30 sec')
+        if hasattr(self.api, 'api_option_init_all_result_v2_event'):
+            self.api.api_option_init_all_result_v2 = None
+            self.api.api_option_init_all_result_v2_event.clear()
+            if self.check_connect() == False:
+                self.connect()
+            self.api.get_api_option_init_all_v2()
+            is_ready = self.api.api_option_init_all_result_v2_event.wait(timeout=TIMEOUT_ALL_INIT)
+            if not is_ready or self.api.api_option_init_all_result_v2 is None:
+                get_logger(__name__).warning("Timeout or disconnect: api_option_init_all_result_v2 unavailable")
                 return None
-        return self.api.api_option_init_all_result_v2
+            return self.api.api_option_init_all_result_v2
+        else:
+            # Fallback legacy spin-loop
+            self.api.api_option_init_all_result_v2 = None
+            if self.check_connect() == False:
+                self.connect()
+            self.api.get_api_option_init_all_v2()
+            start_t = time.time()
+            while self.api.api_option_init_all_result_v2 is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start_t >= TIMEOUT_ALL_INIT:
+                    get_logger(__name__).warning("Legacy spin timeout: api_option_init_all_result_v2")
+                    return None
+            return self.api.api_option_init_all_result_v2
 
     # ------- chek if binary/digit/cfd/stock... if open or not
 
@@ -510,11 +508,22 @@ class IQ_Option:
             
         if hasattr(self.api, 'profile_msg_event'):
             self.api.profile_msg_event.clear()
-            is_ready = self.api.profile_msg_event.wait(timeout=30)
-            if not is_ready:
-                get_logger(__name__).error("Timeout waiting for profile ansyc.")
+            # Request already sent during connect or elsewhere? 
+            # Usually get_profile is called to wait for data already flowing.
+            is_ready = self.api.profile_msg_event.wait(timeout=TIMEOUT_SSID_AUTH)
+            if not is_ready or self.api.profile.msg is None:
+                get_logger(__name__).warning("Timeout or disconnect: profile data unavailable")
                 return None
-        return self.api.profile.msg
+            return self.api.profile.msg
+        else:
+            # Fallback legacy spin-loop
+            start = time.time()
+            while self.api.profile.msg is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_SSID_AUTH:
+                    get_logger(__name__).warning("Legacy spin timeout: profile data")
+                    return None
+            return self.api.profile.msg
 
 
     def get_currency(self):
@@ -561,13 +570,26 @@ class IQ_Option:
                     return "TOURNAMENT"
 
     def reset_practice_balance(self):
-        self.api.training_balance_reset_request = None
-        self.api.training_balance_reset_request_event.clear()
-        self.api.reset_training_balance()
-        is_ready = self.api.training_balance_reset_request_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for training_balance_reset_request')
-        return self.api.training_balance_reset_request
+        if hasattr(self.api, 'training_balance_reset_request_event'):
+            self.api.training_balance_reset_request = None
+            self.api.training_balance_reset_request_event.clear()
+            self.api.reset_training_balance()
+            is_ready = self.api.training_balance_reset_request_event.wait(timeout=TIMEOUT_BALANCE_RESET)
+            if not is_ready or self.api.training_balance_reset_request is None:
+                get_logger(__name__).warning("Timeout or disconnect: training_balance_reset_request unavailable")
+                return None
+            return self.api.training_balance_reset_request
+        else:
+            # Fallback legacy spin-loop
+            self.api.training_balance_reset_request = None
+            self.api.reset_training_balance()
+            start = time.time()
+            while self.api.training_balance_reset_request is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_BALANCE_RESET:
+                    get_logger(__name__).warning("Legacy spin timeout: training_balance_reset_request")
+                    return None
+            return self.api.training_balance_reset_request
 
     def position_change_all(self, Main_Name, user_balance_id):
         instrument_type = ["cfd", "forex", "crypto",
@@ -624,31 +646,40 @@ class IQ_Option:
     # ________________________self.api.getcandles() wss________________________
 
     def get_candles(self, ACTIVES, interval, count, endtime):
-        self.api.candles.candles_data = None
-        while True:
-            time.sleep(0.05)
-            try:
-                if ACTIVES not in OP_code.ACTIVES:
-                    get_logger(__name__).info('Asset {} not found on consts'.format(ACTIVES))
-                    break
-                self.api.getcandles(
-                    OP_code.ACTIVES[ACTIVES], interval, count, endtime)
-                
-                if hasattr(self.api, 'candles_event'):
-                    self.api.candles_event.wait(timeout=20)
-                
-                if self.api.candles.candles_data != None:
-                    break
-            except Exception as e:
-                get_logger(__name__).error('get_candles error: %s', e)
-                try:
-                    self._reconnect_manager.wait()
-                    self.connect()
-                except MaxReconnectAttemptsError:
-                    get_logger(__name__).critical("get_candles: reconnection attempts exhausted. Aborting.")
-                    raise
+        if ACTIVES not in OP_code.ACTIVES:
+            get_logger(__name__).error("Asset %s not found in ACTIVES", ACTIVES)
+            return None
 
-        return self.api.candles.candles_data
+        if hasattr(self.api, 'candles_event'):
+            self.api.candles.candles_data = None
+            self.api.candles_event.clear()
+            try:
+                self.api.getcandles(OP_code.ACTIVES[ACTIVES], interval, count, endtime)
+            except Exception as e:
+                get_logger(__name__).error("get_candles request error: %s", e)
+                return None
+
+            is_ready = self.api.candles_event.wait(timeout=TIMEOUT_WS_DATA)
+            if not is_ready or self.api.candles.candles_data is None:
+                get_logger(__name__).warning("Timeout or disconnect: candles data unavailable")
+                return None
+            return self.api.candles.candles_data
+        else:
+            # Fallback legacy spin-loop
+            self.api.candles.candles_data = None
+            try:
+                self.api.getcandles(OP_code.ACTIVES[ACTIVES], interval, count, endtime)
+            except Exception as e:
+                get_logger(__name__).error("get_candles legacy request error: %s", e)
+                return None
+
+            start = time.time()
+            while self.api.candles.candles_data is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_WS_DATA:
+                    get_logger(__name__).warning("Legacy spin timeout: candles_data")
+                    return None
+            return self.api.candles.candles_data
 
     #######################################################
     # ______________________________________________________
@@ -1144,17 +1175,26 @@ class IQ_Option:
 # __________________for Digital___________________
 
     def get_digital_underlying_list_data(self):
-        self.api.underlying_list_data = None
-        self.api.get_digital_underlying()
-        start_t = time.time()
-        while self.api.underlying_list_data == None:
-            time.sleep(0.05)
-            if time.time() - start_t >= 30:
-                get_logger(__name__).error(
-                    '**warning** get_digital_underlying_list_data late 30 sec')
+        if hasattr(self.api, 'underlying_list_data_event'):
+            self.api.underlying_list_data = None
+            self.api.underlying_list_data_event.clear()
+            self.api.get_digital_underlying()
+            is_ready = self.api.underlying_list_data_event.wait(timeout=TIMEOUT_CANDLE_STREAM)
+            if not is_ready or self.api.underlying_list_data is None:
+                get_logger(__name__).warning("Timeout or disconnect: underlying_list_data unavailable")
                 return None
-
-        return self.api.underlying_list_data
+            return self.api.underlying_list_data
+        else:
+            # Fallback legacy spin-loop
+            self.api.underlying_list_data = None
+            self.api.get_digital_underlying()
+            start_t = time.time()
+            while self.api.underlying_list_data is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start_t >= TIMEOUT_CANDLE_STREAM:
+                    get_logger(__name__).warning("Legacy spin timeout: underlying_list_data")
+                    return None
+            return self.api.underlying_list_data
 
     def get_strike_list(self, ACTIVES, duration):
         self.api.strike_list = None
@@ -1725,19 +1765,26 @@ class IQ_Option:
         return self.api.order_async[buy_order_id]
 
     def get_order(self, buy_order_id):
-        self.api.order_data = None
         if hasattr(self.api, 'order_data_event'):
+            self.api.order_data = None
             self.api.order_data_event.clear()
-            
-        self.api.get_order(buy_order_id)
-        
-        if hasattr(self.api, 'order_data_event'):
-            is_ready = self.api.order_data_event.wait(timeout=30)
-            if not is_ready:
-                get_logger(__name__).error("Timeout waiting for get_order.")
+            self.api.get_order(buy_order_id)
+            is_ready = self.api.order_data_event.wait(timeout=TIMEOUT_WS_DATA)
+            if not is_ready or self.api.order_data is None:
+                get_logger(__name__).warning("Timeout or disconnect: order_data unavailable")
                 return False, None
-                
-        if self.api.order_data and self.api.order_data.get("status") == 2000:
+        else:
+            # Fallback legacy spin-loop
+            self.api.order_data = None
+            self.api.get_order(buy_order_id)
+            start = time.time()
+            while self.api.order_data is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_WS_DATA:
+                    get_logger(__name__).warning("Legacy spin timeout: order_data")
+                    return False, None
+
+        if self.api.order_data.get("status") == 2000:
             return True, self.api.order_data["msg"]
         else:
             return False, None
@@ -1759,19 +1806,26 @@ class IQ_Option:
 
     # this function is heavy
     def get_positions(self, instrument_type):
-        self.api.positions = None
         if hasattr(self.api, 'positions_event'):
+            self.api.positions = None
             self.api.positions_event.clear()
-            
-        self.api.get_positions(instrument_type)
-        
-        if hasattr(self.api, 'positions_event'):
-            is_ready = self.api.positions_event.wait(timeout=30)
-            if not is_ready:
-                get_logger(__name__).error("Timeout waiting for get_positions.")
+            self.api.get_positions(instrument_type)
+            is_ready = self.api.positions_event.wait(timeout=TIMEOUT_WS_DATA)
+            if not is_ready or self.api.positions is None:
+                get_logger(__name__).warning("Timeout or disconnect: positions unavailable")
                 return False, None
-                
-        if self.api.positions and self.api.positions.get("status") == 2000:
+        else:
+            # Fallback legacy spin-loop
+            self.api.positions = None
+            self.api.get_positions(instrument_type)
+            start = time.time()
+            while self.api.positions is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_WS_DATA:
+                    get_logger(__name__).warning("Legacy spin timeout: positions")
+                    return False, None
+
+        if self.api.positions.get("status") == 2000:
             return True, self.api.positions["msg"]
         else:
             return False, None
@@ -1825,17 +1879,26 @@ class IQ_Option:
         return self.api.position
 
     def get_position_history(self, instrument_type):
-        self.api.position_history = None
-        self.api.get_position_history(instrument_type)
-        _ts = time.time()
-        while self.api.position_history == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for position_history')
-                break
-            pass
+        if hasattr(self.api, 'position_history_event'):
+            self.api.position_history = None
+            self.api.position_history_event.clear()
+            self.api.get_position_history(instrument_type)
+            is_ready = self.api.position_history_event.wait(timeout=TIMEOUT_WS_DATA)
+            if not is_ready or self.api.position_history is None:
+                get_logger(__name__).warning("Timeout or disconnect: position_history unavailable")
+                return False, None
+        else:
+            # Fallback legacy spin-loop
+            self.api.position_history = None
+            self.api.get_position_history(instrument_type)
+            start = time.time()
+            while self.api.position_history is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_WS_DATA:
+                    get_logger(__name__).warning("Legacy spin timeout: position_history")
+                    return False, None
 
-        if self.api.position_history["status"] == 2000:
+        if self.api.position_history.get("status") == 2000:
             return True, self.api.position_history["msg"]
         else:
             return False, None
@@ -1999,17 +2062,26 @@ class IQ_Option:
             list(), buffersize)
 
     def get_user_profile_client(self, user_id):
-        self.api.user_profile_client = None
-        self.api.Get_User_Profile_Client(user_id)
-        _ts = time.time()
-        while self.api.user_profile_client == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for user_profile_client')
-                break
-            pass
-
-        return self.api.user_profile_client
+        if hasattr(self.api, 'user_profile_client_event'):
+            self.api.user_profile_client = None
+            self.api.user_profile_client_event.clear()
+            self.api.Get_User_Profile_Client(user_id)
+            is_ready = self.api.user_profile_client_event.wait(timeout=TIMEOUT_WS_DATA)
+            if not is_ready or self.api.user_profile_client is None:
+                get_logger(__name__).warning("Timeout or disconnect: user_profile_client unavailable")
+                return None
+            return self.api.user_profile_client
+        else:
+            # Fallback legacy spin-loop
+            self.api.user_profile_client = None
+            self.api.Get_User_Profile_Client(user_id)
+            start = time.time()
+            while self.api.user_profile_client is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_WS_DATA:
+                    get_logger(__name__).warning("Legacy spin timeout: user_profile_client")
+                    return None
+            return self.api.user_profile_client
 
     def request_leaderboard_userinfo_deals_client(self, user_id, country_id):
         self.api.leaderboard_userinfo_deals_client = None
