@@ -47,10 +47,20 @@ def get_available_binary_asset(api: IQ_Option, instrument_type: str = "binary") 
 
         if instrument_type == "digital":
             category_keys = ["digital"]
+            priority = ["EURUSD", "GBPUSD", "AUDUSD", "USDJPY", "EURJPY"]
+            
+            for asset in priority:
+                if ot.get("digital", {}).get(asset, {}).get("open") is True:
+                    return asset
+                    
+            for asset_name, info in ot.get("digital", {}).items():
+                if info.get("open") is True:
+                    return asset_name
+            return None
         else:
             category_keys = ["binary", "turbo"]
 
-        # Priority pass — check preferred assets first
+        # Priority pass — check preferred assets first (for binary/turbo)
         for asset in priority:
             for cat in category_keys:
                 cat_data = ot.get(cat, {})
@@ -64,8 +74,31 @@ def get_available_binary_asset(api: IQ_Option, instrument_type: str = "binary") 
                 if isinstance(info, dict) and info.get("open") is True:
                     return asset_name
 
+        # Debugging inject for SPRINT-11
+        if instrument_type == "digital":
+            try:
+                digital_keys = list(ot.get("digital", {}).keys())
+                print(f"\n[DEBUG DIGITAL] Found {len(digital_keys)} digital assets. Sample 5: {digital_keys[:5]}")
+                if digital_keys:
+                    first_k = digital_keys[0]
+                    print(f"[DEBUG DIGITAL] Example structure '{first_k}': {ot['digital'][first_k]}")
+            except Exception as e:
+                print(f"[DEBUG DIGITAL] Error extracting debug: {e}")
+
     except Exception as e:
         import logging
         logging.error(f"Error fetching open {instrument_type} assets: {e}")
 
+    return None
+
+def get_available_digital_asset(api):
+    DIGITAL_PRIORITY = ["EURUSD", "GBPUSD", "AUDUSD", "USDJPY", "EURJPY"]
+    open_times = api.get_all_open_time()
+    cat_data = open_times.get("digital", {})
+    for asset in DIGITAL_PRIORITY:
+        if cat_data.get(asset, {}).get("open") is True:
+            return asset
+    for asset_name, info in cat_data.items():
+        if info.get("open") is True:
+            return asset_name
     return None

@@ -28,3 +28,5 @@ test.py
 scripts/
 examples/debug_*.json
 
+# Sprint debug files
+examples/debug_sprint*

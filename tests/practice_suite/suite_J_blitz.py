@@ -29,7 +29,7 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         collector.record(TestResult(SUITE_NAME, "J-02: Blitz asset has valid ID", "SKIPPED", detail=msg))
         collector.record(TestResult(SUITE_NAME, "J-03: Blitz expiration format", "SKIPPED", detail=msg))
         collector.record(TestResult(SUITE_NAME, "J-04: Blitz open_time availability", "SKIPPED", detail=msg))
-        collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz \u2014 CALL", "SKIPPED", detail=msg))
+        collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz — CALL", "SKIPPED", detail=msg))
         return
 
     # Test J-02: Blitz asset has valid ID
@@ -78,7 +78,7 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
                                         duration=time.time() - start))
         else:
             collector.record(TestResult(SUITE_NAME, "J-04: Blitz open_time availability", "SKIPPED",
-                                        detail="SKIPPED_NO_MARKET \u2014 Blitz assets exist in catalog but none open",
+                                        detail="SKIPPED_NO_MARKET — Blitz assets exist in catalog but none open",
                                         duration=time.time() - start))
     except Exception as e:
         collector.record(TestResult(SUITE_NAME, "J-04: Blitz open_time availability", "FAILED",
@@ -86,33 +86,50 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
 
     # Test J-05: Buy blitz - CALL (market-dependent)
     start = time.time()
-    if not blitz_in_open_time:
-        collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz \u2014 CALL", "SKIPPED",
-                                    detail="SKIPPED_NO_MARKET \u2014 No open blitz asset for trading",
+    
+    # Priority picking: known compatible binary-style assets
+    BLITZ_PRIORITY = ["EURAUD-OTC", "EURUSD-OTC", "EURJPY-OTC", "LTCUSD-OTC", "BTCUSD-OTC"]
+    target_asset = None
+    for p_asset in BLITZ_PRIORITY:
+        if p_asset in open_blitz:
+            target_asset = p_asset
+            break
+    
+    if not target_asset and blitz_in_open_time:
+        target_asset = blitz_in_open_time
+
+    if not target_asset:
+        collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz — CALL", "SKIPPED",
+                                    detail="SKIPPED_NO_MARKET — No open blitz asset for trading",
                                     duration=time.time() - start))
         return
 
     try:
         # Use smallest expiration available
-        asset_data = open_blitz[blitz_in_open_time]
+        asset_data = open_blitz[target_asset]
         exp = min(asset_data.get("expirations", [60]))
 
-        # Attempt buy — blitz may require a dedicated buy path since
-        # api.buy() resolves active IDs from the binary/turbo ACTIVES
-        # opcode table, which does not include blitz-category assets.
-        check, order_id = api.buy(1, blitz_in_open_time, "call", exp)
+        # Wait for rate limiter to refill after J-01..J-04 API calls
+        time.sleep(3)
+
+        # Attempt buy — blitz assets use the same binary buy path
+        # since they share active IDs with the binary/turbo ACTIVES table.
+        check, order_id = api.buy(1, target_asset, "call", exp)
         if check is True and order_id is not None:
-            collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz \u2014 CALL", "PASSED",
-                                        detail=f"Asset: {blitz_in_open_time}, ID: {order_id}, exp: {exp}s",
+            collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz — CALL", "PASSED",
+                                        detail=f"Asset: {target_asset}, ID: {order_id}, exp: {exp}s",
                                         duration=time.time() - start))
         else:
-            # Expected: blitz assets are not in ACTIVES opcode table,
-            # so buy() cannot resolve them. This is informational, not a failure.
-            collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz \u2014 CALL", "SKIPPED",
-                                        detail=f"SKIPPED \u2014 buy() cannot resolve blitz active (needs dedicated buy_blitz). msg={order_id}",
+            # Distinguish between rate limit and actual failure
+            reason = str(order_id) if order_id else "no response"
+            collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz — CALL", "FAILED",
+                                        detail=f"check={check}, reason={reason}, asset={target_asset}",
                                         duration=time.time() - start))
-    except Exception as e:
-        collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz \u2014 CALL", "SKIPPED",
-                                    detail=f"SKIPPED \u2014 blitz buy path not wired: {e}",
+    except KeyError as e:
+        collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz — CALL", "FAILED",
+                                    detail=f"Active not in OP_code.ACTIVES: {e}",
                                     duration=time.time() - start))
-
+    except Exception as e:
+        collector.record(TestResult(SUITE_NAME, "J-05: Buy blitz — CALL", "FAILED",
+                                    detail=f"{type(e).__name__}: {e}",
+                                    duration=time.time() - start))

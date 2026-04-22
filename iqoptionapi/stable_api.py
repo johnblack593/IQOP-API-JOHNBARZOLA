@@ -35,6 +35,7 @@ class IQ_Option:
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
+        self._password = password # Harding 3A: will be cleared in connect()
         self._credential_store = CredentialStore(email, password)
         self._reconnect_manager = ReconnectManager()
         self._idempotency = IdempotencyRegistry()
@@ -108,6 +109,7 @@ class IQ_Option:
 
         check, reason = self.api.connect(self._credential_store.consume())
         if check:
+            self._password = None # Harding 3A: clear password from memory post-auth
             self._reconnect_manager.reset()
             self._idempotency.purge_expired()
 
@@ -210,26 +212,79 @@ class IQ_Option:
         return self.api.leaderboard_deals_client
 
     def get_instruments(self, type):
-        # type="crypto"/"forex"/"cfd"
+        """
+        Obtiene instrumentos por tipo ("crypto"/"forex"/"cfd").
+        Intenta WS primero; si retorna lista vacía, hace fallback
+        a extracción desde initialization-data (transparente).
+        """
         time.sleep(self.suspend)
         self.api.instruments = None
-        self.api.instruments_event.clear()
-        
+
         try:
             if hasattr(self.api, 'instruments_event'):
                 self.api.instruments_event.clear()
-            
+
             self.api.get_instruments(type)
-            
+
             if hasattr(self.api, 'instruments_event'):
                 is_ready = self.api.instruments_event.wait(timeout=10)
                 if not is_ready:
-                    get_logger(__name__).warning("Timeout waiting for instruments of type: %s", type)
-                    return {"instruments": []} # Return empty list gracefully instead of None
+                    get_logger(__name__).warning(
+                        "WS timeout for instruments type: %s", type)
         except Exception as e:
-                get_logger(__name__).error('**error** api.get_instruments need reconnect: %s', e)
-                # self.connect() # Removed aggressive recursive connect
-        return getattr(self.api, 'instruments', {"instruments": []})
+            get_logger(__name__).error(
+                'get_instruments WS error for type=%s: %s', type, e)
+
+        ws_result = getattr(self.api, 'instruments', {"instruments": []})
+        ws_instruments = []
+        if isinstance(ws_result, dict):
+            ws_instruments = ws_result.get("instruments", [])
+
+        # ── FALLBACK: init-data extraction when WS returns empty ──
+        if not ws_instruments:
+            get_logger(__name__).info(
+                "WS returned empty for type=%s, attempting init-data fallback", type)
+            try:
+                from iqoptionapi.http.instruments import _extract_instruments_from_init
+                # Use CACHED init data (already populated during connect())
+                # Priority: init_v2 (modern) > init_v1 (classic)
+                init_data = getattr(self.api, 'api_option_init_all_result_v2', None)
+                if init_data and isinstance(init_data, dict):
+                    instruments = _extract_instruments_from_init(init_data, type)
+                    if instruments:
+                        get_logger(__name__).info(
+                            "Init-data fallback (v2 cache): %d instruments for type=%s",
+                            len(instruments), type)
+                        return {"instruments": instruments}
+
+                # Try classic init cache
+                init_data_v1 = getattr(self.api, 'api_option_init_all_result', None)
+                if init_data_v1 and isinstance(init_data_v1, dict):
+                    result_data = init_data_v1.get("result", init_data_v1)
+                    instruments = _extract_instruments_from_init(result_data, type)
+                    if instruments:
+                        get_logger(__name__).info(
+                            "Init-data fallback (v1 cache): %d instruments for type=%s",
+                            len(instruments), type)
+                        return {"instruments": instruments}
+
+                # Last resort: fetch fresh init data
+                get_logger(__name__).info(
+                    "No cached init data, fetching fresh for type=%s", type)
+                fresh_init = self.get_all_init_v2()
+                if fresh_init and isinstance(fresh_init, dict):
+                    instruments = _extract_instruments_from_init(fresh_init, type)
+                    if instruments:
+                        get_logger(__name__).info(
+                            "Init-data fallback (fresh): %d instruments for type=%s",
+                            len(instruments), type)
+                        return {"instruments": instruments}
+
+            except Exception as e:
+                get_logger(__name__).error(
+                    "Init-data fallback failed for type=%s: %s", type, e)
+
+        return ws_result if ws_instruments else {"instruments": []}
 
     def instruments_input_to_ACTIVES(self, type):
         instruments = self.get_instruments(type)
@@ -324,15 +379,27 @@ class IQ_Option:
 
     def __get_digital_open(self):
         # for digital options
-        data = self.get_digital_underlying_list_data()
-        digital_data = data.get("underlying", []) if data else []
+        digital_data = []
+        for _ in range(3):
+            data = self.get_digital_underlying_list_data()
+            if isinstance(data, dict) and "underlying" in data:
+                digital_data = data.get("underlying", [])
+            elif isinstance(data, list):
+                digital_data = data
+            
+            if digital_data:
+                break
+            time.sleep(2)
+            
         for digital in digital_data:
-            name = digital["underlying"]
-            schedule = digital["schedule"]
+            name = digital.get("underlying")
+            if not name:
+                continue
+            schedule = digital.get("schedule", [])
             self.OPEN_TIME["digital"][name]["open"] = False
             for schedule_time in schedule:
-                start = schedule_time["open"]
-                end = schedule_time["close"]
+                start = schedule_time.get("open", 0)
+                end = schedule_time.get("close", 0)
                 if start < time.time() < end:
                     self.OPEN_TIME["digital"][name]["open"] = True
 
@@ -340,14 +407,29 @@ class IQ_Option:
         # Crypto and etc pairs
         instrument_list = ["cfd", "forex", "crypto"]
         for instruments_type in instrument_list:
-            ins_data = self.get_instruments(instruments_type)["instruments"]
+            ins_data = []
+            for _ in range(3):
+                result = self.get_instruments(instruments_type)
+                if isinstance(result, dict) and "instruments" in result:
+                    ins_data = result.get("instruments", [])
+                elif isinstance(result, list):
+                    ins_data = result
+                elif hasattr(result, "get"):
+                    ins_data = result.get("instruments", [])
+                
+                if ins_data:
+                    break
+                time.sleep(2)
+                
             for detail in ins_data:
-                name = detail["name"]
-                schedule = detail["schedule"]
+                name = detail.get("name")
+                if not name:
+                    continue
+                schedule = detail.get("schedule", [])
                 self.OPEN_TIME[instruments_type][name]["open"] = False
                 for schedule_time in schedule:
-                    start = schedule_time["open"]
-                    end = schedule_time["close"]
+                    start = schedule_time.get("open", 0)
+                    end = schedule_time.get("close", 0)
                     if start < time.time() < end:
                         self.OPEN_TIME[instruments_type][name]["open"] = True
 
@@ -1357,6 +1439,91 @@ class IQ_Option:
     # ----------------------------------------------------------
     # -----------------BUY_for__Forex__&&__stock(cfd)__&&__ctrpto
 
+    # ── CFD/Forex/Crypto order capability detection ──
+    # Some user groups (e.g. user_group_id:191) have place-order-temp
+    # silently disabled server-side. This flag caches the probe result.
+    _cfd_order_capable = None  # None=untested, True/False=tested
+
+    def check_cfd_order_capability(self, force=False):
+        """
+        Probes whether the server accepts place-order-temp messages.
+        Returns True if CFD/Forex orders are supported, False otherwise.
+        Result is cached after first call.
+        """
+        if self._cfd_order_capable is not None and not force:
+            return self._cfd_order_capable
+
+        get_logger(__name__).info("Probing CFD order capability...")
+
+        # Use well-known OTC pairs from ACTIVES (always open, no need for
+        # slow get_all_open_time() call)
+        _PROBE_CANDIDATES = [
+            ("forex", "EURUSD-OTC"), ("forex", "USDJPY-OTC"),
+            ("forex", "GBPUSD-OTC"), ("cfd", "APPLE-OTC"),
+            ("crypto", "BTCUSD-OTC"),
+        ]
+        test_asset = None
+        test_type = None
+        for cat, name in _PROBE_CANDIDATES:
+            if name in OP_code.ACTIVES:
+                test_asset = name
+                test_type = cat
+                break
+
+        if not test_asset:
+            # Fallback: use any ACTIVES entry with OTC suffix
+            for name in OP_code.ACTIVES:
+                if "OTC" in name:
+                    test_asset = name
+                    test_type = "forex"
+                    break
+
+        if not test_asset:
+            get_logger(__name__).warning("No OTC assets in ACTIVES to probe CFD capability")
+            self._cfd_order_capable = False
+            return False
+
+        # Send a minimal order and wait for ANY response (3s timeout)
+        self.api.buy_order_id = None
+        try:
+            self.api.buy_order(
+                instrument_type=test_type, instrument_id=test_asset,
+                side="buy", amount=1, leverage=1,
+                type="market", limit_price=None, stop_price=None,
+                stop_lose_value=None, stop_lose_kind=None,
+                take_profit_value=None, take_profit_kind=None,
+                use_trail_stop=False, auto_margin_call=False,
+                use_token_for_commission=False
+            )
+        except Exception as e:
+            get_logger(__name__).warning("CFD probe send failed: %s", e)
+            self._cfd_order_capable = False
+            return False
+
+        # Fast timeout: 3s instead of 15s
+        _ts = time.time()
+        while self.api.buy_order_id is None:
+            time.sleep(0.05)
+            if time.time() - _ts >= 3:
+                break
+
+        if self.api.buy_order_id is not None:
+            get_logger(__name__).info(
+                "CFD orders SUPPORTED — probe order_id=%s", self.api.buy_order_id)
+            # Close the probe order
+            try:
+                self.close_position(self.api.buy_order_id)
+            except Exception:
+                pass
+            self._cfd_order_capable = True
+        else:
+            get_logger(__name__).warning(
+                "CFD orders NOT SUPPORTED for this account "
+                "(server silently dropped place-order-temp)")
+            self._cfd_order_capable = False
+
+        return self._cfd_order_capable
+
     def buy_order(self,
                   instrument_type, instrument_id,
                   side, amount, leverage,
@@ -1395,6 +1562,10 @@ class IQ_Option:
         if type == "stop" and stop_price is None:
             return False, "INVALID_PARAMS: stop_price cannot be None for stop orders"
 
+        # Fast-fail if we already know orders are unsupported
+        if self._cfd_order_capable is False:
+            return False, "CFD_NOT_SUPPORTED: place-order-temp disabled for this account"
+
         try:
             self._rate_limiter.consume()
         except RateLimitExceededError:
@@ -1423,12 +1594,16 @@ class IQ_Option:
             time.sleep(0.05)
             if time.time() - _ts >= 15:
                 self._idempotency.fail(request_id)
+                # Mark as incapable if this is likely a server restriction
+                if self._cfd_order_capable is None:
+                    get_logger(__name__).warning(
+                        "buy_order() first-call timeout — marking CFD as unsupported")
+                    self._cfd_order_capable = False
                 get_logger(__name__).critical(
                     "buy_order() TIMEOUT: request_id=%s — order may or may not exist on server. "
                     "Check open positions manually before retrying.", request_id
                 )
-                get_logger(__name__).warning('Timeout (15s) waiting for buy_order_id')
-                return False, None
+                return False, "TIMEOUT: server did not respond to place-order-temp"
             pass
 
         check, data = self.get_order(self.api.buy_order_id)
@@ -1440,6 +1615,9 @@ class IQ_Option:
         if check:
             if data["status"] != "rejected":
                 self._idempotency.confirm(request_id, self.api.buy_order_id)
+                # Mark as capable on success
+                if self._cfd_order_capable is None:
+                    self._cfd_order_capable = True
                 return True, self.api.buy_order_id
             else:
                 self._idempotency.fail(request_id)
