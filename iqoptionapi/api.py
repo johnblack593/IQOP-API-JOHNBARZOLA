@@ -68,13 +68,9 @@ from iqoptionapi.ws.objects.candles import Candles
 from iqoptionapi.ws.objects.listinfodata import ListInfoData
 from iqoptionapi.ws.objects.betinfo import Game_betinfo_data
 from collections import defaultdict
+from iqoptionapi.utils import nested_dict
 
 
-def nested_dict(n, type):
-    if n == 1:
-        return defaultdict(type)
-    else:
-        return defaultdict(lambda: nested_dict(n - 1, type))
 
 
 
