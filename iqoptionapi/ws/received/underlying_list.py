@@ -3,3 +3,5 @@
 def underlying_list(api, message):
     if message["name"] == "underlying-list":
         api.underlying_list_data = message["msg"]
+        ev = getattr(api, "underlying_list_data_event", None)
+        if ev: ev.set()

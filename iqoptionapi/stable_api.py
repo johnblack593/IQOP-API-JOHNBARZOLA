@@ -400,45 +400,20 @@ class IQ_Option:
             is_ready = self.api.api_option_init_all_result_event.wait(timeout=TIMEOUT_ALL_INIT)
             if not is_ready or self.api.api_option_init_all_result is None:
                 get_logger(__name__).warning("Timeout or disconnect: api_option_init_all_result unavailable")
-                return None
-            return self.api.api_option_init_all_result
-        else:
-            # Fallback legacy spin-loop
-            self.api.api_option_init_all_result = None
-            self.api.get_api_option_init_all()
-            start = time.time()
-            while self.api.api_option_init_all_result is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start > TIMEOUT_ALL_INIT:
-                    get_logger(__name__).warning("Legacy spin timeout: api_option_init_all_result")
-                    return None
-            return self.api.api_option_init_all_result
+        self.api.api_option_init_all_result_event.clear()
+        self.api.get_api_option_init_all()
+        is_ready = self.api.api_option_init_all_result_event.wait(timeout=10)
+        return self.api.api_option_init_all_result if is_ready else None
 
     def get_all_init_v2(self):
-        if hasattr(self.api, 'api_option_init_all_result_v2_event'):
-            self.api.api_option_init_all_result_v2 = None
-            self.api.api_option_init_all_result_v2_event.clear()
-            if self.check_connect() == False:
-                self.connect()
-            self.api.get_api_option_init_all_v2()
-            is_ready = self.api.api_option_init_all_result_v2_event.wait(timeout=TIMEOUT_ALL_INIT)
-            if not is_ready or self.api.api_option_init_all_result_v2 is None:
-                get_logger(__name__).warning("Timeout or disconnect: api_option_init_all_result_v2 unavailable")
-                return None
-            return self.api.api_option_init_all_result_v2
-        else:
-            # Fallback legacy spin-loop
-            self.api.api_option_init_all_result_v2 = None
-            if self.check_connect() == False:
-                self.connect()
-            self.api.get_api_option_init_all_v2()
-            start_t = time.time()
-            while self.api.api_option_init_all_result_v2 is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start_t >= TIMEOUT_ALL_INIT:
-                    get_logger(__name__).warning("Legacy spin timeout: api_option_init_all_result_v2")
-                    return None
-            return self.api.api_option_init_all_result_v2
+        self.api.api_option_init_all_result_v2_event.clear()
+        if self.check_connect() == False:
+            self.connect()
+        self.api.get_api_option_init_all_v2()
+        is_ready = self.api.api_option_init_all_result_v2_event.wait(timeout=TIMEOUT_ALL_INIT)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for api_option_init_all_result_v2")
+        return self.api.api_option_init_all_result_v2
 
     # ------- chek if binary/digit/cfd/stock... if open or not
 
@@ -588,27 +563,12 @@ class IQ_Option:
     # ______________________________________self.api.getprofile() https________________________________
 
     def get_profile_ansyc(self):
-        if self.api.profile.msg is not None:
-            return self.api.profile.msg
-            
-        if hasattr(self.api, 'profile_msg_event'):
-            self.api.profile_msg_event.clear()
-            # Request already sent during connect or elsewhere? 
-            # Usually get_profile is called to wait for data already flowing.
-            is_ready = self.api.profile_msg_event.wait(timeout=TIMEOUT_SSID_AUTH)
-            if not is_ready or self.api.profile.msg is None:
-                get_logger(__name__).warning("Timeout or disconnect: profile data unavailable")
-                return None
-            return self.api.profile.msg
-        else:
-            # Fallback legacy spin-loop
-            start = time.time()
-            while self.api.profile.msg is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start > TIMEOUT_SSID_AUTH:
-                    get_logger(__name__).warning("Legacy spin timeout: profile data")
-                    return None
-            return self.api.profile.msg
+        self.api.profile_event.clear()
+        self.api.get_profile()
+        is_ready = self.api.profile_event.wait(timeout=TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for profile")
+        return self.api.profile.msg
 
 
     def get_currency(self):
@@ -659,26 +619,12 @@ class IQ_Option:
                     return "TOURNAMENT"
 
     def reset_practice_balance(self):
-        if hasattr(self.api, 'training_balance_reset_request_event'):
-            self.api.training_balance_reset_request = None
-            self.api.training_balance_reset_request_event.clear()
-            self.api.reset_training_balance()
-            is_ready = self.api.training_balance_reset_request_event.wait(timeout=TIMEOUT_BALANCE_RESET)
-            if not is_ready or self.api.training_balance_reset_request is None:
-                get_logger(__name__).warning("Timeout or disconnect: training_balance_reset_request unavailable")
-                return None
-            return self.api.training_balance_reset_request
-        else:
-            # Fallback legacy spin-loop
-            self.api.training_balance_reset_request = None
-            self.api.reset_training_balance()
-            start = time.time()
-            while self.api.training_balance_reset_request is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start > TIMEOUT_BALANCE_RESET:
-                    get_logger(__name__).warning("Legacy spin timeout: training_balance_reset_request")
-                    return None
-            return self.api.training_balance_reset_request
+        self.api.training_balance_reset_request_event.clear()
+        self.api.reset_training_balance()
+        is_ready = self.api.training_balance_reset_request_event.wait(timeout=TIMEOUT_BALANCE_RESET)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for training_balance_reset_request")
+        return self.api.training_balance_reset_request
 
     def position_change_all(self, Main_Name, user_balance_id):
         instrument_type = ["cfd", "forex", "crypto",
@@ -739,36 +685,18 @@ class IQ_Option:
             get_logger(__name__).error("Asset %s not found in ACTIVES", ACTIVES)
             return None
 
-        if hasattr(self.api, 'candles_event'):
-            self.api.candles.candles_data = None
-            self.api.candles_event.clear()
-            try:
-                self.api.getcandles(OP_code.ACTIVES[ACTIVES], interval, count, endtime)
-            except Exception as e:
-                get_logger(__name__).error("get_candles request error: %s", e)
-                return None
+        self.api.candles_event.clear()
+        try:
+            self.api.getcandles(OP_code.ACTIVES[ACTIVES], interval, count, endtime)
+        except Exception as e:
+            get_logger(__name__).error("get_candles request error: %s", e)
+            return None
 
-            is_ready = self.api.candles_event.wait(timeout=TIMEOUT_WS_DATA)
-            if not is_ready or self.api.candles.candles_data is None:
-                get_logger(__name__).warning("Timeout or disconnect: candles data unavailable")
-                return None
-            return self.api.candles.candles_data
-        else:
-            # Fallback legacy spin-loop
-            self.api.candles.candles_data = None
-            try:
-                self.api.getcandles(OP_code.ACTIVES[ACTIVES], interval, count, endtime)
-            except Exception as e:
-                get_logger(__name__).error("get_candles legacy request error: %s", e)
-                return None
-
-            start = time.time()
-            while self.api.candles.candles_data is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start > TIMEOUT_WS_DATA:
-                    get_logger(__name__).warning("Legacy spin timeout: candles_data")
-                    return None
-            return self.api.candles.candles_data
+        is_ready = self.api.candles_event.wait(timeout=TIMEOUT_WS_DATA)
+        if not is_ready or self.api.candles.candles_data is None:
+            get_logger(__name__).warning("Timeout or disconnect: candles data unavailable")
+            return None
+        return self.api.candles.candles_data
 
     #######################################################
     # ______________________________________________________
@@ -973,16 +901,13 @@ class IQ_Option:
     # -----------------technical_indicators----------------------
 
     def get_technical_indicators(self, ACTIVES):
-        request_id = self.api.get_Technical_indicators(
-            OP_code.ACTIVES[ACTIVES])
-        _ts = time.time()
-        while self.api.technical_indicators.get(request_id) == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for technical_indicators')
-                break
-            pass
-        return self.api.technical_indicators[request_id]
+        self.api.technical_indicators[str(ACTIVES)] = None
+        self.api.technical_indicators_event.clear()
+        self.api.get_technical_indicators(OP_code.ACTIVES[ACTIVES])
+        is_ready = self.api.technical_indicators_event.wait(timeout=TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for technical_indicators: %s", ACTIVES)
+        return self.api.technical_indicators.get(str(ACTIVES))
 
 ##############################################################################################
 
@@ -990,82 +915,57 @@ class IQ_Option:
 ##############################################################################################
 
     def check_binary_order(self, order_id):
-        _ts = time.time()
-        # Binary options can have expirations up to 1-2 hours or more for end-of-day.
-        # We wait up to 120 minutes max, or until the option closes.
         while order_id not in self.api.order_binary:
-            time.sleep(0.05)
-            if time.time() - _ts >= 7200:
-                get_logger(__name__).warning('Timeout (120 min) waiting for order_id to close in binary options')
-                return None
+            self.api.option_closed_event.wait(timeout=1)
+            self.api.option_closed_event.clear()
         your_order = self.api.order_binary.pop(order_id, None)
         return your_order
 
     def check_win(self, id_number):
-        # 'win':win money 'equal':no win no loose   'loose':loose money
-        listinfodata_dict = None
-        _ts = time.time()
         while True:
-            time.sleep(0.05)
-            if time.time() - _ts >= 7200:
-                get_logger(__name__).warning('Timeout (120 min) waiting for check_win')
-                break
             try:
                 listinfodata_dict = self.api.listinfodata.get(id_number)
-                if listinfodata_dict["game_state"] == 1:
+                if listinfodata_dict and listinfodata_dict.get("game_state") == 1:
                     break
             except Exception:
                 pass
+            # Wait for any data update
+            self.api.result_event.wait(timeout=1)
+            self.api.result_event.clear()
+        
         self.api.listinfodata.delete(id_number)
-        if listinfodata_dict is not None:
-            return listinfodata_dict.get("win", None)
-        return None
+        return listinfodata_dict.get("win", None) if listinfodata_dict else None
 
     def check_win_v2(self, id_number, polling_time):
-        _ts = time.time()
         while True:
-            time.sleep(0.05)
-            if time.time() - _ts >= 7200:
-                get_logger(__name__).warning('Timeout (120 min) waiting for check_win_v2')
-                return None
             check, data = self.get_betinfo(id_number)
             if check and data and "result" in data and "data" in data["result"]:
                 win = data["result"]["data"][str(id_number)].get("win", "")
                 if win != "":
                     try:
                         return data["result"]["data"][str(id_number)]["profit"] - data["result"]["data"][str(id_number)]["deposit"]
-                    except (KeyError, TypeError) as e:
-                        get_logger(__name__).error("Data extraction error: %s", e)
-            time.sleep(polling_time)
+                    except (KeyError, TypeError):
+                        pass
+            # Wait for betinfo update
+            self.api.game_betinfo_event.wait(timeout=polling_time)
+            self.api.game_betinfo_event.clear()
 
-        
     def check_win_v4(self, id_number):
-        _ts = time.time()
-        while True:
-            time.sleep(0.05)
-            if time.time() - _ts >= 7200:
-                get_logger(__name__).warning('Timeout (120 min) waiting for check_win_v4')
-                return None, None
-            if self.api.socket_option_closed.get(id_number) != None:
-                    break
+        while self.api.socket_option_closed.get(id_number) == None:
+             self.api.option_closed_event.wait(timeout=1)
+             self.api.option_closed_event.clear()
         x = self.api.socket_option_closed[id_number]
         return x['msg']['win'], (0 if x['msg']['win'] == 'equal' else float(x['msg']['sum']) * -1 if x['msg']['win'] == 'loose' else float(x['msg']['win_amount']) - float(x['msg']['sum']))
 
     def check_win_v3(self, id_number):
-        _ts = time.time()
         while True:
-            time.sleep(0.05)
-            if time.time() - _ts >= 7200:
-                get_logger(__name__).warning('Timeout (120 min) waiting for check_win_v3')
-                return None, None
-            result = self.get_optioninfo_v2(10)
-            if result and result.get('msg') and result['msg'].get('closed_options'):
-                try:
-                    if result['msg']['closed_options'][0]['id'][0] == id_number and result['msg']['closed_options'][0]['id'][0] != None:
-                        return result['msg']['closed_options'][0]['win'], (result['msg']['closed_options'][0]['win_amount'] - result['msg']['closed_options'][0]['amount'] if result['msg']['closed_options'][0]['win'] != 'equal' else 0)
-                except Exception:
-                    pass
-            time.sleep(1)
+            if self.api.socket_option_closed.get(id_number) is not None:
+                break
+            self.api.option_closed_event.wait(timeout=1)
+            self.api.option_closed_event.clear()
+        
+        x = self.api.socket_option_closed[id_number]
+        return x["msg"]["win"]
 
     # -------------------get infomation only for binary option------------------------
 
@@ -1092,29 +992,19 @@ class IQ_Option:
         return self.api.game_betinfo.isSuccessful, self.api.game_betinfo.dict
 
     def get_optioninfo(self, limit):
-        self.api.api_game_getoptions_result = None
+        self.api.api_game_getoptions_result_event.clear()
         self.api.get_options(limit)
-        _ts = time.time()
-        while self.api.api_game_getoptions_result == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for api_game_getoptions_result')
-                break
-            pass
-
+        is_ready = self.api.api_game_getoptions_result_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for api_game_getoptions_result')
         return self.api.api_game_getoptions_result
 
     def get_optioninfo_v2(self, limit):
-        self.api.get_options_v2_data = None
+        self.api.get_options_v2_data_event.clear()
         self.api.get_options_v2(limit, "binary,turbo")
-        _ts = time.time()
-        while self.api.get_options_v2_data == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for get_options_v2_data')
-                break
-            pass
-
+        is_ready = self.api.get_options_v2_data_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for get_options_v2_data')
         return self.api.get_options_v2_data
 
     # __________________________BUY__________________________
@@ -1129,14 +1019,14 @@ class IQ_Option:
                 self.api.buyv3(
                     price[idx], OP_code.ACTIVES[ACTIVES[idx]], ACTION[idx], expirations[idx], idx)
             while len(self.api.buy_multi_option) < buy_len:
-                time.sleep(0.05)
-                pass
+                self.api.result_event.wait(timeout=1)
+                self.api.result_event.clear()
             buy_id = []
             for key in sorted(self.api.buy_multi_option.keys()):
                 try:
                     value = self.api.buy_multi_option[str(key)]
                     buy_id.append(value["id"])
-                except Exception as e:
+                except Exception:
                     buy_id.append(None)
 
             return buy_id
@@ -1151,35 +1041,19 @@ class IQ_Option:
         return "ERROR duration"
 
     def buy_by_raw_expirations(self, price, active, direction, option, expired):
-
         self.api.buy_multi_option = {}
-        self.api.buy_successful = None
-        req_id = "buyraw"
+        self.api.result_event.clear()
+        req_id = str(randint(0, 10000))
         self.api.buy_multi_option[req_id] = {"id": None}
-        self.api.buyv3_by_raw_expired(
-            price, OP_code.ACTIVES[active], direction, option, expired, request_id=req_id)
-        start_t = time.time()
-        id = None
-        self.api.result = None
-        _ts = time.time()
-        while self.api.result == None or id == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for result')
-                break
-            try:
-                if "message" in self.api.buy_multi_option[req_id].keys():
-                    get_logger(__name__).error(
-                        '**warning** buy' + str(self.api.buy_multi_option[req_id]["message"]))
-                    return False, self.api.buy_multi_option[req_id]["message"]
-            except Exception:
-                pass
-            id = self.api.buy_multi_option.get(req_id, {}).get("id")
-            if time.time() - start_t >= 5:
-                get_logger(__name__).error('**warning** buy late 5 sec')
-                return False, None
-
-        return self.api.result, self.api.buy_multi_option[req_id]["id"]
+        self.api.buyv3_by_raw_expirations(
+            float(price), OP_code.ACTIVES[active], str(direction), str(option), int(expired), req_id)
+        
+        is_ready = self.api.result_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for buy_by_raw_expirations result")
+        
+        id = self.api.buy_multi_option.get(req_id, {}).get("id")
+        return self.api.result, id
 
     def buy(self, price, ACTIVES, ACTION, expirations):
         try:
@@ -1195,32 +1069,26 @@ class IQ_Option:
             request_id, ACTIVES, ACTION, price
         )
         self.api.buy_multi_option = {}
-        self.api.buy_successful = None
-        # req_id = "buy"
+        self.api.result_event.clear()
         req_id = str(randint(0, 10000))
         self.api.buy_multi_option[req_id] = {"id": None}
         self.api.buyv3(
             float(price), OP_code.ACTIVES[ACTIVES], str(ACTION), int(expirations), req_id)
-        start_t = time.time()
-        id = None
-        self.api.result = None
-        while self.api.result == None or id == None:
-            time.sleep(0.05)
+        
+        is_ready = self.api.result_event.wait(timeout=15)
+        
+        id = self.api.buy_multi_option.get(req_id, {}).get("id")
+        if id is None:
             if self.api.buy_multi_option.get(req_id, {}).get("message"):
                 self._idempotency.fail(request_id)
                 return False, self.api.buy_multi_option[req_id]["message"]
-            id = self.api.buy_multi_option.get(req_id, {}).get("id")
-            if time.time() - start_t >= 5:
+            if not is_ready:
                 self._idempotency.fail(request_id)
-                get_logger(__name__).critical(
-                    "buy() TIMEOUT: request_id=%s — order may or may not exist on server. "
-                    "Check open positions manually before retrying.", request_id
-                )
-                get_logger(__name__).error('**warning** buy late 5 sec')
+                get_logger(__name__).critical("buy() TIMEOUT: request_id=%s", request_id)
                 return False, None
-
+        
         self._idempotency.confirm(request_id, id)
-        return self.api.result, self.api.buy_multi_option[req_id]["id"]
+        return self.api.result, id
 
     def sell_option(self, options_ids):
         try:
@@ -1230,18 +1098,12 @@ class IQ_Option:
                 "sell_option() BLOCKED by rate limiter — options_ids=%s", options_ids
             )
             return None
-        self.api.sold_options_respond = None
-        if hasattr(self.api, 'sold_options_respond_event'):
-            self.api.sold_options_respond_event.clear()
-            
+        self.api.sold_options_respond_event.clear()
         self.api.sell_option(options_ids)
-        
-        if hasattr(self.api, 'sold_options_respond_event'):
-            is_ready = self.api.sold_options_respond_event.wait(timeout=30)
-            if not is_ready:
-                get_logger(__name__).error("Timeout waiting for sell_option response.")
-                return None
-                
+        is_ready = self.api.sold_options_respond_event.wait(timeout=30)
+        if not is_ready:
+            get_logger(__name__).error("Timeout waiting for sell_option response.")
+            return None
         return self.api.sold_options_respond
 
     def sell_digital_option(self, options_ids):
@@ -1252,50 +1114,31 @@ class IQ_Option:
                 "sell_digital_option() BLOCKED by rate limiter — options_ids=%s", options_ids
             )
             return None
-        self.api.sold_digital_options_respond = None
+        self.api.result_event.clear()
         self.api.sell_digital_option(options_ids)
-        _ts = time.time()
-        while self.api.sold_digital_options_respond == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for sold_digital_options_respond')
-                break
+        is_ready = self.api.result_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for sell_digital_option_respond')
         return self.api.sold_digital_options_respond
 # __________________for Digital___________________
 
     def get_digital_underlying_list_data(self):
-        if hasattr(self.api, 'underlying_list_data_event'):
-            self.api.underlying_list_data = None
-            self.api.underlying_list_data_event.clear()
-            self.api.get_digital_underlying()
-            is_ready = self.api.underlying_list_data_event.wait(timeout=TIMEOUT_CANDLE_STREAM)
-            if not is_ready or self.api.underlying_list_data is None:
-                get_logger(__name__).warning("Timeout or disconnect: underlying_list_data unavailable")
-                return None
-            return self.api.underlying_list_data
-        else:
-            # Fallback legacy spin-loop
-            self.api.underlying_list_data = None
-            self.api.get_digital_underlying()
-            start_t = time.time()
-            while self.api.underlying_list_data is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start_t >= TIMEOUT_CANDLE_STREAM:
-                    get_logger(__name__).warning("Legacy spin timeout: underlying_list_data")
-                    return None
-            return self.api.underlying_list_data
+        self.api.underlying_list_data_event.clear()
+        self.api.get_digital_underlying()
+        is_ready = self.api.underlying_list_data_event.wait(timeout=TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for underlying_list_data")
+        return self.api.underlying_list_data
 
     def get_strike_list(self, ACTIVES, duration):
-        self.api.strike_list = None
+        self.api.strike_list_event.clear()
         self.api.get_strike_list(ACTIVES, duration)
+        is_ready = self.api.strike_list_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for strike_list')
+            return None, None
+        
         ans = {}
-        _ts = time.time()
-        while self.api.strike_list == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for strike_list')
-                break
-            pass
         try:
             for data in self.api.strike_list["msg"]["strike"]:
                 temp = {}
@@ -1304,7 +1147,7 @@ class IQ_Option:
                 ans[("%.6f" % (float(data["value"]) * 10e-7))] = temp
         except (KeyError, TypeError) as e:
             get_logger(__name__).error('**error** get_strike_list read problem: %s', e)
-            return getattr(self.api, 'strike_list', None), None
+            return self.api.strike_list, None
         return self.api.strike_list, ans
 
     def subscribe_strike_list(self, ACTIVE, expiration_period):
@@ -1318,29 +1161,26 @@ class IQ_Option:
 
     def get_instrument_quites_generated_data(self, ACTIVE, duration):
         while self.api.instrument_quotes_generated_raw_data[ACTIVE][duration * 60] == {}:
-            time.sleep(0.05)
-            pass
+            self.api.instrument_quotes_generated_event.wait(timeout=1)
+            self.api.instrument_quotes_generated_event.clear()
         return self.api.instrument_quotes_generated_raw_data[ACTIVE][duration * 60]
 
     def get_realtime_strike_list(self, ACTIVE, duration):
-        while True:
-            time.sleep(0.05)
-            if not self.api.instrument_quites_generated_data[ACTIVE][duration * 60]:
-                pass
-            else:
-                break
-        """
-        strike_list dict: price:{call:id,put:id}
-        """
+        while not self.api.instrument_quites_generated_data[ACTIVE][duration * 60]:
+            self.api.instrument_quotes_generated_event.wait(timeout=1)
+            self.api.instrument_quotes_generated_event.clear()
+
         ans = {}
         now_timestamp = self.api.instrument_quites_generated_timestamp[ACTIVE][duration * 60]
 
         while ans == {}:
-            time.sleep(0.05)
             if self.get_realtime_strike_list_temp_data == {} or now_timestamp != self.get_realtime_strike_list_temp_expiration:
                 raw_data, strike_list = self.get_strike_list(ACTIVE, duration)
-                self.get_realtime_strike_list_temp_expiration = raw_data["msg"]["expiration"]
-                self.get_realtime_strike_list_temp_data = strike_list
+                if raw_data:
+                    self.get_realtime_strike_list_temp_expiration = raw_data["msg"]["expiration"]
+                    self.get_realtime_strike_list_temp_data = strike_list
+                else:
+                    break
             else:
                 strike_list = self.get_realtime_strike_list_temp_data
 
@@ -1357,6 +1197,10 @@ class IQ_Option:
                     ans[price_key] = side_data
                 except (KeyError, TypeError) as e:
                     get_logger(__name__).error("Data extraction error: %s", e)
+            
+            if ans == {}:
+                self.api.instrument_quotes_generated_event.wait(timeout=1)
+                self.api.instrument_quotes_generated_event.clear()
 
         return ans
 
@@ -1392,47 +1236,22 @@ class IQ_Option:
         else:
             get_logger(__name__).error('buy_digital_spot active error')
             return -1, None
-        # doEURUSD201907191250PT5MPSPT
-        timestamp = int(self.api.timesync.server_timestamp)
-        if duration == 1:
-            exp, _ = get_expiration_time(timestamp, duration)
-        else:
-            now_date = datetime.fromtimestamp(
-                timestamp) + timedelta(minutes=1, seconds=30)
-            while True:
-                time.sleep(0.05)
-                if now_date.minute % duration == 0 and time.mktime(now_date.timetuple()) - timestamp > 30:
-                    break
-                now_date = now_date + timedelta(minutes=1)
-            exp = time.mktime(now_date.timetuple())
+        
+        exp, _ = get_expiration_time(int(self.api.timesync.server_timestamp), duration)
+        dateFormated = str(datetime.utcfromtimestamp(exp).strftime("%Y%m%d%H%M"))
+        instrument_id = "do" + active + dateFormated + "PT" + str(duration) + "M" + action + "SPT"
 
-        dateFormated = str(datetime.utcfromtimestamp(
-            exp).strftime("%Y%m%d%H%M"))
-        instrument_id = "do" + active + dateFormated + \
-                        "PT" + str(duration) + "M" + action + "SPT"
-        # self.api.digital_option_placed_id = None
-
+        self.api.digital_option_placed_id_event.clear()
         request_id = self.api.place_digital_option(instrument_id, amount)
 
-        _ts = time.time()
-        while self.api.digital_option_placed_id.get(request_id) == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for digital_option_placed_id')
-                break
-            pass
+        is_ready = self.api.digital_option_placed_id_event.wait(timeout=15)
         digital_order_id = self.api.digital_option_placed_id.get(request_id)
-        if isinstance(digital_order_id, int):
-            return True, digital_order_id
-        else:
+        
+        if not is_ready or digital_order_id is None:
+            get_logger(__name__).warning('Timeout (15s) waiting for digital_option_placed_id')
             return False, digital_order_id
-
-        # while self.api.digital_option_placed_id == None:
-        #     pass
-        # if isinstance(self.api.digital_option_placed_id, int):
-        #     return True, self.api.digital_option_placed_id
-        # else:
-        #     return False, self.api.digital_option_placed_id
+            
+        return True, digital_order_id
 
     def get_digital_spot_profit_after_sale(self, position_id):
         def get_instrument_id_to_bid(data, instrument_id):
@@ -1441,9 +1260,9 @@ class IQ_Option:
                     return row["price"]["bid"]
             return None
 
-        while self.get_async_order(position_id)["position-changed"] == {}:
-            time.sleep(0.05)
-            pass
+        while self.get_async_order(position_id).get("position-changed") == {}:
+            self.api.position_changed_event.wait(timeout=1)
+            self.api.position_changed_event.clear()
         # ___________________/*position*/_________________
         position = self.get_async_order(position_id)["position-changed"]["msg"]
         # doEURUSD201911040628PT1MPSPT
@@ -1529,50 +1348,46 @@ class IQ_Option:
             return None
 
     def buy_digital(self, amount, instrument_id):
-        self.api.digital_option_placed_id = None
-        self.api.place_digital_option(instrument_id, amount)
-        start_t = time.time()
-        while self.api.digital_option_placed_id == None:
-            time.sleep(0.05)
-            if time.time() - start_t > 30:
-                get_logger(__name__).error('buy_digital loss digital_option_placed_id')
-                return False, None
-        return True, self.api.digital_option_placed_id
+        self.api.digital_option_placed_id_event.clear()
+        request_id = self.api.place_digital_option(instrument_id, amount)
+        is_ready = self.api.digital_option_placed_id_event.wait(timeout=30)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for buy_digital")
+        return self.api.digital_option_placed_id.get(request_id)
 
     def close_digital_option(self, position_id):
-        self.api.result = None
-        while self.get_async_order(position_id)["position-changed"] == {}:
+        # Wait for position info
+        while self.get_async_order(position_id).get("position-changed") == {}:
             time.sleep(0.05)
             pass
-        position_changed = self.get_async_order(
-            position_id)["position-changed"]["msg"]
+        position_changed = self.get_async_order(position_id)["position-changed"]["msg"]
+        
+        self.api.result_event.clear()
         self.api.close_digital_option(position_changed["external_id"])
-        _ts = time.time()
-        while self.api.result == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for result')
-                break
-            pass
+        is_ready = self.api.result_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for close_digital_option result')
         return self.api.result
 
     def check_win_digital(self, buy_order_id, polling_time):
         while True:
-            time.sleep(0.05)
-            time.sleep(polling_time)
             data = self.get_digital_position(buy_order_id)
 
-            if data["msg"]["position"]["status"] == "closed":
-                if data["msg"]["position"]["close_reason"] == "default":
-                    return data["msg"]["position"]["pnl_realized"]
-                elif data["msg"]["position"]["close_reason"] == "expired":
-                    return data["msg"]["position"]["pnl_realized"] - data["msg"]["position"]["buy_amount"]
+            if data and data.get("msg") and data["msg"].get("position", {}).get("status") == "closed":
+                pos = data["msg"]["position"]
+                if pos["close_reason"] == "default":
+                    return pos["pnl_realized"]
+                elif pos["close_reason"] == "expired":
+                    return pos["pnl_realized"] - pos["buy_amount"]
+            
+            self.api.position_changed_event.wait(timeout=polling_time)
+            self.api.position_changed_event.clear()
 
     def check_win_digital_v2(self, buy_order_id):
 
-        while self.get_async_order(buy_order_id)["position-changed"] == {}:
-            time.sleep(0.05)
-            pass
+        while self.get_async_order(buy_order_id).get("position-changed") == {}:
+            self.api.position_changed_event.wait(timeout=1)
+            self.api.position_changed_event.clear()
         order_data = self.get_async_order(
             buy_order_id)["position-changed"]["msg"]
         if order_data != None:
@@ -1651,11 +1466,8 @@ class IQ_Option:
             return False
 
         # Fast timeout: 3s instead of 15s
-        _ts = time.time()
-        while self.api.buy_order_id is None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 3:
-                break
+        self.api.order_data_event.clear()
+        is_ready = self.api.order_data_event.wait(timeout=3)
 
         if self.api.buy_order_id is not None:
             get_logger(__name__).info(
@@ -1684,19 +1496,6 @@ class IQ_Option:
 
                   use_trail_stop=False, auto_margin_call=False,
                   use_token_for_commission=False):
-        """
-        Places a new order with optional SL/TP capabilities.
-        
-        Args:
-            stop_lose_kind / take_profit_kind accepted values:
-              "percent"  -> value is percentage (e.g. 50.0 means 50%)
-              "price"    -> value is absolute asset price
-              "pnl"      -> value is amount in USD of profit/loss
-        
-        Example:
-            buy_order(..., stop_lose_kind="percent", stop_lose_value=50.0,
-                           take_profit_kind="percent", take_profit_value=100.0)
-        """
         if amount <= 0:
             return False, "INVALID_PARAMS: amount must be > 0"
         if side not in ("buy", "sell"):
@@ -1712,7 +1511,6 @@ class IQ_Option:
         if type == "stop" and stop_price is None:
             return False, "INVALID_PARAMS: stop_price cannot be None for stop orders"
 
-        # Fast-fail if we already know orders are unsupported
         if self._cfd_order_capable is False:
             return False, "CFD_NOT_SUPPORTED: place-order-temp disabled for this account"
 
@@ -1723,12 +1521,11 @@ class IQ_Option:
                 "buy_order() BLOCKED by rate limiter — instrument=%s side=%s", instrument_id, side
             )
             return False, None
+            
         request_id = self._idempotency.register()
-        get_logger(__name__).info(
-            "buy_order(): request_id=%s | instrument_id=%s | side=%s | amount=%s",
-            request_id, instrument_id, side, amount
-        )
         self.api.buy_order_id = None
+        self.api.order_data_event.clear()
+        
         self.api.buy_order(
             instrument_type=instrument_type, instrument_id=instrument_id,
             side=side, amount=amount, leverage=leverage,
@@ -1739,53 +1536,26 @@ class IQ_Option:
             use_token_for_commission=use_token_for_commission
         )
 
-        _ts = time.time()
-        while self.api.buy_order_id == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                self._idempotency.fail(request_id)
-                # Mark as incapable if this is likely a server restriction
-                if self._cfd_order_capable is None:
-                    get_logger(__name__).warning(
-                        "buy_order() first-call timeout — marking CFD as unsupported")
-                    self._cfd_order_capable = False
-                get_logger(__name__).critical(
-                    "buy_order() TIMEOUT: request_id=%s — order may or may not exist on server. "
-                    "Check open positions manually before retrying.", request_id
-                )
-                return False, "TIMEOUT: server did not respond to place-order-temp"
-            pass
-
-        check, data = self.get_order(self.api.buy_order_id)
-        while data["status"] == "pending_new":
-            time.sleep(0.05)
-            check, data = self.get_order(self.api.buy_order_id)
-            time.sleep(1)
-
-        if check:
-            if data["status"] != "rejected":
-                self._idempotency.confirm(request_id, self.api.buy_order_id)
-                # Mark as capable on success
-                if self._cfd_order_capable is None:
-                    self._cfd_order_capable = True
-                return True, self.api.buy_order_id
-            else:
-                self._idempotency.fail(request_id)
-                return False, data["reject_status"]
-        else:
+        is_ready = self.api.order_data_event.wait(timeout=15)
+        if not is_ready or self.api.buy_order_id is None:
             self._idempotency.fail(request_id)
-            return False, None
+            if self._cfd_order_capable is None:
+                self._cfd_order_capable = False
+            get_logger(__name__).critical("buy_order() TIMEOUT: request_id=%s", request_id)
+            return False, "TIMEOUT"
+
+        self._idempotency.confirm(request_id, self.api.buy_order_id)
+        if self._cfd_order_capable is None:
+            self._cfd_order_capable = True
+        return True, self.api.buy_order_id
 
     def change_auto_margin_call(self, ID_Name, ID, auto_margin_call):
-        self.api.auto_margin_call_changed_respond = None
+        self.api.auto_margin_call_changed_respond_event.clear()
         self.api.change_auto_margin_call(ID_Name, ID, auto_margin_call)
-        _ts = time.time()
-        while self.api.auto_margin_call_changed_respond == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for auto_margin_call_changed_respond')
-                break
-            pass
+        is_ready = self.api.auto_margin_call_changed_respond_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for auto_margin_call_changed_respond')
+            return False, None
         if self.api.auto_margin_call_changed_respond["status"] == 2000:
             return True, self.api.auto_margin_call_changed_respond
         else:
@@ -1834,13 +1604,10 @@ class IQ_Option:
                 use_trail_stop=use_trail_stop)
             self.change_auto_margin_call(
                 ID_Name=ID_Name, ID=ID, auto_margin_call=auto_margin_call)
-            _ts = time.time()
-            while self.api.tpsl_changed_respond == None:
-                time.sleep(0.05)
-                if time.time() - _ts >= 15:
-                    get_logger(__name__).warning('Timeout (15s) waiting for tpsl_changed_respond')
-                    break
-                pass
+            self.api.tpsl_changed_respond_event.clear()
+            is_ready = self.api.tpsl_changed_respond_event.wait(timeout=15)
+            if not is_ready:
+                get_logger(__name__).warning('Timeout (15s) waiting for tpsl_changed_respond')
             if self.api.tpsl_changed_respond["status"] == 2000:
                 return True, self.api.tpsl_changed_respond["msg"]
             else:
@@ -1854,138 +1621,79 @@ class IQ_Option:
         return self.api.order_async[buy_order_id]
 
     def get_order(self, buy_order_id):
-        if hasattr(self.api, 'order_data_event'):
-            self.api.order_data = None
-            self.api.order_data_event.clear()
-            self.api.get_order(buy_order_id)
-            is_ready = self.api.order_data_event.wait(timeout=TIMEOUT_WS_DATA)
-            if not is_ready or self.api.order_data is None:
-                get_logger(__name__).warning("Timeout or disconnect: order_data unavailable")
-                return False, None
-        else:
-            # Fallback legacy spin-loop
-            self.api.order_data = None
-            self.api.get_order(buy_order_id)
-            start = time.time()
-            while self.api.order_data is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start > TIMEOUT_WS_DATA:
-                    get_logger(__name__).warning("Legacy spin timeout: order_data")
-                    return False, None
-
-        if self.api.order_data.get("status") == 2000:
-            return True, self.api.order_data["msg"]
-        else:
+        self.api.order_data_event.clear()
+        self.api.get_order(buy_order_id)
+        is_ready = self.api.order_data_event.wait(timeout=15)
+        if not is_ready or self.api.order_data is None:
+            get_logger(__name__).warning('Timeout (15s) waiting for order_data')
             return False, None
+        return True, self.api.order_data
 
     def get_pending(self, instrument_type):
-        self.api.deferred_orders = None
+        self.api.deferred_orders_event.clear()
         self.api.get_pending(instrument_type)
-        _ts = time.time()
-        while self.api.deferred_orders == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for deferred_orders')
-                break
-            pass
-        if self.api.deferred_orders["status"] == 2000:
+        is_ready = self.api.deferred_orders_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for deferred_orders')
+            return False, None
+        if self.api.deferred_orders.get("status") == 2000:
             return True, self.api.deferred_orders["msg"]
         else:
             return False, None
 
     # this function is heavy
     def get_positions(self, instrument_type):
-        if hasattr(self.api, 'positions_event'):
-            self.api.positions = None
-            self.api.positions_event.clear()
-            self.api.get_positions(instrument_type)
-            is_ready = self.api.positions_event.wait(timeout=TIMEOUT_WS_DATA)
-            if not is_ready or self.api.positions is None:
-                get_logger(__name__).warning("Timeout or disconnect: positions unavailable")
-                return False, None
-        else:
-            # Fallback legacy spin-loop
-            self.api.positions = None
-            self.api.get_positions(instrument_type)
-            start = time.time()
-            while self.api.positions is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start > TIMEOUT_WS_DATA:
-                    get_logger(__name__).warning("Legacy spin timeout: positions")
-                    return False, None
-
+        self.api.positions_event.clear()
+        self.api.get_positions(instrument_type)
+        is_ready = self.api.positions_event.wait(timeout=TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for positions")
+            return False, None
+        
         if self.api.positions.get("status") == 2000:
             return True, self.api.positions["msg"]
         else:
             return False, None
 
     def get_position(self, buy_order_id):
-        self.api.position = None
         check, order_data = self.get_order(buy_order_id)
+        if not check: return False, None
         position_id = order_data["position_id"]
+        self.api.position_event.clear()
         self.api.get_position(position_id)
-        _ts = time.time()
-        while self.api.position == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for position')
-                break
-            pass
-        if self.api.position["status"] == 2000:
+        is_ready = self.api.position_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for position')
+            return False, None
+        if self.api.position.get("status") == 2000:
             return True, self.api.position["msg"]
         else:
             return False, None
 
-    # this function is heavy
-
     def get_digital_position_by_position_id(self, position_id):
-        self.api.position = None
+        self.api.position_event.clear()
         self.api.get_digital_position(position_id)
-        _ts = time.time()
-        while self.api.position == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for position')
-                break
-            pass
+        is_ready = self.api.position_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for digital position')
         return self.api.position
 
     def get_digital_position(self, order_id):
-        self.api.position = None
-        while self.get_async_order(order_id)["position-changed"] == {}:
+        # Note: digital-position often requires waiting for position-changed or similar
+        # For simplicity, we keep the sync part but use events for the final fetch
+        while self.get_async_order(order_id).get("position-changed") == {}:
             time.sleep(0.05)
             pass
-        position_id = self.get_async_order(
-            order_id)["position-changed"]["msg"]["external_id"]
-        self.api.get_digital_position(position_id)
-        _ts = time.time()
-        while self.api.position == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for position')
-                break
-            pass
-        return self.api.position
+        position_id = self.get_async_order(order_id)["position-changed"]["msg"]["external_id"]
+        return self.get_digital_position_by_position_id(position_id)
 
     def get_position_history(self, instrument_type):
-        if hasattr(self.api, 'position_history_event'):
-            self.api.position_history = None
-            self.api.position_history_event.clear()
-            self.api.get_position_history(instrument_type)
-            is_ready = self.api.position_history_event.wait(timeout=TIMEOUT_WS_DATA)
-            if not is_ready or self.api.position_history is None:
-                get_logger(__name__).warning("Timeout or disconnect: position_history unavailable")
-                return False, None
-        else:
-            # Fallback legacy spin-loop
-            self.api.position_history = None
-            self.api.get_position_history(instrument_type)
-            start = time.time()
-            while self.api.position_history is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start > TIMEOUT_WS_DATA:
-                    get_logger(__name__).warning("Legacy spin timeout: position_history")
-                    return False, None
+        self.api.position_history_event.clear()
+        self.api.get_position_history(instrument_type)
+        is_ready = self.api.position_history_event.wait(timeout=TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for position_history")
+            return False, None
 
         if self.api.position_history.get("status") == 2000:
             return True, self.api.position_history["msg"]
@@ -1993,56 +1701,40 @@ class IQ_Option:
             return False, None
 
     def get_position_history_v2(self, instrument_type, limit, offset, start, end):
-        # instrument_type=crypto forex fx-option multi-option cfd digital-option turbo-option
-        self.api.position_history_v2 = None
-        self.api.get_position_history_v2(
-            instrument_type, limit, offset, start, end)
-        _ts = time.time()
-        while self.api.position_history_v2 == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for position_history_v2')
-                break
-            pass
-
-        if self.api.position_history_v2["status"] == 2000:
+        self.api.position_history_v2_event.clear()
+        self.api.get_position_history_v2(instrument_type, limit, offset, start, end)
+        is_ready = self.api.position_history_v2_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for position_history_v2')
+            return False, None
+        if self.api.position_history_v2.get("status") == 2000:
             return True, self.api.position_history_v2["msg"]
         else:
             return False, None
 
     def get_available_leverages(self, instrument_type, actives=""):
-        self.api.available_leverages = None
+        self.api.available_leverages_event.clear()
         if actives == "":
             self.api.get_available_leverages(instrument_type, "")
         else:
-            self.api.get_available_leverages(
-                instrument_type, OP_code.ACTIVES[actives])
-        _ts = time.time()
-        while self.api.available_leverages == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for available_leverages')
-                break
-            pass
-        if self.api.available_leverages["status"] == 2000:
+            self.api.get_available_leverages(instrument_type, OP_code.ACTIVES[actives])
+        is_ready = self.api.available_leverages_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for available_leverages')
+            return False, None
+        if self.api.available_leverages.get("status") == 2000:
             return True, self.api.available_leverages["msg"]
         else:
             return False, None
 
     def cancel_order(self, buy_order_id):
-        self.api.order_canceled = None
+        self.api.order_canceled_event.clear()
         self.api.cancel_order(buy_order_id)
-        _ts = time.time()
-        while self.api.order_canceled == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for order_canceled')
-                break
-            pass
-        if self.api.order_canceled["status"] == 2000:
-            return True
-        else:
+        is_ready = self.api.order_canceled_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for order_canceled')
             return False
+        return self.api.order_canceled.get("status") == 2000
 
     def close_position(self, position_id):
         try:
@@ -2053,22 +1745,15 @@ class IQ_Option:
             )
             return False
         check, data = self.get_order(position_id)
-        if data["position_id"] != None:
-            self.api.close_position_data = None
+        if check and data.get("position_id") != None:
+            self.api.close_position_data_event.clear()
             self.api.close_position(data["position_id"])
-            _ts = time.time()
-            while self.api.close_position_data == None:
-                time.sleep(0.05)
-                if time.time() - _ts >= 15:
-                    get_logger(__name__).warning('Timeout (15s) waiting for close_position_data')
-                    break
-                pass
-            if self.api.close_position_data["status"] == 2000:
-                return True
-            else:
+            is_ready = self.api.close_position_data_event.wait(timeout=15)
+            if not is_ready:
+                get_logger(__name__).warning('Timeout (15s) waiting for close_position_data')
                 return False
-        else:
-            return False
+            return self.api.close_position_data.get("status") == 2000
+        return False
 
     def close_position_v2(self, position_id):
         _ts = time.time()
@@ -2093,16 +1778,13 @@ class IQ_Option:
             return False
 
     def get_overnight_fee(self, instrument_type, active):
-        self.api.overnight_fee = None
+        self.api.overnight_fee_event.clear()
         self.api.get_overnight_fee(instrument_type, OP_code.ACTIVES[active])
-        _ts = time.time()
-        while self.api.overnight_fee == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for overnight_fee')
-                break
-            pass
-        if self.api.overnight_fee["status"] == 2000:
+        is_ready = self.api.overnight_fee_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for overnight_fee')
+            return False, None
+        if self.api.overnight_fee.get("status") == 2000:
             return True, self.api.overnight_fee["msg"]
         else:
             return False, None
@@ -2151,49 +1833,27 @@ class IQ_Option:
             list(), buffersize)
 
     def get_user_profile_client(self, user_id):
-        if hasattr(self.api, 'user_profile_client_event'):
-            self.api.user_profile_client = None
-            self.api.user_profile_client_event.clear()
-            self.api.Get_User_Profile_Client(user_id)
-            is_ready = self.api.user_profile_client_event.wait(timeout=TIMEOUT_WS_DATA)
-            if not is_ready or self.api.user_profile_client is None:
-                get_logger(__name__).warning("Timeout or disconnect: user_profile_client unavailable")
-                return None
-            return self.api.user_profile_client
-        else:
-            # Fallback legacy spin-loop
-            self.api.user_profile_client = None
-            self.api.Get_User_Profile_Client(user_id)
-            start = time.time()
-            while self.api.user_profile_client is None:
-                time.sleep(POLLING_FAST)
-                if time.time() - start > TIMEOUT_WS_DATA:
-                    get_logger(__name__).warning("Legacy spin timeout: user_profile_client")
-                    return None
-            return self.api.user_profile_client
+        self.api.user_profile_client_event.clear()
+        self.api.Get_User_Profile_Client(user_id)
+        is_ready = self.api.user_profile_client_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for user_profile_client')
+        return self.api.user_profile_client
 
     def request_leaderboard_userinfo_deals_client(self, user_id, country_id):
-        self.api.leaderboard_userinfo_deals_client = None
-        if hasattr(self.api, 'leaderboard_userinfo_deals_client_event'):
-            self.api.leaderboard_userinfo_deals_client_event.clear()
+        self.api.leaderboard_userinfo_deals_client_event.clear()
         self.api.Request_Leaderboard_Userinfo_Deals_Client(user_id, country_id)
-        if hasattr(self.api, 'leaderboard_userinfo_deals_client_event'):
-            is_ready = self.api.leaderboard_userinfo_deals_client_event.wait(timeout=15)
-            if not is_ready:
-                get_logger(__name__).warning('Timeout (15s) waiting for leaderboard_userinfo')
+        is_ready = self.api.leaderboard_userinfo_deals_client_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for leaderboard_userinfo')
         return self.api.leaderboard_userinfo_deals_client
 
     def get_users_availability(self, user_id):
-        self.api.users_availability = None
-
-        _ts = time.time()
-        while self.api.users_availability == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for users_availability')
-                break
-            self.api.Get_Users_Availability(user_id)
-            time.sleep(0.2)
+        self.api.users_availability_event.clear()
+        self.api.Get_Users_Availability(user_id)
+        is_ready = self.api.users_availability_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for users_availability')
         return self.api.users_availability
 
     def get_digital_payout(self, active, seconds=0):

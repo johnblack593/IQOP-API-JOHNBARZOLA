@@ -2,4 +2,6 @@
 
 def tpsl_changed(api, message):
     if message["name"] == "tpsl-changed":
-            api.tpsl_changed_respond = message
+        api.tpsl_changed_respond = message
+        ev = getattr(api, "tpsl_changed_respond_event", None)
+        if ev: ev.set()

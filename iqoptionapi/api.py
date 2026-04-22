@@ -199,10 +199,29 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.position_event = threading.Event()
         self.sold_options_respond_event = threading.Event()
         self.sold_digital_options_respond_event = threading.Event()
-        self.game_betinfo_isSuccessful_event = threading.Event()
+        self.game_betinfo_event = threading.Event() # Unified alias
+        self.game_betinfo_isSuccessful_event = self.game_betinfo_event
         self.api_option_init_all_result_v2_event = threading.Event()
+        self.api_option_init_all_result_event = threading.Event()
         self.candles_event = threading.Event()
         self.ws_connected_event = threading.Event()
+        
+        # Additional events for S1-03b
+        self.position_history_event = threading.Event()
+        self.position_history_v2_event = threading.Event()
+        self.available_leverages_event = threading.Event()
+        self.order_canceled_event = threading.Event()
+        self.close_position_data_event = threading.Event()
+        self.overnight_fee_event = threading.Event()
+        self.user_profile_client_event = threading.Event()
+        self.leaderboard_userinfo_deals_client_event = threading.Event()
+        self.users_availability_event = threading.Event()
+        self.result_event = threading.Event()
+        self.buy_complete_event = threading.Event()
+        self.tpsl_changed_respond_event = threading.Event()
+        self.auto_margin_call_changed_respond_event = threading.Event()
+        self.technical_indicators_event = threading.Event()
+        self.digital_payout_event = threading.Event()
         
         # Callbacks for S1-03 Resilience
         self._reconnect_callback: callable | None = None

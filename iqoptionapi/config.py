@@ -35,7 +35,7 @@ POLLING_SLOW: float = 0.5    # 500ms — operaciones lentas
 
 # MIGRACIÓN: estos valores se eliminan cuando todos los spin-loops
 # sean migrados a threading.Event.wait(). Ver S1-02 tracking.
-_SPINLOOP_METHODS_REMAINING: int = 25   # trackeando deuda técnica restante
+_SPINLOOP_METHODS_REMAINING: int = 0   # Deuda técnica eliminada exitosamente
 
 # --- Rate limiting ---
 RATE_LIMIT_CAPACITY: float = 5.0    # tokens máximos en bucket

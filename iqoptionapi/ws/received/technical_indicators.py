@@ -10,3 +10,5 @@ def technical_indicators(api, message, api_dict_clean):
                 "code": "no_technical_indicator_available",
                 "message": message["msg"]["message"]
             }
+        ev = getattr(api, "technical_indicators_event", None)
+        if ev: ev.set()

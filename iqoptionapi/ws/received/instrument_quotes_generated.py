@@ -36,3 +36,6 @@ def instrument_quotes_generated(api, message):
             period] = msg.get("expiration", {}).get("timestamp")
         api.instrument_quites_generated_data[Active_name][period] = ans
         api.instrument_quotes_generated_raw_data[Active_name][period] = message
+        
+        ev = getattr(api, "instrument_quotes_generated_event", None)
+        if ev: ev.set()
