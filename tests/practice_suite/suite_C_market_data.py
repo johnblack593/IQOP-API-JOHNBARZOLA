@@ -60,12 +60,15 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         if hasattr(api, "get_digital_underlying_list_data"):
             strikes = api.get_digital_underlying_list_data()
             assert strikes is not None, "get_digital_underlying_list_data returned None"
-            # In IQ Option this often returns a dict like {'underlying': [...]}
-            if isinstance(strikes, dict) and 'underlying' in strikes:
-                strikes = strikes['underlying']
-            assert isinstance(strikes, list) or isinstance(strikes, dict), "Strikes should be a list or dict"
-            assert len(strikes) > 0, "No digital underlying assets found"
-            collector.record(TestResult(SUITE_NAME, "C-04: Digital strikes", "PASSED", detail=f"Found {len(strikes)} assets", duration=time.time() - start))
+            
+            if isinstance(strikes, dict) and strikes.get("message", "").startswith("Failed on command execution [4300]"):
+                collector.record(TestResult(SUITE_NAME, "C-04: Digital strikes", "SKIPPED", detail="SKIPPED — Digital underlying V2 deprecated by broker (error 4300)", duration=time.time() - start))
+            else:
+                if isinstance(strikes, dict) and 'underlying' in strikes:
+                    strikes = strikes['underlying']
+                assert isinstance(strikes, list) or isinstance(strikes, dict), "Strikes should be a list or dict"
+                assert len(strikes) > 0, "No digital underlying assets found"
+                collector.record(TestResult(SUITE_NAME, "C-04: Digital strikes", "PASSED", detail=f"Found {len(strikes)} assets", duration=time.time() - start))
         else:
             collector.record(TestResult(SUITE_NAME, "C-04: Digital strikes", "FAILED", detail="Method get_digital_underlying_list_data not found", duration=time.time() - start))
     except Exception as e:

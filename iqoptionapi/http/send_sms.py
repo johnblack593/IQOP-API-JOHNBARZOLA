@@ -33,7 +33,7 @@ class SMS_Sender(Resource):
             'Content-Type': 'application/json',
             'Referer': 'https://iqoption.com/en/login',
             'Sec-Fetch-Mode': 'cors',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
             }
 
         return self._post(data=data, headers=headers)
