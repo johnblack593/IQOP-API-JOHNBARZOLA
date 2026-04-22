@@ -1103,6 +1103,13 @@ class IQ_Option:
         return self.api.result, self.api.buy_multi_option[req_id]["id"]
 
     def sell_option(self, options_ids):
+        try:
+            self._rate_limiter.consume()
+        except RateLimitExceededError:
+            get_logger(__name__).error(
+                "sell_option() BLOCKED by rate limiter — options_ids=%s", options_ids
+            )
+            return None
         self.api.sold_options_respond = None
         if hasattr(self.api, 'sold_options_respond_event'):
             self.api.sold_options_respond_event.clear()
@@ -1118,6 +1125,13 @@ class IQ_Option:
         return self.api.sold_options_respond
 
     def sell_digital_option(self, options_ids):
+        try:
+            self._rate_limiter.consume()
+        except RateLimitExceededError:
+            get_logger(__name__).error(
+                "sell_digital_option() BLOCKED by rate limiter — options_ids=%s", options_ids
+            )
+            return None
         self.api.sold_digital_options_respond = None
         self.api.sell_digital_option(options_ids)
         _ts = time.time()
@@ -1226,6 +1240,13 @@ class IQ_Option:
 
     
     def buy_digital_spot(self, active, amount, action, duration):
+        try:
+            self._rate_limiter.consume()
+        except RateLimitExceededError:
+            get_logger(__name__).error(
+                "buy_digital_spot() BLOCKED by rate limiter — active=%s action=%s", active, action
+            )
+            return False, None
         """
         DEPRECATED: Use buy_digital_spot_v2() instead. This method uses
         the legacy instrument_id format which may be rejected by the server.
@@ -1872,6 +1893,13 @@ class IQ_Option:
             return False
 
     def close_position(self, position_id):
+        try:
+            self._rate_limiter.consume()
+        except RateLimitExceededError:
+            get_logger(__name__).error(
+                "close_position() BLOCKED by rate limiter — position_id=%s", position_id
+            )
+            return False
         check, data = self.get_order(position_id)
         if data["position_id"] != None:
             self.api.close_position_data = None
@@ -2027,6 +2055,13 @@ class IQ_Option:
         self.api.logout()
 
     def buy_digital_spot_v2(self, active, amount, action, duration):
+        try:
+            self._rate_limiter.consume()
+        except RateLimitExceededError:
+            get_logger(__name__).error(
+                "buy_digital_spot_v2() BLOCKED by rate limiter — active=%s action=%s", active, action
+            )
+            return False, None
         action = action.lower()
 
         if action == 'put':
