@@ -13,17 +13,15 @@ class CredentialStore:
 
     @property
     def password(self):
-        if self._consumed:
-            raise CredentialConsumedError("Password has already been consumed. Re-instantiate CredentialStore to authenticate again.")
+        # Prevent direct property access to avoid accidental leakage in logs/repr
         raise AttributeError("Password cannot be accessed via property. Use .consume() instead.")
 
     def consume(self) -> str:
-        if self._consumed:
-            raise CredentialConsumedError("Password has already been consumed. Re-instantiate CredentialStore to authenticate again.")
-        val = self._password
-        self._password = ""
-        self._consumed = True
-        return val
+        """
+        Returns the password.
+        NOTE: Password is kept in memory to support Auto-Reconnect (S1-03).
+        """
+        return self._password
 
     def __repr__(self):
         return f"CredentialStore(email='{self.email}', password='[PROTECTED]')"

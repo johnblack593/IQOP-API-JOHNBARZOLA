@@ -12,7 +12,7 @@ from iqoptionapi.security import CredentialStore, generate_user_agent
 from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
 from iqoptionapi.config import (
     TIMEOUT_WS_DATA, TIMEOUT_CANDLE_STREAM, TIMEOUT_SSID_AUTH,
-    TIMEOUT_BALANCE_RESET, POLLING_FAST
+    TIMEOUT_BALANCE_RESET, POLLING_FAST, TIMEOUT_ALL_INIT
 )
 from iqoptionapi.http.session import close_shared_session
 import iqoptionapi
@@ -82,6 +82,7 @@ class IQ_Option:
 
     def close(self):
         """Gracefully close WebSocket and HTTP session."""
+        self._stop_heartbeat_watchdog()
         try:
             self.api.close()
         except Exception:
@@ -113,7 +114,10 @@ class IQ_Option:
 
         check, reason = self.api.connect(self._credential_store.consume())
         if check:
-            self._password = None # Harding 3A: clear password from memory post-auth
+            # Register callbacks for resilience (S1-03)
+            self.api._reconnect_callback = self._auto_reconnect
+            self.api._heartbeat_callback = lambda: setattr(self, '_last_heartbeat', __import__('time').time())
+            
             self._reconnect_manager.reset()
             self._idempotency.purge_expired()
 
@@ -140,6 +144,7 @@ class IQ_Option:
                 get_logger(__name__).warning("Failed to auto-update asset catalogs: %s", e)
 
 
+            self._start_heartbeat_watchdog()
             return True, None
         else:
             if json.loads(reason)['code'] == 'verify':
@@ -157,6 +162,85 @@ class IQ_Option:
 
     def connect_2fa(self, sms_code):
         return self.connect(sms_code=sms_code)
+
+    def _auto_reconnect(self) -> None:
+        """
+        Auto-reconexión con backoff exponencial.
+        Llamado por WebsocketClient.on_close() en thread daemon.
+        Usa self._reconnect_manager para controlar intentos y delays.
+        """
+        from iqoptionapi.reconnect import MaxReconnectAttemptsError
+        logger = get_logger(__name__)
+        logger.info("Auto-reconnect started.")
+
+        while True:
+            try:
+                self._reconnect_manager.wait()   # backoff + jitter
+            except MaxReconnectAttemptsError:
+                logger.critical(
+                    "Auto-reconnect: max attempts exhausted. "
+                    "Bot requires manual intervention."
+                )
+                return
+
+            logger.info(
+                "Auto-reconnect: attempt %d/%d (waiting finished)",
+                self._reconnect_manager.attempts,
+                self._reconnect_manager._max
+            )
+
+            try:
+                logger.info("Auto-reconnect: calling self.connect()...")
+                status, reason = self.connect()
+                if status:
+                    logger.info("Auto-reconnect: SUCCESS.")
+                    self._reconnect_manager.reset()
+                    return
+                else:
+                    logger.warning("Auto-reconnect: connect() failed: %s", reason)
+            except Exception as e:
+                logger.error("Auto-reconnect: exception during connect(): %s", e)
+
+    def _start_heartbeat_watchdog(self) -> None:
+        """
+        Inicia un thread daemon que monitorea el heartbeat del servidor.
+        Si no llega un heartbeat en HEARTBEAT_TIMEOUT_SECS segundos,
+        fuerza reconexión llamando a _auto_reconnect().
+        """
+        import threading, time
+        from iqoptionapi.config import HEARTBEAT_TIMEOUT_SECS, HEARTBEAT_CHECK_INTERVAL
+
+        self._last_heartbeat = time.time()
+        self._watchdog_stop = threading.Event()
+
+        def watchdog_loop():
+            while not self._watchdog_stop.is_set():
+                time.sleep(HEARTBEAT_CHECK_INTERVAL)
+                elapsed = time.time() - self._last_heartbeat
+                if elapsed > HEARTBEAT_TIMEOUT_SECS:
+                    get_logger(__name__).warning(
+                        "Heartbeat watchdog: %.0fs sin heartbeat — forzando reconexión",
+                        elapsed
+                    )
+                    self._last_heartbeat = time.time()  # reset para evitar bucle
+                    t = threading.Thread(
+                        target=self._auto_reconnect, daemon=True,
+                        name="WatchdogReconnect"
+                    )
+                    t.start()
+
+        self._watchdog_thread = threading.Thread(
+            target=watchdog_loop, daemon=True, name="HeartbeatWatchdog"
+        )
+        self._watchdog_thread.start()
+        get_logger(__name__).info("Heartbeat watchdog started.")
+
+    def _stop_heartbeat_watchdog(self) -> None:
+        """Detiene el watchdog. Llamar en IQ_Option.close()."""
+        if hasattr(self, '_watchdog_stop'):
+            self._watchdog_stop.set()
+        if hasattr(self, '_watchdog_thread'):
+            self._watchdog_thread.join(timeout=2.0)
 
     def check_connect(self):
         # True/False
@@ -307,7 +391,8 @@ class IQ_Option:
                 OP_code.ACTIVES[(init_info["result"][dirr]
                                  ["actives"][i]["name"]).split(".")[1]] = int(i)
 
-    # _________________________self.api.get_api_option_init_all() wss______________    def get_all_init(self):
+    # _________________________self.api.get_api_option_init_all() wss______________
+    def get_all_init(self):
         if hasattr(self.api, 'api_option_init_all_result_event'):
             self.api.api_option_init_all_result = None
             self.api.api_option_init_all_result_event.clear()
@@ -528,9 +613,11 @@ class IQ_Option:
 
     def get_currency(self):
         balances_raw = self.get_balances()
-        for balance in balances_raw["msg"]:
-            if balance["id"] == self.api.balance_id:
-                return balance["currency"]
+        if balances_raw and "msg" in balances_raw:
+            for balance in balances_raw["msg"]:
+                if balance["id"] == self.api.balance_id:
+                    return balance["currency"]
+        return None
 
     def get_balance_id(self):
         return self.api.balance_id
@@ -539,9 +626,11 @@ class IQ_Option:
     def get_balance(self):
 
         balances_raw = self.get_balances()
-        for balance in balances_raw["msg"]:
-            if balance["id"] == self.api.balance_id:
-                return balance["amount"]
+        if balances_raw and "msg" in balances_raw:
+            for balance in balances_raw["msg"]:
+                if balance["id"] == self.api.balance_id:
+                    return balance["amount"]
+        return 0
 
     def get_balances(self):
         self.api.balances_raw = None
