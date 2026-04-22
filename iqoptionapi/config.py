@@ -33,6 +33,15 @@ POLLING_SLOW: float = 0.5    # 500ms — operaciones lentas
 RATE_LIMIT_CAPACITY: float = 5.0    # tokens máximos en bucket
 RATE_LIMIT_REFILL: float = 0.5      # tokens por segundo
 
+# BURST: número máximo de órdenes que el bot puede enviar en ráfaga
+# antes de que el token bucket se agote. Igual a RATE_LIMIT_CAPACITY.
+RATE_LIMIT_BURST: int = 5
+
+# COOLDOWN mínimo entre órdenes del mismo activo (segundos).
+# No lo aplica el SDK directamente, pero el bot de JCBV-NEXUS
+# debe respetarlo para evitar duplicados en opciones binarias.
+ORDER_COOLDOWN_SECS: float = 2.0
+
 # --- Reconexión ---
 RECONNECT_BASE_DELAY: float = 2.0   # base exponencial (segundos)
 RECONNECT_MAX_DELAY: float = 60.0   # techo máximo (segundos)
