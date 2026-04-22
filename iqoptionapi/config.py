@@ -23,6 +23,10 @@ TIMEOUT_SSID_AUTH: int = 15
 TIMEOUT_ALL_INIT: int = 30      # para get_all_init
 TIMEOUT_THREAD_JOIN: float = 5.0  # para api.py close() BUG-WS-01
 
+# --- Heartbeat watchdog ---
+HEARTBEAT_TIMEOUT_SECS: float = 30.0   # segundos sin heartbeat antes de forzar reconexión
+HEARTBEAT_CHECK_INTERVAL: float = 10.0  # cada cuántos segundos el watchdog revisa
+
 # --- Polling intervals (segundos) ---
 # ADVERTENCIA: estos valores existen solo para compatibilidad
 # con código legacy. Todo código nuevo usa threading.Event.wait().

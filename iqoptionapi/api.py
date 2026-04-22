@@ -202,6 +202,11 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.game_betinfo_isSuccessful_event = threading.Event()
         self.api_option_init_all_result_v2_event = threading.Event()
         self.candles_event = threading.Event()
+        self.ws_connected_event = threading.Event()
+        
+        # Callbacks for S1-03 Resilience
+        self._reconnect_callback: callable | None = None
+        self._heartbeat_callback: callable | None = None
 
     def prepare_http_url(self, resource):
         """Construct http url from resource url.
@@ -805,26 +810,19 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                                                  "check_hostname": True, "cert_reqs": ssl.CERT_REQUIRED, "ca_certs": certifi.where()}})  # for fix pyinstall error: cafile, capath and cadata cannot be all omitted
         self.websocket_thread.daemon = True
         self.websocket_thread.start()
+
+        from iqoptionapi.config import TIMEOUT_WS_CONNECT
+        connected = self.ws_connected_event.wait(timeout=TIMEOUT_WS_CONNECT)
+        if not connected:
+            if self.check_websocket_if_error:
+                return False, self.websocket_error_reason
+            return False, f"WS timeout after {TIMEOUT_WS_CONNECT}s"
         
-        import time
-        timeout = time.time() + 15  # Fail-safe 15 second timeout to prevent infinite hangs
-        
-        while True:
-            try:
-                if self.check_websocket_if_error:
-                    return False, self.websocket_error_reason
-                if self.check_websocket_if_connect == 0:
-                    return False, "Websocket connection closed."
-                elif self.check_websocket_if_connect == 1:
-                    return True, None
-                
-                if time.time() > timeout:
-                    return False, "Websocket connection timed out after 15 seconds."
-                    
-                time.sleep(0.05)  # CRITICAL: Prevent GIL Deadlock while waiting
-            except Exception as e:
-                get_logger(__name__).error("Websocket check error: %s", e)
-                return False, str(e)
+        if self.check_websocket_if_error:
+            return False, self.websocket_error_reason
+        if self.check_websocket_if_connect == 0:
+            return False, "Websocket connection closed immediately."
+        return True, None
 
     # @tokensms.setter
     def setTokenSMS(self, response):
@@ -851,15 +849,30 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             return e
         return response
 
-    def send_ssid(self):
+    def send_ssid(self) -> bool:
+        from iqoptionapi.config import TIMEOUT_SSID_AUTH, POLLING_FAST
         self.profile.msg = None
+        if hasattr(self, 'profile_msg_event'):
+            self.profile_msg_event.clear()
         self.ssid(self.SSID)  # pylint: disable=not-callable
-        while self.profile.msg == None:
-            pass
-        if self.profile.msg == False:
-            return False
+        if hasattr(self, 'profile_msg_event'):
+            is_ready = self.profile_msg_event.wait(timeout=TIMEOUT_SSID_AUTH)
+            if not is_ready or self.profile.msg is None:
+                get_logger(__name__).error(
+                    "send_ssid: timeout (%.0fs) — no profile response",
+                    TIMEOUT_SSID_AUTH
+                )
+                return False
         else:
-            return True
+            # Fallback legacy (sin Event disponible)
+            import time
+            start = time.time()
+            while self.profile.msg is None:
+                time.sleep(POLLING_FAST)
+                if time.time() - start > TIMEOUT_SSID_AUTH:
+                    get_logger(__name__).error("send_ssid: legacy timeout")
+                    return False
+        return self.profile.msg is not False
 
     def connect(self, password):
         """Method for connection to IQ Option API."""
@@ -925,11 +938,20 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             return False, None
         return True, None
 
-    def close(self):
+    def close(self) -> None:
+        from iqoptionapi.config import TIMEOUT_THREAD_JOIN
         if self.websocket:
-            self.websocket.close()
+            try:
+                self.websocket.close()
+            except Exception as e:
+                get_logger(__name__).warning("close(): websocket.close() error: %s", e)
         if hasattr(self, 'websocket_thread') and self.websocket_thread:
-            self.websocket_thread.join()
+            self.websocket_thread.join(timeout=TIMEOUT_THREAD_JOIN)
+            if self.websocket_thread.is_alive():
+                get_logger(__name__).warning(
+                    "close(): websocket_thread still alive after %.0fs — forcing abandon",
+                    TIMEOUT_THREAD_JOIN
+                )
 
     def websocket_alive(self):
         return self.websocket_thread.is_alive()

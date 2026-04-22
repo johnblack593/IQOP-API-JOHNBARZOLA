@@ -196,14 +196,30 @@ class WebsocketClient(object):
         logger = get_logger(__name__)
         logger.debug("Websocket client connected.")
         self.api.check_websocket_if_connect = 1
+        self.api.ws_connected_event.set()
 
     def on_close(self, wss, close_status_code, close_msg):  # pylint: disable=unused-argument
         """Method to process websocket close."""
         logger = get_logger(__name__)
-        logger.debug("Websocket connection closed.")
+        logger.warning(
+            "WS disconnected. Code=%s Msg=%s", close_status_code, close_msg
+        )
         self.api.check_websocket_if_connect = 0
-        
-        # [KILL-SWITCH] Release all pending threading.Event objects on disconnect
+        self.api.ws_connected_event.clear()
+
+        # KILL-SWITCH: liberar todos los _event para desbloquear waits
         for attr in dir(self.api):
-            if attr.endswith('_event') and hasattr(getattr(self.api, attr), 'set'):
-                getattr(self.api, attr).set()
+            if attr.endswith('_event') and attr != 'ws_connected_event':
+                ev = getattr(self.api, attr, None)
+                if hasattr(ev, 'set'):
+                    ev.set()
+
+        # AUTO-RECONEXIÓN: lanzar en thread daemon para no bloquear on_close
+        cb = getattr(self.api, '_reconnect_callback', None)
+        if cb is not None and callable(cb):
+            import threading
+            t = threading.Thread(target=cb, daemon=True,
+                                 name="AutoReconnect")
+            t.start()
+        else:
+            logger.info("No reconnect callback registered — manual reconnect required.")
