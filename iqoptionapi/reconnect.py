@@ -6,13 +6,14 @@ import time
 import random
 import threading
 from iqoptionapi.logger import get_logger
+from iqoptionapi.config import (
+    RECONNECT_BASE_DELAY,
+    RECONNECT_MAX_DELAY,
+    RECONNECT_MAX_ATTEMPTS,
+    RECONNECT_JITTER,
+)
 
 logger = get_logger(__name__)
-
-_DEFAULT_BASE   = 2       # seconds — base of the exponential
-_DEFAULT_CAP    = 60      # seconds — maximum wait ceiling
-_DEFAULT_MAX    = 10      # maximum reconnection attempts before raising
-_JITTER_RANGE   = 0.5     # ±50% jitter on calculated wait
 
 
 class MaxReconnectAttemptsError(Exception):
@@ -32,8 +33,9 @@ class ReconnectManager:
         rm.reset()             # call on successful connection
     """
 
-    def __init__(self, base=_DEFAULT_BASE, cap=_DEFAULT_CAP,
-                 max_attempts=_DEFAULT_MAX):
+    def __init__(self, base: float = RECONNECT_BASE_DELAY,
+                 cap: float = RECONNECT_MAX_DELAY,
+                 max_attempts: int = RECONNECT_MAX_ATTEMPTS) -> None:
         self._base        = base
         self._cap         = cap
         self._max         = max_attempts
@@ -53,7 +55,7 @@ class ReconnectManager:
                     f"Reconnection failed after {self._max} attempts."
                 )
             raw_wait  = min(self._base ** self._attempt, self._cap)
-            jitter    = raw_wait * _JITTER_RANGE * (2 * random.random() - 1)
+            jitter    = raw_wait * RECONNECT_JITTER * (2 * random.random() - 1)
             wait_time = max(0.0, raw_wait + jitter)
 
         logger.warning(
