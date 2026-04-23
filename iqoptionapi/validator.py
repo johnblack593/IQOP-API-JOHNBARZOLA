@@ -163,3 +163,47 @@ def validate_sl_tp(
                 f"{prefix}_value debe ser > 0 cuando {prefix}_kind='{kind}'",
                 param=f"{prefix}_value"
             )
+
+
+class Validator:
+    """
+    Orquestador de validaciones para el SDK.
+    """
+    def __init__(self, config=None) -> None:
+        self.config = config
+
+    def validate_order(
+        self,
+        active: str,
+        amount: float,
+        action: str,
+        duration: int,
+        instrument_type: str = "binary"
+    ) -> tuple[bool, str | None]:
+        """
+        Valida todos los parámetros de una orden antes de ser enviada.
+        Retorna (True, None) si es válida, (False, reason) si falla.
+        """
+        try:
+            # 1. Validar dirección (normaliza a 'call'/'put')
+            validate_action(action)
+
+            # 2. Validar monto
+            min_amount = 1.0
+            if self.config and hasattr(self.config, "MM_BASE_AMOUNT"):
+                min_amount = self.config.MM_BASE_AMOUNT
+            validate_amount(amount, min_amount=min_amount)
+
+            # 3. Validar duración
+            validate_duration(duration, option_type=instrument_type)
+
+            # 4. Validar activo (si el mapa está disponible)
+            # Nota: validate_active requiere el mapa de activos, 
+            # lo omitimos aquí si no se pasa explícitamente o lo dejamos para el gate.
+            
+            return True, None
+        except TradingValidationError as e:
+            return False, str(e)
+        except Exception as e:
+            return False, f"Unexpected validation error: {e}"
+

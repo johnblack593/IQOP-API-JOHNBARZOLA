@@ -249,3 +249,20 @@ class PerformanceAnalyzer:
             "is_reliable": sample_size >= 20,
         }
 
+
+class PerformanceTracker:
+    """
+    Monitor de rendimiento en tiempo real vinculado al trade_journal.
+    """
+    def __init__(self, trade_journal) -> None:
+        self.journal = trade_journal
+
+    def get_report(self) -> PerformanceReport:
+        trades = self.journal.get_trades_today()
+        return PerformanceAnalyzer.analyze(trades)
+
+    def get_asset_score(self, active_id: int, timeframe: int, last_n: int = 50) -> dict:
+        trades = self.journal.get_trades_today()
+        return PerformanceAnalyzer.get_asset_score(trades, active_id, timeframe, last_n)
+
+

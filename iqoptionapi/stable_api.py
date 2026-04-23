@@ -11,11 +11,8 @@ from iqoptionapi.reconnect import ReconnectManager, MaxReconnectAttemptsError
 from iqoptionapi.idempotency import IdempotencyRegistry
 from iqoptionapi.security import CredentialStore, generate_user_agent
 from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError, rate_limited
-from iqoptionapi.config import (
-    TIMEOUT_WS_DATA, TIMEOUT_CANDLE_STREAM, TIMEOUT_SSID_AUTH,
-    TIMEOUT_BALANCE_RESET, TIMEOUT_ALL_INIT
-)
 from iqoptionapi.http.session import close_shared_session
+import iqoptionapi.config as config
 import iqoptionapi
 import logging
 import operator
@@ -33,11 +30,56 @@ class IQ_Option:
 
     def __init__(self, email, password, active_account_type="PRACTICE"):
         self._stop_event = threading.Event()
+        
+        # --- Base Infrastructure ---
         from iqoptionapi.candle_cache import CandleCache
         self.candle_cache = CandleCache()
         self._start_maintenance_thread()
 
-        # S4: Intelligence modules (READ-ONLY, consume candle_cache)
+        from iqoptionapi.trade_journal import TradeJournal
+        self.trade_journal = TradeJournal(
+            journal_dir=getattr(config, "JOURNAL_DIR", "./journal")
+        )
+
+        # --- Business Modules ---
+        from iqoptionapi.circuit_breaker import CircuitBreaker
+        self.circuit_breaker = CircuitBreaker(
+            max_consecutive_losses=getattr(config, "CB_MAX_CONSECUTIVE_LOSSES", 3),
+            max_session_loss_usd=getattr(config, "CB_MAX_SESSION_LOSS_USD", 10.0),
+            max_drawdown_pct=getattr(config, "CB_MAX_DRAWDOWN_PCT", 0.10),
+            recovery_wait_secs=getattr(config, "CB_RECOVERY_WAIT_SECS", 300.0)
+        )
+
+        from iqoptionapi.martingale_guard import MartingaleGuard, MoneyManagement
+        mm_strat = MoneyManagement.FLAT
+        try:
+            mm_strat = MoneyManagement(getattr(config, "MM_DEFAULT_STRATEGY", "flat"))
+        except: pass
+        self.martingale_guard = MartingaleGuard(
+            strategy=mm_strat,
+            base_amount=getattr(config, "MM_BASE_AMOUNT", 1.0),
+            max_steps=getattr(config, "MM_MAX_STEPS", 4),
+            max_amount_usd=getattr(config, "MM_MAX_AMOUNT_USD", 50.0),
+            max_balance_pct=getattr(config, "MM_MAX_BALANCE_PCT", 0.05)
+        )
+
+        from iqoptionapi.signal_consensus import SignalConsensus
+        self.signal_consensus = SignalConsensus(strategies=[])
+
+        from iqoptionapi.validator import Validator
+        self.validator = Validator(config)
+
+        from iqoptionapi.session_scheduler import SessionScheduler
+        self.session_scheduler = SessionScheduler()
+
+        # --- Modules depending on trade_journal ---
+        from iqoptionapi.performance import PerformanceTracker
+        self.performance = PerformanceTracker(self.trade_journal)
+        
+        from iqoptionapi.reconciler import Reconciler
+        self._reconciler = Reconciler(self)
+
+        # --- Intelligence Modules (depend on candle_cache) ---
         from iqoptionapi.market_quality import MarketQualityMonitor
         self.market_quality = MarketQualityMonitor(self.candle_cache)
         from iqoptionapi.pattern_engine import PatternEngine
@@ -47,6 +89,10 @@ class IQ_Option:
         from iqoptionapi.correlation_engine import CorrelationEngine
         self.correlation_engine = CorrelationEngine(self.candle_cache)
 
+        # --- Scanner (depends on modules above) ---
+        from iqoptionapi.asset_scanner import AssetScanner
+        self.asset_scanner = AssetScanner(self)
+
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
@@ -54,12 +100,7 @@ class IQ_Option:
         self._reconnect_manager = ReconnectManager()
         self._idempotency = IdempotencyRegistry()
         self._order_bucket = TokenBucket(block=True)
-        # BUG-DIGITAL-01: Initialize missing event stores on api instance
-        # These are used by the new non-blocking _wait_result helper
         self.api_event_stores = {}
-        # S1-T2: Reconciler for post-disconnect result recovery
-        from iqoptionapi.reconciler import Reconciler
-        self._reconciler = Reconciler(self)
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
@@ -963,7 +1004,20 @@ class IQ_Option:
         )
         if result:
             self.api.listinfodata.delete(id_number)
-            return result.get("win", None)
+            win_val = result.get("win", None)
+            if win_val is not None and hasattr(self, 'trade_journal') and self.trade_journal is not None:
+                res_str = "win" if win_val > 0 else ("loose" if win_val < 0 else "equal")
+                try:
+                    self.trade_journal.record(
+                        order_id=id_number,
+                        result=res_str,
+                        active_id=result.get("active_id"),
+                        amount=result.get("amount"),
+                        profit=win_val
+                    )
+                except Exception as e:
+                    get_logger(__name__).warning("trade_journal.record failed: %s", e)
+            return win_val
         return None
 
     def check_win_v2(self, id_number, timeout=120.0):
@@ -980,12 +1034,25 @@ class IQ_Option:
 
     def check_win_v4(self, id_number, timeout=120.0):
         # BUG-SPINLOOP-01: Refactorizado a _wait_result
-        return self._wait_result(
+        result = self._wait_result(
             order_id=id_number,
             result_store=self.api.socket_option_closed,
             event_store=self.api.socket_option_closed_event,
             timeout=timeout
         )
+        if result is not None and hasattr(self, 'trade_journal') and self.trade_journal is not None:
+            try:
+                res_str = result if isinstance(result, str) else result.get("result", "unknown")
+                self.trade_journal.record(
+                    order_id=id_number,
+                    result=res_str,
+                    active_id=result.get("active_id") if isinstance(result, dict) else None,
+                    amount=result.get("amount") if isinstance(result, dict) else None,
+                    profit=result.get("win") if isinstance(result, dict) else None,
+                )
+            except Exception as e:
+                get_logger(__name__).warning("trade_journal.record failed: %s", e)
+        return result
 
     def check_win_v3(self, id_number, timeout=120.0):
         # BUG-SPINLOOP-01: Refactorizado a _wait_result
@@ -996,7 +1063,18 @@ class IQ_Option:
             timeout=timeout
         )
         if result:
-            return result.get("msg", {}).get("win")
+            win_val = result.get("msg", {}).get("win")
+            if win_val is not None and hasattr(self, 'trade_journal') and self.trade_journal is not None:
+                res_str = "win" if win_val > 0 else ("loose" if win_val < 0 else "equal")
+                try:
+                    self.trade_journal.record(
+                        order_id=id_number,
+                        result=res_str,
+                        profit=win_val
+                    )
+                except Exception as e:
+                    get_logger(__name__).warning("trade_journal.record failed: %s", e)
+            return win_val
         return None
 
     # -------------------get infomation only for binary option------------------------
@@ -1090,6 +1168,19 @@ class IQ_Option:
 
     @rate_limited("_order_bucket")
     def buy(self, price, ACTIVES, ACTION, expirations):
+        # Gate de validación
+        if hasattr(self, 'validator') and self.validator is not None:
+            is_valid, reason = self.validator.validate_order(
+                active=ACTIVES,
+                amount=price,
+                action=ACTION,
+                duration=expirations,
+                instrument_type="binary"
+            )
+            if not is_valid:
+                get_logger(__name__).error("buy rejected by validator: %s", reason)
+                return False, None
+
         request_id = self._idempotency.register()
         get_logger(__name__).info(
             "buy(): request_id=%s | asset=%s | action=%s | amount=%s",
@@ -1129,6 +1220,12 @@ class IQ_Option:
 
     @rate_limited("_order_bucket")
     def sell_digital_option(self, options_ids):
+        # Gate de validación
+        if hasattr(self, 'validator') and self.validator is not None:
+            # Nota: para sell no validamos todos los params de buy, 
+            # pero el gate existe si se requiere lógica especial.
+            pass
+
         # BUG-DIGITAL-01: Migrado de _rate_limiter a _order_bucket via decorador
         self.api.result_event.clear()
         self.api.sell_digital_option(options_ids)
@@ -1232,6 +1329,19 @@ class IQ_Option:
     
     @rate_limited("_order_bucket")
     def buy_digital_spot(self, active, amount, action, duration):
+        # Gate de validación
+        if hasattr(self, 'validator') and self.validator is not None:
+            is_valid, reason = self.validator.validate_order(
+                active=active,
+                amount=amount,
+                action=action,
+                duration=duration,
+                instrument_type="digital"
+            )
+            if not is_valid:
+                get_logger(__name__).error("buy_digital_spot rejected by validator: %s", reason)
+                return False, None
+
         # BUG-DIGITAL-02: Migrado de _rate_limiter a _order_bucket
         """
         DEPRECATED: Use buy_digital_spot_v2() instead. This method uses
@@ -1398,10 +1508,25 @@ class IQ_Option:
         )
         if result and result.get("msg") and result["msg"].get("position", {}).get("status") == "closed":
             pos = result["msg"]["position"]
+            profit = 0.0
             if pos["close_reason"] == "default":
-                return pos["pnl_realized"]
+                profit = pos["pnl_realized"]
             elif pos["close_reason"] == "expired":
-                return pos["pnl_realized"] - pos["buy_amount"]
+                profit = pos["pnl_realized"] - pos["buy_amount"]
+            
+            if hasattr(self, 'trade_journal') and self.trade_journal is not None:
+                res_str = "win" if profit > 0 else ("loose" if profit < 0 else "equal")
+                try:
+                    self.trade_journal.record(
+                        order_id=buy_order_id,
+                        result=res_str,
+                        active_id=pos.get("active_id"),
+                        amount=pos.get("buy_amount"),
+                        profit=profit
+                    )
+                except Exception as e:
+                    get_logger(__name__).warning("trade_journal.record failed: %s", e)
+            return profit
         return None
 
     def check_win_digital_v2(self, buy_order_id, timeout=120.0):
@@ -1416,10 +1541,25 @@ class IQ_Option:
         order_data = self.get_async_order(buy_order_id).get("position-changed", {}).get("msg")
         if order_data:
             if order_data["status"] == "closed":
+                profit = 0.0
                 if order_data["close_reason"] == "expired":
-                    return True, order_data["close_profit"] - order_data["invest"]
+                    profit = order_data["close_profit"] - order_data["invest"]
                 elif order_data["close_reason"] == "default":
-                    return True, order_data["pnl_realized"]
+                    profit = order_data["pnl_realized"]
+                
+                if hasattr(self, 'trade_journal') and self.trade_journal is not None:
+                    res_str = "win" if profit > 0 else ("loose" if profit < 0 else "equal")
+                    try:
+                        self.trade_journal.record(
+                            order_id=buy_order_id,
+                            result=res_str,
+                            active_id=order_data.get("active_id"),
+                            amount=order_data.get("invest"),
+                            profit=profit
+                        )
+                    except Exception as e:
+                        get_logger(__name__).warning("trade_journal.record failed: %s", e)
+                return True, profit
             return False, None
         return False, None
 
@@ -1896,6 +2036,19 @@ class IQ_Option:
 
     @rate_limited("_order_bucket")
     def buy_digital_spot_v2(self, active, amount, action, duration):
+        # Gate de validación
+        if hasattr(self, 'validator') and self.validator is not None:
+            is_valid, reason = self.validator.validate_order(
+                active=active,
+                amount=amount,
+                action=action,
+                duration=duration,
+                instrument_type="digital"
+            )
+            if not is_valid:
+                get_logger(__name__).error("buy_digital_spot_v2 rejected by validator: %s", reason)
+                return False, None
+
         action = action.lower()
 
         if action == 'put':
@@ -2078,6 +2231,19 @@ class IQ_Option:
 
     @rate_limited("_order_bucket")
     def buy_blitz(self, active, amount, action, duration):
+        # Gate de validación
+        if hasattr(self, 'validator') and self.validator is not None:
+            is_valid, reason = self.validator.validate_order(
+                active=active,
+                amount=amount,
+                action=action,
+                duration=duration,
+                instrument_type="blitz"
+            )
+            if not is_valid:
+                get_logger(__name__).error("buy_blitz rejected by validator: %s", reason)
+                return False, None
+
         """
         Abre una opción Blitz.
         Los instrumentos Blitz SOLO se obtienen de initialization-data.

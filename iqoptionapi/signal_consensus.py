@@ -31,16 +31,15 @@ class SignalConsensus:
 
     def __init__(
         self,
-        strategies: List[BaseStrategy],
+        strategies: Optional[List[BaseStrategy]] = None,
         min_agreement: float = 0.66,
         min_score: float = 0.60,
     ) -> None:
-        if len(strategies) < 2:
-            raise ValueError("SignalConsensus requiere al menos 2 estrategias.")
-        self.strategies = strategies
+        self.strategies = strategies or []
         self.min_agreement = min_agreement
         self.min_score = min_score
         self._logger = logging.getLogger(__name__)
+
 
     def evaluate(self, candles: NDArray[np.float64]) -> ConsensusResult:
         signals: List[Signal] = []
