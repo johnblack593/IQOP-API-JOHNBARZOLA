@@ -3,6 +3,7 @@
 import json
 import threading
 import logging
+from collections import defaultdict
 from iqoptionapi.logger import get_logger
 import websocket
 from iqoptionapi.ws.received.technical_indicators import technical_indicators
@@ -219,9 +220,9 @@ class WebsocketClient(object):
         self.api.check_websocket_if_connect = 0
         self.api.ws_connected_event.clear()
 
-        # KILL-SWITCH: liberar todos los _event para desbloquear waits
+        # KILL-SWITCH: liberar todos los _event y _store para desbloquear waits
         for attr in dir(self.api):
-            if attr.endswith('_event') and attr != 'ws_connected_event':
+            if (attr.endswith('_event') or attr.endswith('_store')) and attr != 'ws_connected_event':
                 ev = getattr(self.api, attr, None)
                 if hasattr(ev, 'set'):
                     ev.set()

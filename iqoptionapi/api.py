@@ -187,6 +187,11 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.balance_id_event = threading.Event()
         self.instruments_event = threading.Event()
         
+        # --- SPRINT 7: Reactive Event Stores (defaultdict) ---
+        self.socket_option_closed_event = defaultdict(threading.Event)
+        self.result_event_store = defaultdict(threading.Event)
+        self.position_changed_event_store = defaultdict(threading.Event)
+        
         # --- NEW CONCURRENCY EVENTS ---
         self.financial_information_event = threading.Event()
         self.leaderboard_deals_client_event = threading.Event()

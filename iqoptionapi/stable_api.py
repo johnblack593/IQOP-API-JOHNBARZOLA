@@ -463,12 +463,12 @@ class IQ_Option:
     # _________________________self.api.get_api_option_init_all() wss______________
     def get_all_init(self):
         """Solicita initialization-data. Una sola llamada WS por sesión."""
-        if getattr(self.api, '_init_data_received', False):
+        if self.api.api_option_init_all_result is not None:
             return self.api.api_option_init_all_result
             
         self.api.api_option_init_all_result_event.clear()
         self.api.get_api_option_init_all()
-        is_ready = self.api.api_option_init_all_result_event.wait(timeout=TIMEOUT_ALL_INIT)
+        is_ready = self.api.api_option_init_all_result_event.wait(timeout=config.TIMEOUT_ALL_INIT)
         
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for get_all_init")
@@ -477,7 +477,7 @@ class IQ_Option:
 
     def get_all_init_v2(self):
         """Solicita initialization-data v2. Una sola llamada WS por sesión."""
-        if getattr(self.api, '_init_data_received', False):
+        if self.api.api_option_init_all_result_v2 is not None:
             return self.api.api_option_init_all_result_v2
             
         if self.check_connect() == False:
@@ -485,7 +485,7 @@ class IQ_Option:
             
         self.api.api_option_init_all_result_v2_event.clear()
         self.api.get_api_option_init_all_v2()
-        is_ready = self.api.api_option_init_all_result_v2_event.wait(timeout=TIMEOUT_ALL_INIT)
+        is_ready = self.api.api_option_init_all_result_v2_event.wait(timeout=config.TIMEOUT_ALL_INIT)
         
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for get_all_init_v2")
@@ -496,21 +496,31 @@ class IQ_Option:
 
     def __get_binary_open(self):
         # for turbo and binary pairs
-        binary_data = self.get_all_init_v2()
+        # SPRINT 13: Intentar v1 y v2 para maxima compatibilidad
+        v2_data = self.get_all_init_v2()
+        v1_data = self.get_all_init()
+        
         binary_list = ["binary", "turbo"]
-        if binary_data:
+        
+        # Procesar v2 (initialization-data)
+        if v2_data:
             for option in binary_list:
-                if option in binary_data:
-                    for actives_id in binary_data[option]["actives"]:
-                        active = binary_data[option]["actives"][actives_id]
+                if option in v2_data:
+                    for actives_id in v2_data[option]["actives"]:
+                        active = v2_data[option]["actives"][actives_id]
                         name = str(active["name"]).split(".")[1]
-                        if active["enabled"] == True:
-                            if active["is_suspended"] == True:
-                                self.OPEN_TIME[option][name]["open"] = False
-                            else:
-                                self.OPEN_TIME[option][name]["open"] = True
-                        else:
-                            self.OPEN_TIME[option][name]["open"] = active["enabled"]    
+                        self.OPEN_TIME[option][name]["open"] = active["enabled"] and not active.get("is_suspended", False)
+        
+        # Procesar v1 (api_option_init_all_result) como fallback/complemento
+        if v1_data and v1_data.get("result"):
+            res = v1_data["result"]
+            for option in binary_list:
+                if option in res:
+                    for actives_id in res[option]["actives"]:
+                        active = res[option]["actives"][actives_id]
+                        name = str(active["name"]).split(".")[1]
+                        # Solo sobreescribir si no estaba abierto en v2 (v1 suele ser mas confiable para Binary)
+                        self.OPEN_TIME[option][name]["open"] = active["enabled"] and not active.get("is_suspended", False)
 
     def __get_digital_open(self):
         # for digital options
@@ -642,15 +652,25 @@ class IQ_Option:
     def get_profile_ansyc(self):
         resp = self.api.getprofile()
         if resp and resp.status_code == 200:
-            self.api.profile.msg = resp.json()
-            if hasattr(self.api, 'profile_msg_event'):
-                self.api.profile_msg_event.set()
+            data = resp.json()
+            # Si viene envuelto en result (HTTP), lo desempaquetamos
+            if isinstance(data, dict) and data.get("isSuccessful"):
+                p_msg = data.get("result")
+            else:
+                p_msg = data
+            
+            # SPRINT 13: Validacion de integridad. Si no hay balances, ignorar HTTP (posible block/limit)
+            if p_msg and "balances" in p_msg and p_msg["balances"]:
+                self.api.profile.msg = p_msg
+                if hasattr(self.api, 'profile_msg_event'):
+                    self.api.profile_msg_event.set()
         
-        if self.api.profile.msg is None:
-            # Fallback a esperar mensaje WS si el HTTP fallo
+        if self.api.profile.msg is None or "balances" not in self.api.profile.msg:
+            # Fallback a esperar mensaje WS
+            get_logger(__name__).info("HTTP profile missing balances, waiting for WS profile...")
             is_ready = self.api.profile_msg_event.wait(timeout=config.TIMEOUT_WS_DATA)
             if not is_ready:
-                get_logger(__name__).warning("Timeout waiting for profile")
+                get_logger(__name__).warning("Timeout waiting for profile via WS")
         
         return self.api.profile.msg
 
