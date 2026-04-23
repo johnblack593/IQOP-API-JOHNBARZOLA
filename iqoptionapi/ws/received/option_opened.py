@@ -9,7 +9,9 @@ def option_opened(api, message):
         # Correlación con el request_id pendiente (Sprint 3)
         if api.pending_buy_ids:
             req_id = api.pending_buy_ids.popleft()
-            api.buy_multi_option[req_id] = {"id": option_id}
+            if req_id not in api.buy_multi_option:
+                api.buy_multi_option[req_id] = {}
+            api.buy_multi_option[req_id]["id"] = option_id
             get_logger(__name__).debug("Correlated req_id=%s with option_id=%s", req_id, option_id)
             # También disparamos el evento para que buy() despierte si aún no lo hizo
             ev = getattr(api, "result_event", None)

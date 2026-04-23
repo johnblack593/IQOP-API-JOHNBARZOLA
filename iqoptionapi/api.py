@@ -341,6 +341,16 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         logger.debug("WS SEND: %s", data)
         self.websocket.send(data)
 
+    def remove_pending_buy_id(self, request_id):
+        """Remove a specific request_id from the pending queue if it exists."""
+        req_id_str = str(request_id)
+        if req_id_str in self.pending_buy_ids:
+            try:
+                self.pending_buy_ids.remove(req_id_str)
+                get_logger(__name__).debug("Removed req_id %s from pending_buy_ids (cleanup)", req_id_str)
+            except ValueError:
+                pass
+
     @property
     def logout(self):
         """Property for get IQ Option http login resource.
