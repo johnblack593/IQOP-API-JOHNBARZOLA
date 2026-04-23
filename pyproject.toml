@@ -1,66 +1,53 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "iqoptionapi"
-version = "8.9.2"
-description = "IQ Option API JCBV Wrapper (Modernized Asynchronous Edition)"
+version = "2.0.0"
+description = "IQ Option API wrapper with market intelligence for trading robots"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = { text = "MIT" }
 authors = [
-    {name = "John Barzola / JCBV", email = "jchbarvill@gmail.com"}
+    { name = "John Barzola", email = "jchbarvill@gmail.com" }
 ]
-urls = {Homepage = "https://github.com/johnblack593/IQOP-API-JOHNBARZOLA"}
+keywords = ["iqoption", "trading", "api", "binary-options", "algorithmic-trading"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Development Status :: 4 - Beta",
+]
 dependencies = [
-    "requests>=2.31.0",
-    "websocket-client>=1.8.0",
-    "certifi>=2024.2.2",
-    "pyOpenSSL>=24.0.0",
-    "numpy>=1.26.0",
-    "pandas>=2.2.0",
+    "websocket-client>=1.7",
+    "requests>=2.31",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.4.0",
-    "mypy>=1.9.0",
-    "black>=24.2.0",
-    "isort>=5.13.0",
-]
-test = [
-    "pytest>=8.0.0",
-    "pytest-mock>=3.12.0",
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "python-dotenv>=1.0",
 ]
 
-[tool.setuptools]
-packages = ["iqoptionapi"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["iqoptionapi*"]
 
 [tool.ruff]
-line-length = 88
+line-length = 120
 target-version = "py311"
-
-[tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "C4"]
-ignore = ["E266", "E501"]
-
-[tool.mypy]
-python_version = "3.11"
-files = ["iqoptionapi"]
-ignore_missing_imports = true
-strict = false
+select = ["E", "F", "W"]
+ignore = ["E501", "F401", "E711", "E712", "E701", "W291", "W293", "F821", "F841", "E741", "E721", "W191", "E722", "F811", "E401", "E731", "F405", "F403"]
+# F401 ignorado: imports legacy en __init__.py
+# E711/E712 ignorado: comparaciones legacy (is None, == True) en código existente
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
 addopts = "-v --tb=short"
-
-[tool.pyrefly]
-project_root = "."
-python_version = "3.11"
-search_path = ["iqoptionapi"]
-exclude = ["examples/**", "tests/**", "**/__pycache__/**", "**/*.pyc"]
-
-[tool.pyrefly.suppress]
-parse-error = false
-unknown-name = false

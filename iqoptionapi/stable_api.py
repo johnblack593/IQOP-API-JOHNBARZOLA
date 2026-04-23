@@ -640,7 +640,7 @@ class IQ_Option:
     def get_profile_ansyc(self):
         self.api.profile_msg_event.clear()
         self.api.getprofile()
-        is_ready = self.api.profile_msg_event.wait(timeout=TIMEOUT_WS_DATA)
+        is_ready = self.api.profile_msg_event.wait(timeout=config.TIMEOUT_WS_DATA)
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for profile")
         return self.api.profile.msg
@@ -696,7 +696,7 @@ class IQ_Option:
     def reset_practice_balance(self):
         self.api.training_balance_reset_request_event.clear()
         self.api.reset_training_balance()
-        is_ready = self.api.training_balance_reset_request_event.wait(timeout=TIMEOUT_BALANCE_RESET)
+        is_ready = self.api.training_balance_reset_request_event.wait(timeout=config.TIMEOUT_BALANCE_RESET)
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for training_balance_reset_request")
         return self.api.training_balance_reset_request
@@ -767,7 +767,7 @@ class IQ_Option:
             get_logger(__name__).error("get_candles request error: %s", e)
             return None
 
-        is_ready = self.api.candles_event.wait(timeout=TIMEOUT_WS_DATA)
+        is_ready = self.api.candles_event.wait(timeout=config.TIMEOUT_WS_DATA)
         if not is_ready or self.api.candles.candles_data is None:
             get_logger(__name__).warning("Timeout or disconnect: candles data unavailable")
             return None
@@ -955,7 +955,7 @@ class IQ_Option:
         self.api.technical_indicators[str(ACTIVES)] = None
         self.api.technical_indicators_event.clear()
         self.api.get_technical_indicators(OP_code.ACTIVES[ACTIVES])
-        is_ready = self.api.technical_indicators_event.wait(timeout=TIMEOUT_WS_DATA)
+        is_ready = self.api.technical_indicators_event.wait(timeout=config.TIMEOUT_WS_DATA)
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for technical_indicators: %s", ACTIVES)
         return self.api.technical_indicators.get(str(ACTIVES))
@@ -1238,7 +1238,7 @@ class IQ_Option:
     def get_digital_underlying_list_data(self):
         self.api.underlying_list_data_event.clear()
         self.api.get_digital_underlying()
-        is_ready = self.api.underlying_list_data_event.wait(timeout=TIMEOUT_WS_DATA)
+        is_ready = self.api.underlying_list_data_event.wait(timeout=config.TIMEOUT_WS_DATA)
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for underlying_list_data")
         return self.api.underlying_list_data
@@ -1483,7 +1483,7 @@ class IQ_Option:
     def close_digital_option(self, position_id):
         # Wait for position info
         while self.get_async_order(position_id).get("position-changed") == {}:
-            is_ready = self.api.position_changed_event.wait(timeout=TIMEOUT_WS_DATA)
+            is_ready = self.api.position_changed_event.wait(timeout=config.TIMEOUT_WS_DATA)
             if not is_ready:
                 get_logger(__name__).warning("Timeout waiting for position_changed in close_digital_option")
                 break
@@ -1810,7 +1810,7 @@ class IQ_Option:
     def get_positions(self, instrument_type):
         self.api.positions_event.clear()
         self.api.get_positions(instrument_type)
-        is_ready = self.api.positions_event.wait(timeout=TIMEOUT_WS_DATA)
+        is_ready = self.api.positions_event.wait(timeout=config.TIMEOUT_WS_DATA)
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for positions")
             return False, None
@@ -1856,7 +1856,7 @@ class IQ_Option:
     def get_position_history(self, instrument_type):
         self.api.position_history_event.clear()
         self.api.get_position_history(instrument_type)
-        is_ready = self.api.position_history_event.wait(timeout=TIMEOUT_WS_DATA)
+        is_ready = self.api.position_history_event.wait(timeout=config.TIMEOUT_WS_DATA)
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for position_history")
             return False, None
@@ -2023,7 +2023,7 @@ class IQ_Option:
 
         self.api.subscribe_digital_price_splitter(asset_id)
 
-        is_ready = self.api.digital_payout_event.wait(timeout=seconds or TIMEOUT_WS_DATA)
+        is_ready = self.api.digital_payout_event.wait(timeout=seconds or config.TIMEOUT_WS_DATA)
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for digital_payout")
 
