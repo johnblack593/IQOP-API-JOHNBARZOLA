@@ -1311,6 +1311,9 @@ class IQ_Option:
                 self.api.result_event.clear()
         
         if id is None:
+            # S4-T3: Cleanup correlation queue on failure/timeout
+            self.api.remove_pending_buy_id(req_id)
+            
             if self.api.buy_multi_option.get(req_id, {}).get("message"):
                 self._idempotency.fail(request_id)
                 return False, self.api.buy_multi_option[req_id]["message"]
