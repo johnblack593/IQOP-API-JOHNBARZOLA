@@ -222,6 +222,10 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.auto_margin_call_changed_respond_event = threading.Event()
         self.technical_indicators_event = threading.Event()
         self.digital_payout_event = threading.Event()
+        self.open_positions_event = threading.Event()
+
+        # Portfolio storage
+        self.open_positions = {}
         
         # Callbacks for S1-03 Resilience
         self._reconnect_callback: callable | None = None

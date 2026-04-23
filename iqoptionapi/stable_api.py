@@ -40,7 +40,10 @@ class IQ_Option:
         self._order_bucket = TokenBucket(block=True)
         # BUG-DIGITAL-01: Initialize missing event stores on api instance
         # These are used by the new non-blocking _wait_result helper
-        self.api_event_stores = {} 
+        self.api_event_stores = {}
+        # S1-T2: Reconciler for post-disconnect result recovery
+        from iqoptionapi.reconciler import Reconciler
+        self._reconciler = Reconciler(self)
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
@@ -1913,3 +1916,136 @@ class IQ_Option:
             return True, digital_order_id
         else:
             return False, digital_order_id
+
+    # ══════════════════════════════════════════════════════════════════
+    #  SPRINT 1 — Portfolio Control
+    # ══════════════════════════════════════════════════════════════════
+
+    def get_open_positions(
+        self,
+        instrument_type: str = "binary-option",
+        timeout: float = 10.0
+    ) -> list:
+        """
+        Retorna snapshot de posiciones abiertas para el instrument_type dado.
+        instrument_type: "binary-option" | "turbo-option" | "digital-option" | "blitz"
+        Retorna lista vacía si timeout o sin posiciones.
+        """
+        self.api.open_positions_event.clear()
+        self.api.open_positions[instrument_type] = None
+
+        self.api.send_websocket_request(
+            name="sendMessage",
+            msg={
+                "name": "portfolio.get-positions",
+                "version": "1.0",
+                "body": {
+                    "instrument_type": instrument_type,
+                    "user_balance_id": self.api.balance_id,
+                    "offset": 0,
+                    "limit": 100
+                }
+            }
+        )
+
+        is_ready = self.api.open_positions_event.wait(timeout=timeout)
+        if not is_ready:
+            get_logger(__name__).warning(
+                "Timeout (%.1fs) waiting for get_open_positions(%s)", timeout, instrument_type
+            )
+            return []
+
+        result = self.api.open_positions.get(instrument_type, [])
+        return result if isinstance(result, list) else []
+
+    def get_all_open_positions(self, timeout: float = 10.0) -> dict:
+        """
+        Retorna dict con posiciones abiertas por tipo de instrumento.
+        Llama en paralelo los 4 tipos para minimizar latencia.
+        """
+        import concurrent.futures
+        instrument_types = ["binary-option", "turbo-option", "digital-option", "blitz"]
+        result = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(self.get_open_positions, itype, timeout): itype
+                for itype in instrument_types
+            }
+            for future in concurrent.futures.as_completed(futures):
+                itype = futures[future]
+                try:
+                    result[itype] = future.result()
+                except Exception as e:
+                    get_logger(__name__).error("get_all_open_positions error for %s: %s", itype, e)
+                    result[itype] = []
+        return result
+
+    # ── S1-T2: Reconciler ──────────────────────────────────────────
+
+    def reconcile_missed_results(self, since_ts: float) -> dict:
+        """
+        Recupera resultados de trades que expiraron durante una desconexión.
+        Llamar SIEMPRE al reconectar si había trades abiertos.
+
+        Args:
+            since_ts: Unix timestamp de inicio del período a reconciliar
+        Returns:
+            {order_id: "win" | "loose" | "equal" | "unknown"}
+        Note:
+            "loose" is the IQ Option server typo — NOT a bug.
+        """
+        return self._reconciler.reconcile(since_ts)
+
+    # ── S1-T3: Generic Order Status ───────────────────────────────
+
+    def get_order_status(
+        self,
+        order_id: int,
+        instrument_type: str
+    ):
+        """
+        Consulta el estado de una orden por ID sin importar su tipo.
+        instrument_type: "binary" | "turbo" | "digital" | "blitz" | "cfd" | "forex" | "crypto"
+
+        Retorna dict con al menos: {id, status, result, invest, close_profit}
+        Retorna None si no se puede obtener el estado.
+        """
+        _binary_types = {"binary", "turbo", "blitz"}
+        _digital_types = {"digital"}
+        _cfd_types = {"cfd", "forex", "crypto"}
+
+        itype = instrument_type.lower().replace("-option", "").replace("-", "")
+
+        if itype in _binary_types:
+            success, data = self.get_betinfo(order_id)
+            if success and data:
+                return {
+                    "id": order_id,
+                    "type": instrument_type,
+                    "status": "closed" if data.get("result") else "open",
+                    "result": data.get("result"),
+                    "invest": data.get("amount"),
+                    "close_profit": data.get("win_amount"),
+                    "raw": data
+                }
+
+        elif itype in _digital_types or itype in _cfd_types:
+            # Para digitales y CFD usar get_async_order
+            order_data = self.get_async_order(order_id)
+            if order_data and order_data.get("position-changed"):
+                msg = order_data["position-changed"].get("msg", {})
+                return {
+                    "id": order_id,
+                    "type": instrument_type,
+                    "status": msg.get("status", "unknown"),
+                    "result": msg.get("close_reason"),
+                    "invest": msg.get("invest"),
+                    "close_profit": msg.get("close_profit") or msg.get("pnl_realized"),
+                    "raw": msg
+                }
+
+        get_logger(__name__).warning(
+            "get_order_status: no data found for order_id=%s type=%s",
+            order_id, instrument_type
+        )
+        return None

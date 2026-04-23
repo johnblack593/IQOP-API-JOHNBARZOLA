@@ -59,6 +59,7 @@ from iqoptionapi.ws.received.user_profile_client import user_profile_client
 from iqoptionapi.ws.received.leaderboard_userinfo_deals_client import leaderboard_userinfo_deals_client
 from iqoptionapi.ws.received.client_price_generated import client_price_generated
 from iqoptionapi.ws.received.users_availability import users_availability
+from iqoptionapi.ws.received.portfolio_get_positions import portfolio_get_positions
 
 
 
@@ -97,6 +98,7 @@ _MESSAGE_ROUTER: dict = {
     'order-canceled': [order_canceled],
     'order-placed-temp': [order_placed_temp], # order_placed_temp: called once — duplicate removed (audit SPRINT-02)
     'overnight-fee': [overnight_fee],
+    'portfolio.get-positions': [portfolio_get_positions],
     'position': [position],
     'positions': [positions],
     'position-changed': [position_changed],
