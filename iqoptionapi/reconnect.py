@@ -9,7 +9,7 @@ from iqoptionapi.logger import get_logger
 from iqoptionapi.config import (
     RECONNECT_BASE_DELAY,
     RECONNECT_MAX_DELAY,
-    RECONNECT_MAX_ATTEMPTS,
+    MAX_RECONNECT_ATTEMPTS,
     RECONNECT_JITTER,
 )
 
@@ -35,7 +35,7 @@ class ReconnectManager:
 
     def __init__(self, base: float = RECONNECT_BASE_DELAY,
                  cap: float = RECONNECT_MAX_DELAY,
-                 max_attempts: int = RECONNECT_MAX_ATTEMPTS) -> None:
+                 max_attempts: int = MAX_RECONNECT_ATTEMPTS) -> None:
         self._base        = base
         self._cap         = cap
         self._max         = max_attempts

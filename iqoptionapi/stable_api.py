@@ -12,7 +12,7 @@ from iqoptionapi.security import CredentialStore, generate_user_agent
 from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
 from iqoptionapi.config import (
     TIMEOUT_WS_DATA, TIMEOUT_CANDLE_STREAM, TIMEOUT_SSID_AUTH,
-    TIMEOUT_BALANCE_RESET, POLLING_FAST, TIMEOUT_ALL_INIT
+    TIMEOUT_BALANCE_RESET, TIMEOUT_ALL_INIT
 )
 from iqoptionapi.http.session import close_shared_session
 import iqoptionapi
