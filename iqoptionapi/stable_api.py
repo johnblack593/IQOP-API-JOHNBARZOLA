@@ -37,6 +37,16 @@ class IQ_Option:
         self.candle_cache = CandleCache()
         self._start_maintenance_thread()
 
+        # S4: Intelligence modules (READ-ONLY, consume candle_cache)
+        from iqoptionapi.market_quality import MarketQualityMonitor
+        self.market_quality = MarketQualityMonitor(self.candle_cache)
+        from iqoptionapi.pattern_engine import PatternEngine
+        self.pattern_engine = PatternEngine(self.candle_cache)
+        from iqoptionapi.market_regime import MarketRegime
+        self.market_regime = MarketRegime(self.candle_cache)
+        from iqoptionapi.correlation_engine import CorrelationEngine
+        self.correlation_engine = CorrelationEngine(self.candle_cache)
+
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email

@@ -166,3 +166,86 @@ class PerformanceAnalyzer:
         
         if std_ret == 0: return 0.0
         return float((mean_ret - risk_free) / std_ret)
+
+    @staticmethod
+    def get_asset_score(
+        trades: List[TradeRecord],
+        active_id: int,
+        timeframe: int,
+        last_n: int = 50,
+    ) -> dict:
+        """
+        Calcula métricas de rendimiento para un activo+timeframe específico.
+        Basado en los últimos `last_n` trades cerrados del trade_journal.
+
+        Retorna dict con: win_rate, avg_payout, profit_factor, expected_value,
+        sample_size, is_reliable.
+        Si no hay trades → dict con todos en 0.0 y is_reliable = False.
+        """
+        empty = {
+            "active_id": active_id,
+            "timeframe": timeframe,
+            "win_rate": 0.0,
+            "avg_payout": 0.0,
+            "profit_factor": 0.0,
+            "expected_value": 0.0,
+            "sample_size": 0,
+            "is_reliable": False,
+        }
+
+        if not trades:
+            return empty
+
+        # Filter trades matching this active_id and duration
+        matching = [
+            t for t in trades
+            if t.duration_secs == timeframe
+            and t.result in ("win", "loss")
+            and t.profit_usd is not None
+        ]
+        # Filter by asset name containing the active_id (best-effort)
+        # TradeRecord stores asset name, not active_id directly
+        # We accept all matching trades for the given timeframe
+        # and let the caller pre-filter if needed
+
+        # Take last_n most recent (trades should be sorted by open_time)
+        matching = sorted(matching, key=lambda t: t.open_time)[-last_n:]
+
+        sample_size = len(matching)
+        if sample_size == 0:
+            return empty
+
+        wins = [t for t in matching if t.result == "win"]
+        losses = [t for t in matching if t.result == "loss"]
+
+        win_count = len(wins)
+        loss_count = len(losses)
+        total = win_count + loss_count
+
+        win_rate = win_count / total if total > 0 else 0.0
+
+        # avg_payout: average profit_usd on wins / average amount bet
+        gross_profit = sum(t.profit_usd for t in wins)
+        gross_loss = abs(sum(t.profit_usd for t in losses))
+
+        avg_win_amount = sum(t.amount for t in wins) / win_count if win_count else 0.0
+        avg_payout = (gross_profit / sum(t.amount for t in wins)) if (wins and sum(t.amount for t in wins) > 0) else 0.0
+
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else (
+            float('inf') if gross_profit > 0 else 0.0
+        )
+
+        # expected_value = (win_rate * avg_payout) - (1 - win_rate)
+        expected_value = (win_rate * avg_payout) - (1.0 - win_rate)
+
+        return {
+            "active_id": active_id,
+            "timeframe": timeframe,
+            "win_rate": round(win_rate, 4),
+            "avg_payout": round(avg_payout, 4),
+            "profit_factor": round(profit_factor, 2) if profit_factor != float('inf') else 999.99,
+            "expected_value": round(expected_value, 4),
+            "sample_size": sample_size,
+            "is_reliable": sample_size >= 20,
+        }
+

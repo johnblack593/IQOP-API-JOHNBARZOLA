@@ -103,3 +103,97 @@ class AssetScanner:
 
     def is_worth_trading(self, score_obj: AssetScore, min_score: float = 0.6) -> bool:
         return score_obj.score >= min_score
+
+    def get_best_payout_assets(
+        self,
+        instrument_type: str = "turbo-option",
+        top_n: int = 5,
+        min_payout: float = 0.80,
+        timeframe: int = 60,
+        require_tradeable: bool = True,
+        open_time_data: Optional[Dict] = None,
+        profit_data: Optional[Dict] = None,
+        market_quality=None,
+        market_regime=None,
+    ) -> List[Dict]:
+        """
+        Retorna los top_n activos con mejor payout disponible ahora,
+        filtrados por calidad de mercado y régimen.
+
+        Cada item retornado:
+        {
+          "asset": str, "active_id": int, "payout": float,
+          "is_open": bool, "quality_score": float, "regime": str,
+          "trend_direction": str, "rank_score": float
+        }
+
+        Si market_quality/market_regime no están disponibles,
+        el método funciona igualmente — omite esos filtros.
+        """
+        results: List[Dict] = []
+
+        if not profit_data:
+            return results
+
+        for asset_name, payouts_by_type in profit_data.items():
+            payout = 0.0
+            if isinstance(payouts_by_type, dict):
+                # profit_data format: {"EURUSD": {"turbo": 0.85, "binary": 0.80}}
+                type_key = instrument_type.replace("-option", "")
+                payout = payouts_by_type.get(type_key, 0.0)
+            elif isinstance(payouts_by_type, (int, float)):
+                payout = float(payouts_by_type)
+
+            if payout < min_payout:
+                continue
+
+            # Check is_open from open_time_data
+            is_open = True
+            if open_time_data:
+                type_key = instrument_type.replace("-option", "")
+                asset_info = open_time_data.get(type_key, {}).get(asset_name, {})
+                if isinstance(asset_info, dict):
+                    is_open = asset_info.get("open", True)
+            if not is_open:
+                continue
+
+            # Resolve active_id (best-effort)
+            from iqoptionapi import constants as OP_code
+            active_id = OP_code.ACTIVES.get(asset_name, 0)
+
+            # Market quality filter
+            quality_score = 1.0
+            if market_quality and active_id:
+                try:
+                    quality_score = market_quality.get_quality_score(active_id, timeframe)
+                    if require_tradeable:
+                        if not market_quality.is_tradeable(active_id, timeframe):
+                            continue
+                except Exception:
+                    quality_score = 1.0
+
+            # Market regime filter
+            regime = "unknown"
+            trend_direction = "neutral"
+            if market_regime and active_id:
+                try:
+                    regime = market_regime.get_regime(active_id, timeframe)
+                    trend_direction = market_regime.get_trend_direction(active_id, timeframe)
+                except Exception:
+                    regime = "unknown"
+
+            rank_score = round(payout * quality_score, 4)
+
+            results.append({
+                "asset": asset_name,
+                "active_id": active_id,
+                "payout": payout,
+                "is_open": is_open,
+                "quality_score": quality_score,
+                "regime": regime,
+                "trend_direction": trend_direction,
+                "rank_score": rank_score,
+            })
+
+        results.sort(key=lambda x: x["rank_score"], reverse=True)
+        return results[:top_n]
