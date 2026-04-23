@@ -1,5 +1,6 @@
 # python
 from iqoptionapi.api import IQOptionAPI
+from typing import Callable
 import iqoptionapi.constants as OP_code
 import iqoptionapi.country_id as Country
 import threading
@@ -31,6 +32,11 @@ class IQ_Option:
     __version__ = iqoptionapi.__version__
 
     def __init__(self, email, password, active_account_type="PRACTICE"):
+        self._stop_event = threading.Event()
+        from iqoptionapi.candle_cache import CandleCache
+        self.candle_cache = CandleCache()
+        self._start_maintenance_thread()
+
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
@@ -403,26 +409,34 @@ class IQ_Option:
 
     # _________________________self.api.get_api_option_init_all() wss______________
     def get_all_init(self):
-        if hasattr(self.api, 'api_option_init_all_result_event'):
-            self.api.api_option_init_all_result = None
-            self.api.api_option_init_all_result_event.clear()
-            self.api.get_api_option_init_all()
-            is_ready = self.api.api_option_init_all_result_event.wait(timeout=TIMEOUT_ALL_INIT)
-            if not is_ready or self.api.api_option_init_all_result is None:
-                get_logger(__name__).warning("Timeout or disconnect: api_option_init_all_result unavailable")
+        """Solicita initialization-data. Una sola llamada WS por sesión."""
+        if getattr(self.api, '_init_data_received', False):
+            return self.api.api_option_init_all_result
+            
         self.api.api_option_init_all_result_event.clear()
         self.api.get_api_option_init_all()
-        is_ready = self.api.api_option_init_all_result_event.wait(timeout=10)
-        return self.api.api_option_init_all_result if is_ready else None
+        is_ready = self.api.api_option_init_all_result_event.wait(timeout=TIMEOUT_ALL_INIT)
+        
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for get_all_init")
+            
+        return self.api.api_option_init_all_result
 
     def get_all_init_v2(self):
-        self.api.api_option_init_all_result_v2_event.clear()
+        """Solicita initialization-data v2. Una sola llamada WS por sesión."""
+        if getattr(self.api, '_init_data_received', False):
+            return self.api.api_option_init_all_result_v2
+            
         if self.check_connect() == False:
             self.connect()
+            
+        self.api.api_option_init_all_result_v2_event.clear()
         self.api.get_api_option_init_all_v2()
         is_ready = self.api.api_option_init_all_result_v2_event.wait(timeout=TIMEOUT_ALL_INIT)
+        
         if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for api_option_init_all_result_v2")
+            get_logger(__name__).warning("Timeout waiting for get_all_init_v2")
+            
         return self.api.api_option_init_all_result_v2
 
     # ------- chek if binary/digit/cfd/stock... if open or not
@@ -2085,3 +2099,51 @@ class IQ_Option:
             
         id = self.api.buy_multi_option.get(req_id, {}).get("id")
         return self.api.result, id
+
+    # ── S3: Memory & Stream Stabilization ─────────────────────────
+
+    def _start_maintenance_thread(self):
+        def _run():
+            while not self._stop_event.is_set():
+                # Esperar 1 hora entre limpiezas
+                if self._stop_event.wait(timeout=3600):
+                    break
+                if hasattr(self, 'candle_cache'):
+                    n = self.candle_cache.evict_expired()
+                    if n > 0:
+                        get_logger(__name__).info("candle_cache: evicted %d expired candles", n)
+        
+        t = threading.Thread(target=_run, name="candle-maintenance", daemon=True)
+        t.start()
+
+    def subscribe_candle_v2(
+        self,
+        active: str,
+        size: int,
+        buffer_max: int = 500,
+        on_candle: Callable[[dict], None] | None = None
+    ) -> bool:
+        """
+        Suscribe al stream de velas con buffer acotado y callback opcional.
+        """
+        active_id = OP_code.ACTIVES[active]
+        
+        # 1. Configurar maxlen para este key en el cache
+        if hasattr(self, 'candle_cache'):
+            self.candle_cache.set_maxlen(active_id, size, buffer_max)
+        
+        # 2. Registrar callback si fue provisto
+        if on_candle is not None:
+            key = (active_id, size)
+            self.api._candle_callbacks[key] = on_candle
+        
+        # 3. Iniciar stream (reusando lógica existente)
+        return self.start_candles_one_stream(active, size)
+
+    def unsubscribe_candle_v2(self, active: str, size: int) -> None:
+        """Cancela suscripción y limpia callback."""
+        active_id = OP_code.ACTIVES[active]
+        key = (active_id, size)
+        if hasattr(self.api, '_candle_callbacks'):
+            self.api._candle_callbacks.pop(key, None)
+        self.stop_candles_one_stream(active, size)
