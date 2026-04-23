@@ -6,10 +6,13 @@ from datetime import datetime
 
 import logging
 
+from dotenv import load_dotenv
+
 # Ensure project root is in path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 if __name__ == "__main__":
+    load_dotenv()
     print("=" * 72)
     print("  IQ OPTION API — JCBV EDITION")
     print("  COMPREHENSIVE TEST GALLERY RUNNER")

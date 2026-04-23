@@ -85,8 +85,8 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     profile = Profile()
     candles = Candles()
     listinfodata = ListInfoData()
-    api_option_init_all_result = []
-    api_option_init_all_result_v2 = []
+    api_option_init_all_result = None
+    api_option_init_all_result_v2 = None
     # for digital
     underlying_list_data = None
     position_changed = None
