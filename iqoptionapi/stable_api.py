@@ -18,18 +18,13 @@ from iqoptionapi.http.session import close_shared_session
 import iqoptionapi
 import logging
 import operator
-from collections import defaultdict
 from collections import deque
+from iqoptionapi.utils import nested_dict
 from iqoptionapi.expiration import get_expiration_time, get_remaning_time
 from datetime import datetime, timedelta
 from random import randint
 
 
-def nested_dict(n, type):
-    if n == 1:
-        return defaultdict(type)
-    else:
-        return defaultdict(lambda: nested_dict(n - 1, type))
 
 
 class IQ_Option:
