@@ -1,20 +1,56 @@
-"""Module for IQ option websocket."""
+"""
+Handler para mensajes position-changed.
+Maneja cierre de posiciones Digital/CFD/Forex.
+"""
+from iqoptionapi.logger import get_logger
 
-def position_changed(api, message):
-    if message["name"] == "position-changed":
-        order_id = None
-        if message["microserviceName"] == "portfolio" and (message["msg"]["source"] == "digital-options") or message["msg"]["source"] == "trading":
-            order_id = int(message["msg"]["raw_event"]["order_ids"][0])
-            api.order_async[order_id][message["name"]] = message
-        elif message["microserviceName"] == "portfolio" and message["msg"]["source"] == "binary-options":
-            order_id = int(message["msg"]["external_id"])
-            api.order_async[order_id][message["name"]] = message
-        else:
-            api.position_changed = message
-        
-        ev = getattr(api, "position_changed_event", None)
-        if ev: ev.set()
+logger = get_logger(__name__)
 
-        # S1-T4: Notify per-order event store for non-blocking check_win_digital()
-        if order_id and hasattr(api, 'position_changed_event_store'):
-            api.position_changed_event_store[order_id].set()
+
+class PositionChanged:
+    """Procesa cambios en posiciones y notifica a check_win_digital*."""
+
+    def __call__(self, api, message):
+        try:
+            msg = message.get("msg", {})
+            order_id = None
+            
+            microservice = message.get("microserviceName")
+            source = msg.get("source")
+            
+            if microservice == "portfolio" and (source in ("digital-options", "trading")):
+                if msg.get("raw_event") and msg["raw_event"].get("order_ids"):
+                    order_id = msg["raw_event"]["order_ids"][0]
+            elif microservice == "portfolio" and source == "binary-options":
+                order_id = msg.get("external_id")
+            else:
+                order_id = msg.get("position_id") or msg.get("id")
+
+            if order_id is None:
+                api.position_changed = message
+                return
+
+            try:
+                order_id = int(order_id)
+            except (ValueError, TypeError):
+                pass
+
+            if hasattr(api, "order_async"):
+                api.order_async[order_id][message.get("name")] = message
+
+            status = msg.get("status")
+            if status in ("closed", "expired"):
+                ev_global = getattr(api, "position_changed_event", None)
+                if ev_global:
+                    ev_global.set()
+
+                if hasattr(api, "position_changed_event_store"):
+                    api.position_changed_event_store[order_id].set()
+                
+                if hasattr(api, "result_event_store"):
+                    api.result_event_store[order_id].set()
+                    
+                logger.debug("position_changed: order_id=%s closed notified", order_id)
+
+        except Exception as e:
+            logger.warning("position_changed handler error: %s", e)

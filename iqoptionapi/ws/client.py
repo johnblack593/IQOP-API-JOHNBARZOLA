@@ -13,7 +13,6 @@ from iqoptionapi.ws.received.profile import profile
 from iqoptionapi.ws.received.balance_changed import balance_changed
 from iqoptionapi.ws.received.candles import candles
 from iqoptionapi.ws.received.buy_complete import buy_complete
-from iqoptionapi.ws.received.option import option
 from iqoptionapi.ws.received.position_history import position_history
 from iqoptionapi.ws.received.list_info_data import list_info_data
 from iqoptionapi.ws.received.candle_generated import candle_generated_realtime
@@ -25,9 +24,7 @@ from iqoptionapi.ws.received.initialization_data import initialization_data
 from iqoptionapi.ws.received.underlying_list import underlying_list
 from iqoptionapi.ws.received.instruments import instruments
 from iqoptionapi.ws.received.financial_information import financial_information
-from iqoptionapi.ws.received.position_changed import position_changed
 from iqoptionapi.ws.received.option_opened import option_opened
-from iqoptionapi.ws.received.option_closed import option_closed
 from iqoptionapi.ws.received.top_assets_updated import top_assets_updated
 from iqoptionapi.ws.received.strike_list import strike_list
 from iqoptionapi.ws.received.api_game_betinfo_result import api_game_betinfo_result
@@ -50,7 +47,6 @@ from iqoptionapi.ws.received.digital_option_placed import digital_option_placed
 from iqoptionapi.ws.received.result import result
 from iqoptionapi.ws.received.instrument_quotes_generated import instrument_quotes_generated
 from iqoptionapi.ws.received.training_balance_reset import training_balance_reset
-from iqoptionapi.ws.received.socket_option_closed import socket_option_closed
 from iqoptionapi.ws.received.live_deal_binary_option_placed import live_deal_binary_option_placed
 from iqoptionapi.ws.received.live_deal_digital_option import live_deal_digital_option
 from iqoptionapi.ws.received.leaderboard_deals_client import leaderboard_deals_client
@@ -60,6 +56,17 @@ from iqoptionapi.ws.received.leaderboard_userinfo_deals_client import leaderboar
 from iqoptionapi.ws.received.client_price_generated import client_price_generated
 from iqoptionapi.ws.received.users_availability import users_availability
 from iqoptionapi.ws.received.portfolio_get_positions import portfolio_get_positions
+
+# SPRINT 7: Reactive Event Handlers (Classes)
+from iqoptionapi.ws.received.option_closed import OptionClosed
+from iqoptionapi.ws.received.position_changed import PositionChanged
+from iqoptionapi.ws.received.socket_option_closed import SocketOptionClosed
+
+# Instancias únicas para el router
+_option_closed_handler = OptionClosed()
+_position_changed_handler = PositionChanged()
+_socket_option_closed_handler = SocketOptionClosed()
+
 
 
 
@@ -91,9 +98,10 @@ _MESSAGE_ROUTER: dict = {
     'live-deal': [live_deal],
     'live-deal-binary-option-placed': [live_deal_binary_option_placed],
     'live-deal-digital-option': [live_deal_digital_option],
-    'option': [option],
-    'option-closed': [option_closed],
+    'option': [_option_closed_handler],
+    'option-closed': [_option_closed_handler],
     'option-opened': [option_opened],
+
     'order': [order],
     'order-canceled': [order_canceled],
     'order-placed-temp': [order_placed_temp], # order_placed_temp: called once — duplicate removed (audit SPRINT-02)
@@ -101,13 +109,15 @@ _MESSAGE_ROUTER: dict = {
     'portfolio.get-positions': [portfolio_get_positions],
     'position': [position],
     'positions': [positions],
-    'position-changed': [position_changed],
+    'position-changed': [_position_changed_handler],
     'position-closed': [position_closed],
+
     'position-history': [position_history],
     'profile': [profile],
     'result': [result],
-    'socket-option-closed': [socket_option_closed],
+    'socket-option-closed': [_socket_option_closed_handler],
     'socket-option-opened': [socket_option_opened],
+
     'sold-options': [sold_options],
     'strike-list': [strike_list],
     'technical-indicators': [lambda api, msg: technical_indicators(api, msg, api.websocket_client.api_dict_clean)],

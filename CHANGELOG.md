@@ -4,6 +4,19 @@ Todos los cambios notables de este proyecto. Formato: [Keep a Changelog](https:/
 
 ***
 
+
+## [2.1.0] - 2026-04-23
+### Added
+- **Reactive WS Dispatcher**: Elimination of 120s latency in `check_win*` methods.
+- **Unified Event Notification**: `option`, `option-closed`, `socket-option-closed`, and `position-changed` now trigger real-time events.
+- **Type Resilience**: Robust handling of int/str IDs in event stores via automatic casting.
+- **Test Suite**: Added `tests/unit/test_ws_event_dispatch.py` (100% pass rate).
+
+### Fixed
+- `check_win_digital` correctly accesses result data from `order_async` fallback.
+- `_wait_result` now supports both single events (legacy) and event stores (dict).
+- Type mismatch bug where string IDs from WS caused missing events in int-keyed stores.
+
 ## [2.0.0] — 2026-04-22 — "API con esteroides"
 
 ### 🔴 Crítico — Bug fixes de runtime
