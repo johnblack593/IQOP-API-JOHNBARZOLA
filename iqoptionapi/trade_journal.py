@@ -162,3 +162,38 @@ class TradeJournal:
             writer.writeheader()
             for t in trades:
                 writer.writerow(asdict(t))
+
+    def record(
+        self,
+        order_id: str | int,
+        result: str,
+        active_id: Optional[int] = None,
+        amount: Optional[float] = None,
+        profit: Optional[float] = None,
+    ) -> None:
+        """
+        Registra o actualiza el resultado de una operación.
+        Wrapper sobre close_trade si el trade ya existe, o persistencia directa.
+        """
+        try:
+            self.close_trade(str(order_id), result, profit or 0.0)
+        except KeyError:
+            # Si el trade no fue abierto con open_trade (ej: legacy o crash), 
+            # creamos un record mínimo para no perder la estadística.
+            record = TradeRecord(
+                trade_id=str(order_id),
+                asset=str(active_id or "unknown"),
+                direction="unknown",
+                amount=amount or 0.0,
+                duration_secs=0,
+                asset_type="unknown",
+                strategy_id="manual",
+                signal_confidence=0.0,
+                open_time=datetime.now(timezone.utc).isoformat(),
+                close_time=datetime.now(timezone.utc).isoformat(),
+                result=result,
+                profit_usd=profit,
+                session_id=self.session_id
+            )
+            self._persist(record)
+

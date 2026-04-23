@@ -26,11 +26,14 @@ class AssetScanner:
 
     def __init__(
         self,
+        api_instance=None,
         min_payout: float = 0.80,
         optimal_vol: float = 0.40,
     ) -> None:
+        self.api = api_instance
         self.min_payout = min_payout
         self.optimal_vol = optimal_vol
+
 
     def score_asset(
         self,
