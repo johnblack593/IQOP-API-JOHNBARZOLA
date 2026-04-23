@@ -1054,7 +1054,7 @@ class IQ_Option:
         self.api.result_event.clear()
         req_id = str(randint(0, 10000))
         self.api.buy_multi_option[req_id] = {"id": None}
-        self.api.buyv3_by_raw_expirations(
+        self.api.buyv3_by_raw_expired(
             float(price), OP_code.ACTIVES[active], str(direction), str(option), int(expired), req_id)
         
         is_ready = self.api.result_event.wait(timeout=15)
@@ -1890,8 +1890,8 @@ class IQ_Option:
             now_date = datetime.fromtimestamp(
                 timestamp) + timedelta(minutes=1, seconds=30)
 
-            while True:
-                time.sleep(0.05)
+            # Refactored to avoid infinite loop and follow S2 stability rules
+            for _ in range(100):
                 if now_date.minute % duration == 0 and time.mktime(now_date.timetuple()) - timestamp > 30:
                     break
                 now_date = now_date + timedelta(minutes=1)
@@ -1900,9 +1900,9 @@ class IQ_Option:
 
         date_formated = str(datetime.utcfromtimestamp(exp).strftime("%Y%m%d%H%M"))
         active_id = str(OP_code.ACTIVES[active])
-        instrument_id = "do" + active_id + "A" + \
-            date_formated[:8] + "D" + date_formated[8:] + \
-            "00T" + str(duration) + "M" + action + "SPT"
+        # S2-T2: Corrected instrument_id format: "do" + ASSET + YYYYMMDDHHMM + "PT" + DURATION + "M" + action + "SPT"
+        instrument_id = "do" + active + date_formated + "PT" + str(duration) + "M" + action + "SPT"
+        
         logger = get_logger(__name__)
         logger.info(instrument_id)
         request_id = self.api.place_digital_option_v2(instrument_id, active_id, amount)
@@ -2049,3 +2049,39 @@ class IQ_Option:
             order_id, instrument_type
         )
         return None
+
+    # ── S2-T1: Blitz Trading ──────────────────────────────────────
+
+    @rate_limited("_order_bucket")
+    def buy_blitz(self, active, amount, action, duration):
+        """
+        Abre una opción Blitz.
+        Los instrumentos Blitz SOLO se obtienen de initialization-data.
+        Retorna (True, order_id) en éxito, (False, None) en fallo.
+        """
+        if active not in self.api.blitz_instruments:
+            get_logger(__name__).error(f"buy_blitz: asset '{active}' not found in blitz catalog. "
+                                       "Ensure initialization-data has been received.")
+            return False, None
+            
+        active_data = self.api.blitz_instruments[active]
+        active_id = active_data["id"]
+        
+        # Blitz duration is in seconds
+        expired = int(self.api.timesync.server_timestamp) + duration
+        
+        self.api.buy_multi_option = {}
+        self.api.result_event.clear()
+        req_id = str(randint(0, 10000))
+        self.api.buy_multi_option[req_id] = {"id": None}
+        
+        # S2-T1: Blitz uses option_type_id 3 (turbo) and binary-options.open-option
+        self.api.buyv3_by_raw_expired(
+            float(amount), active_id, str(action), "turbo", int(expired), req_id)
+            
+        is_ready = self.api.result_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for buy_blitz result")
+            
+        id = self.api.buy_multi_option.get(req_id, {}).get("id")
+        return self.api.result, id
