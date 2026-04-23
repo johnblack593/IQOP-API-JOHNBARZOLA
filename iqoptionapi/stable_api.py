@@ -1052,33 +1052,35 @@ class IQ_Option:
                 # Retornar el primer mensaje disponible (ej: position-changed)
                 for k in ["position-changed", "option-closed", "option"]:
                     if k in async_data:
-                        res = async_data[k]
+                        res = async_data.get(k)
                         break
             
             get_logger(__name__).debug("_wait_result: result for order_id=%s received in %.2fs", order_id, elapsed)
-            
-            # S1-T6: Cleanup event store to prevent memory leaks
+            return res
+
+        except Exception as e:
+            get_logger(__name__).warning("_wait_result error for order_id=%s: %s", order_id, e)
+            return None
+        finally:
+            # S1-T6: Cleanup event store to prevent memory leaks (Garantizado via finally)
             if not isinstance(event_store, threading.Event):
                 try:
                     del event_store[order_id]
-                except KeyError:
+                except (KeyError, UnboundLocalError):
                     pass
-
-            return res
-        except Exception as e:
-            get_logger(__name__).error("_wait_result error: %s", e)
-            return None
 
 
 ##############################################################################################
 
     def check_binary_order(self, order_id, timeout=30.0):
-        # BUG-SPINLOOP-01: Migrado a Event+timeout
-        start_t = time.time()
-        while order_id not in self.api.order_binary and (time.time() - start_t < timeout):
-            self.api.option_closed_event.wait(timeout=1.0)
-            self.api.option_closed_event.clear()
-        return self.api.order_binary.pop(order_id, None)
+        # Sprint 1 refactor: use reactive _wait_result helper
+        result = self._wait_result(
+            order_id=order_id,
+            result_store=self.api.order_binary,
+            event_store=self.api.socket_option_closed_event,
+            timeout=timeout
+        )
+        return result
 
     def check_win(self, id_number, timeout=120.0):
         # BUG-SPINLOOP-01: Refactorizado a _wait_result para evitar while True
@@ -1181,7 +1183,7 @@ class IQ_Option:
             get_logger(__name__).error('**error** def get_betinfo  self.api.get_betinfo reconnect')
             return False, None
             
-        is_ready = self.api.game_betinfo_event.wait(timeout=10)
+        is_ready = self.api.game_betinfo_event[id_number].wait(timeout=10)
         
         if not is_ready:
             get_logger(__name__).warning('**error** get_betinfo time out')
@@ -1217,8 +1219,9 @@ class IQ_Option:
             for idx in range(buy_len):
                 self.api.buyv3(
                     price[idx], OP_code.ACTIVES[ACTIVES[idx]], ACTION[idx], expirations[idx], idx)
-            while len(self.api.buy_multi_option) < buy_len:
-                self.api.result_event.wait(timeout=1)
+            start_multi_t = time.time()
+            while len(self.api.buy_multi_option) < buy_len and time.time() - start_multi_t < 30:
+                self.api.result_event.wait(timeout=0.1)
                 self.api.result_event.clear()
             buy_id = []
             for key in sorted(self.api.buy_multi_option.keys()):
@@ -1247,11 +1250,22 @@ class IQ_Option:
         self.api.buyv3_by_raw_expired(
             float(price), OP_code.ACTIVES[active], str(direction), str(option), int(expired), req_id)
         
-        is_ready = self.api.result_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for buy_by_raw_expirations result")
+        # Wait for either result (success=False) or correlated ID (Sprint 3)
+        start_t = time.time()
+        id = None
+        while time.time() - start_t < 15:
+            id = self.api.buy_multi_option.get(req_id, {}).get("id")
+            if id:
+                break
+            
+            if self.api.buy_multi_option.get(req_id, {}).get("success") == False:
+                break
+                
+            if self.api.result_event.wait(timeout=0.1):
+                self.api.result_event.clear()
         
-        id = self.api.buy_multi_option.get(req_id, {}).get("id")
+        if id is None:
+            get_logger(__name__).warning("buy_by_raw_expirations TIMEOUT or NO ID: req_id=%s", req_id)
         return self.api.result, id
 
     @rate_limited("_order_bucket")
@@ -1281,17 +1295,29 @@ class IQ_Option:
         self.api.buyv3(
             float(price), OP_code.ACTIVES[ACTIVES], str(ACTION), int(expirations), req_id)
         
-        is_ready = self.api.result_event.wait(timeout=15)
+        # Wait for either result (success=False) or correlated ID (Sprint 3)
+        start_t = time.time()
+        id = None
+        while time.time() - start_t < 15:
+            id = self.api.buy_multi_option.get(req_id, {}).get("id")
+            if id:
+                break
+            
+            # Si el result llegó y dice success=False, abortamos
+            if self.api.buy_multi_option.get(req_id, {}).get("success") == False:
+                break
+                
+            if self.api.result_event.wait(timeout=0.1):
+                self.api.result_event.clear()
         
-        id = self.api.buy_multi_option.get(req_id, {}).get("id")
         if id is None:
             if self.api.buy_multi_option.get(req_id, {}).get("message"):
                 self._idempotency.fail(request_id)
                 return False, self.api.buy_multi_option[req_id]["message"]
-            if not is_ready:
-                self._idempotency.fail(request_id)
-                get_logger(__name__).critical("buy() TIMEOUT: request_id=%s", request_id)
-                return False, None
+            
+            self._idempotency.fail(request_id)
+            get_logger(__name__).critical("buy() TIMEOUT or NO ID: request_id=%s req_id=%s", request_id, req_id)
+            return False, None
         
         self._idempotency.confirm(request_id, id)
         return self.api.result, id
