@@ -16,7 +16,7 @@ class Digital_options_place_digital_option(Base):
             "name": "digital-options.place-digital-option",
             "version": "1.0",
             "body": {
-                "user_balance_id": int(self.api.balance_id),
+                "user_balance_id": int(self.api.balance_id or self.api.profile.balance_id),
                 "instrument_id": str(instrument_id),
                 "amount": str(amount)
             }
@@ -52,7 +52,7 @@ class DigitalOptionsPlaceDigitalOptionV2(Base):
                 "asset_id": int(asset_id),
                 "instrument_id": instrument_id,
                 "instrument_index": 0,
-                "user_balance_id": int(self.api.balance_id)
+                "user_balance_id": int(self.api.balance_id or self.api.profile.balance_id)
             }
         }
 

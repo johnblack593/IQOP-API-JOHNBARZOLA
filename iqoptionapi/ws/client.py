@@ -225,6 +225,11 @@ class WebsocketClient(object):
                 ev = getattr(self.api, attr, None)
                 if hasattr(ev, 'set'):
                     ev.set()
+                elif isinstance(ev, (dict, defaultdict)):
+                    # Liberar todos los eventos dentro del defaultdict/dict
+                    for sub_ev in list(ev.values()):
+                        if hasattr(sub_ev, 'set'):
+                            sub_ev.set()
 
         # AUTO-RECONEXIÓN: lanzar en thread daemon para no bloquear on_close
         cb = getattr(self.api, '_reconnect_callback', None)

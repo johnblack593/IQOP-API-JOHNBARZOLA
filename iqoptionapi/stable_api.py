@@ -16,7 +16,7 @@ import iqoptionapi.config as config
 import iqoptionapi
 import logging
 import operator
-from collections import deque
+from collections import deque, defaultdict
 from iqoptionapi.utils import nested_dict
 from iqoptionapi.expiration import get_expiration_time, get_remaning_time
 from datetime import datetime, timedelta
@@ -158,10 +158,12 @@ class IQ_Option:
             "ws.iqoption.com", self.email)
         
         # Initialize event stores required for non-blocking result waits
-        from collections import defaultdict
-        self.api.socket_option_closed_event = defaultdict(threading.Event)
-        self.api.result_event_store = defaultdict(threading.Event)
-        self.api.position_changed_event_store = defaultdict(threading.Event)
+        if not hasattr(self.api, "socket_option_closed_event"):
+            self.api.socket_option_closed_event = defaultdict(threading.Event)
+        if not hasattr(self.api, "result_event_store"):
+            self.api.result_event_store = defaultdict(threading.Event)
+        if not hasattr(self.api, "position_changed_event_store"):
+            self.api.position_changed_event_store = defaultdict(threading.Event)
         check = None
 
         # 2FA--
@@ -638,11 +640,18 @@ class IQ_Option:
     # ______________________________________self.api.getprofile() https________________________________
 
     def get_profile_ansyc(self):
-        self.api.profile_msg_event.clear()
-        self.api.getprofile()
-        is_ready = self.api.profile_msg_event.wait(timeout=config.TIMEOUT_WS_DATA)
-        if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for profile")
+        resp = self.api.getprofile()
+        if resp and resp.status_code == 200:
+            self.api.profile.msg = resp.json()
+            if hasattr(self.api, 'profile_msg_event'):
+                self.api.profile_msg_event.set()
+        
+        if self.api.profile.msg is None:
+            # Fallback a esperar mensaje WS si el HTTP fallo
+            is_ready = self.api.profile_msg_event.wait(timeout=config.TIMEOUT_WS_DATA)
+            if not is_ready:
+                get_logger(__name__).warning("Timeout waiting for profile")
+        
         return self.api.profile.msg
 
 
@@ -974,38 +983,42 @@ class IQ_Option:
         
         Retorna el dict del resultado, o None si vence el timeout.
         """
-        # S7: Asegurar que el ID sea int para coincidir con las llaves del event_store (defaultdict)
         try:
-            order_id = int(order_id)
-        except (ValueError, TypeError):
-            pass
+            # S7: Asegurar que el ID sea int para coincidir con las llaves del event_store (defaultdict)
+            try:
+                order_id = int(order_id)
+            except (ValueError, TypeError):
+                pass
 
-        # S7: Manejar tanto dicts/defaultdicts de eventos como eventos únicos (legacy)
-        if isinstance(event_store, threading.Event):
-            event = event_store
-        else:
-            event = event_store[order_id]
+            # S7: Manejar tanto dicts/defaultdicts de eventos como eventos únicos (legacy)
+            if isinstance(event_store, threading.Event):
+                event = event_store
+            else:
+                event = event_store[order_id]
 
-        fired = event.wait(timeout=timeout)
-        if not fired:
+            fired = event.wait(timeout=timeout)
+            if not fired:
+                return None
+            
+            # Si el result_store tiene un método get_id_data (como listinfodata)
+            if hasattr(result_store, "get_id_data"):
+                return result_store.get_id_data(order_id)
+            
+            # S7: Intentar obtener del store con el ID procesado
+            res = result_store.get(order_id) if result_store is not None else None
+            
+            # Fallback para Digital/CFD: si res es None y es un check_win que usa order_async
+            if res is None and hasattr(self, "get_async_order"):
+                async_data = self.get_async_order(order_id)
+                # Retornar el primer mensaje disponible (ej: position-changed)
+                for k in ["position-changed", "option-closed", "option"]:
+                    if k in async_data:
+                        return async_data[k]
+            
+            return res
+        except Exception as e:
+            get_logger(__name__).error("_wait_result error: %s", e)
             return None
-        
-        # Si el result_store tiene un método get_id_data (como listinfodata)
-        if hasattr(result_store, "get_id_data"):
-            return result_store.get_id_data(order_id)
-        
-        # S7: Intentar obtener del store con el ID procesado
-        res = result_store.get(order_id) if result_store is not None else None
-        
-        # Fallback para Digital/CFD: si res es None y es un check_win que usa order_async
-        if res is None and hasattr(self, "get_async_order"):
-            async_data = self.get_async_order(order_id)
-            # Retornar el primer mensaje disponible (ej: position-changed)
-            for k in ["position-changed", "option-closed", "option"]:
-                if k in async_data:
-                    return async_data[k]
-        
-        return res
 
 
 ##############################################################################################
@@ -1106,7 +1119,7 @@ class IQ_Option:
     def get_betinfo(self, id_number):
         # INPUT:int
         if not hasattr(self.api, "game_betinfo_event"):
-            self.api.game_betinfo_event = threading.Event()
+            self.api.game_betinfo_event = defaultdict(threading.Event)
             
         self.api.game_betinfo.isSuccessful = None
         self.api.game_betinfo_event.clear()
