@@ -14,6 +14,12 @@ class Login(Resource):
 
         :returns: The instance of :class:`requests.Response`.
         """
+        if headers is None:
+            headers = {
+                "Origin": "https://iqoption.com",
+                "Referer": "https://iqoption.com/en/login",
+                "Accept": "application/json"
+            }
         return self.api.send_http_request_v2(method="POST", url="https://auth.iqoption.com/api/v2/login",data=data, headers=headers)
 
     def __call__(self, username, password):

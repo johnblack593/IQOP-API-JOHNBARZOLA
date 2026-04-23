@@ -8,7 +8,7 @@ import certifi
 import ssl
 import atexit
 import websocket
-from collections import deque
+from collections import deque, defaultdict
 from iqoptionapi.http.login import Login
 from iqoptionapi.http.loginv2 import Loginv2
 from iqoptionapi.http.logout import Logout
@@ -153,7 +153,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         :param str password: The password of a IQ Option server.
         :param dict proxies: (optional) The http request proxies.
         """
-        self.https_url = "https://{host}/api".format(host=host)
+        self.https_url = "https://iqoption.com/api"
         self.wss_url = "wss://{host}/echo/websocket".format(host=host)
         self.websocket_client = None
         self.session = get_shared_session()
@@ -204,7 +204,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.position_event = threading.Event()
         self.sold_options_respond_event = threading.Event()
         self.sold_digital_options_respond_event = threading.Event()
-        self.game_betinfo_event = threading.Event() # Unified alias
+        self.game_betinfo_event = defaultdict(threading.Event) # Unified alias
         self.game_betinfo_isSuccessful_event = self.game_betinfo_event
         self.api_option_init_all_result_v2_event = threading.Event()
         self.api_option_init_all_result_event = threading.Event()
@@ -300,7 +300,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                                         params=params,
                                         headers=headers,
                                         proxies=self.proxies,
-                                        timeout=15)
+                                        timeout=30)
         logger.debug(response)
         logger.debug(response.text)
         logger.debug(response.headers)
