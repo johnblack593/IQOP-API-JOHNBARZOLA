@@ -39,7 +39,9 @@ class PositionChanged:
                 api.order_async[order_id][message.get("name")] = message
 
             status = msg.get("status")
-            if status in ("closed", "expired"):
+            logger.debug("position_changed raw status=%r source=%r order_id=%s", status, source, order_id)
+            
+            if status in ("closed", "expired", "canceled", "sold"):
                 ev_global = getattr(api, "position_changed_event", None)
                 if ev_global:
                     ev_global.set()
@@ -50,7 +52,7 @@ class PositionChanged:
                 if hasattr(api, "result_event_store"):
                     api.result_event_store[order_id].set()
                     
-                logger.debug("position_changed: order_id=%s closed notified", order_id)
+                logger.debug("position_changed: order_id=%s status=%s signaled", order_id, status)
 
         except Exception as e:
             logger.warning("position_changed handler error: %s", e)

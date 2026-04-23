@@ -442,8 +442,9 @@ class IQ_Option:
 
     def instruments_input_to_ACTIVES(self, type):
         instruments = self.get_instruments(type)
-        for ins in instruments["instruments"]:
-            OP_code.ACTIVES[ins["id"]] = ins["active_id"]
+        if instruments and isinstance(instruments, dict) and "instruments" in instruments:
+            for ins in instruments["instruments"]:
+                OP_code.ACTIVES[ins["id"]] = ins["active_id"]
 
     def instruments_input_all_in_ACTIVES(self):
         self.instruments_input_to_ACTIVES("crypto")
@@ -452,10 +453,14 @@ class IQ_Option:
 
     def get_ALL_Binary_ACTIVES_OPCODE(self):
         init_info = self.get_all_init()
+        if not init_info or not isinstance(init_info, dict) or "result" not in init_info:
+            return
+
         for dirr in (["binary", "turbo"]):
-            for i in init_info["result"][dirr]["actives"]:
-                OP_code.ACTIVES[(init_info["result"][dirr]
-                                 ["actives"][i]["name"]).split(".")[1]] = int(i)
+            if dirr in init_info["result"]:
+                for i in init_info["result"][dirr]["actives"]:
+                    OP_code.ACTIVES[(init_info["result"][dirr]
+                                     ["actives"][i]["name"]).split(".")[1]] = int(i)
 
     # _________________________self.api.get_api_option_init_all() wss______________
     def get_all_init(self):
@@ -1012,6 +1017,9 @@ class IQ_Option:
         Retorna el dict del resultado, o None si vence el timeout.
         """
         try:
+            start_wait = time.time()
+            get_logger(__name__).debug("_wait_result: waiting for order_id=%s", order_id)
+            
             # S7: Asegurar que el ID sea int para coincidir con las llaves del event_store (defaultdict)
             try:
                 order_id = int(order_id)
@@ -1025,15 +1033,18 @@ class IQ_Option:
                 event = event_store[order_id]
 
             fired = event.wait(timeout=timeout)
+            elapsed = time.time() - start_wait
+            
             if not fired:
+                get_logger(__name__).debug("_wait_result: timeout for order_id=%s after %.2fs", order_id, elapsed)
                 return None
             
             # Si el result_store tiene un método get_id_data (como listinfodata)
             if hasattr(result_store, "get_id_data"):
-                return result_store.get_id_data(order_id)
-            
-            # S7: Intentar obtener del store con el ID procesado
-            res = result_store.get(order_id) if result_store is not None else None
+                res = result_store.get_id_data(order_id)
+            else:
+                # S7: Intentar obtener del store con el ID procesado
+                res = result_store.get(order_id) if result_store is not None else None
             
             # Fallback para Digital/CFD: si res es None y es un check_win que usa order_async
             if res is None and hasattr(self, "get_async_order"):
@@ -1041,7 +1052,10 @@ class IQ_Option:
                 # Retornar el primer mensaje disponible (ej: position-changed)
                 for k in ["position-changed", "option-closed", "option"]:
                     if k in async_data:
-                        return async_data[k]
+                        res = async_data[k]
+                        break
+            
+            get_logger(__name__).debug("_wait_result: result for order_id=%s received in %.2fs", order_id, elapsed)
             
             # S1-T6: Cleanup event store to prevent memory leaks
             if not isinstance(event_store, threading.Event):
@@ -1616,7 +1630,7 @@ class IQ_Option:
         result = self._wait_result(
             order_id=buy_order_id,
             result_store=None, # Usamos get_async_order que ya consulta el store correcto
-            event_store=self.api.position_changed_event_store,
+            event_store=self.api.result_event_store,
             timeout=timeout
         )
         
