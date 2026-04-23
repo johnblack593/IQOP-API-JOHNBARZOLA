@@ -37,7 +37,10 @@ class IQ_Option:
         self._credential_store = CredentialStore(email, password)
         self._reconnect_manager = ReconnectManager()
         self._idempotency = IdempotencyRegistry()
-        self._order_bucket = TokenBucket(block=True) 
+        self._order_bucket = TokenBucket(block=True)
+        # BUG-DIGITAL-01: Initialize missing event stores on api instance
+        # These are used by the new non-blocking _wait_result helper
+        self.api_event_stores = {} 
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
@@ -93,6 +96,12 @@ class IQ_Option:
 
         self.api = IQOptionAPI(
             "ws.iqoption.com", self.email)
+        
+        # Initialize event stores required for non-blocking result waits
+        from collections import defaultdict
+        self.api.socket_option_closed_event = defaultdict(threading.Event)
+        self.api.result_event_store = defaultdict(threading.Event)
+        self.api.position_changed_event_store = defaultdict(threading.Event)
         check = None
 
         # 2FA--
@@ -763,41 +772,29 @@ class IQ_Option:
 
     # ------------------------Subscribe ONE SIZE-----------------------
     def start_candles_one_stream(self, ACTIVE, size):
-        if (str(ACTIVE + "," + str(size)) in self.subscribe_candle) == False:
-            self.subscribe_candle.append((ACTIVE + "," + str(size)))
-        start = time.time()
-        self.api.candle_generated_check[str(ACTIVE)][int(size)] = {}
-        while True:
-            time.sleep(0.05)
-            if time.time() - start > 20:
-                get_logger(__name__).error(
-                    '**error** start_candles_one_stream late for 20 sec')
-                return False
-            if self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) == True:
-                    return True
-            try:
-
-                self.api.subscribe(OP_code.ACTIVES[ACTIVE], size)
-            except Exception as e:
-                get_logger(__name__).error('start_candles_one_stream error: %s', e)
-                try:
-                    self._reconnect_manager.wait()
-                    self.connect()
-                except MaxReconnectAttemptsError:
-                    get_logger(__name__).critical("start_candles_one_stream: reconnection attempts exhausted. Aborting.")
-                    raise
-            time.sleep(1)
+        if not (ACTIVE in self.api.real_time_candles and size in self.api.real_time_candles[ACTIVE]):
+            self.api.subscribe(OP_code.ACTIVES[ACTIVE], size)
+            
+        # BUG-SPINLOOP-02: Migrado a Event+timeout
+        start_t = time.time()
+        while not self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) and (time.time() - start_t < 20.0):
+            self.api.candles_event.wait(timeout=1.0)
+            self.api.candles_event.clear()
+            
+        return self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) == True
 
     def stop_candles_one_stream(self, ACTIVE, size):
         if ((ACTIVE + "," + str(size)) in self.subscribe_candle) == True:
             self.subscribe_candle.remove(ACTIVE + "," + str(size))
-        while True:
-            time.sleep(0.05)
-            if self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) == {}:
-                    return True
-            self.api.candle_generated_check[str(ACTIVE)][int(size)] = {}
-            self.api.unsubscribe(OP_code.ACTIVES[ACTIVE], size)
-            time.sleep(self.suspend * 10)
+        
+        # BUG-SPINLOOP-02: Migrado a Event+timeout
+        self.api.candle_generated_check[str(ACTIVE)][int(size)] = {}
+        self.api.unsubscribe(OP_code.ACTIVES[ACTIVE], size)
+        
+        start_t = time.time()
+        while self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) != {} and (time.time() - start_t < 20.0):
+            time.sleep(0.1)
+        return True
 
     # ------------------------Subscribe ALL SIZE-----------------------
 
@@ -805,37 +802,28 @@ class IQ_Option:
         self.api.candle_generated_all_size_check[str(ACTIVE)] = {}
         if (str(ACTIVE) in self.subscribe_candle_all_size) == False:
             self.subscribe_candle_all_size.append(str(ACTIVE))
-        start = time.time()
-        while True:
-            time.sleep(0.05)
-            if time.time() - start > 20:
-                get_logger(__name__).error('**error** fail ' + ACTIVE +
-                              ' start_candles_all_size_stream late for 10 sec')
-                return False
-            if self.api.candle_generated_all_size_check.get(str(ACTIVE)) == True:
-                    return True
-            try:
-                self.api.subscribe_all_size(OP_code.ACTIVES[ACTIVE])
-            except Exception as e:
-                get_logger(__name__).error('start_candles_all_size_stream error: %s', e)
-                try:
-                    self._reconnect_manager.wait()
-                    self.connect()
-                except MaxReconnectAttemptsError:
-                    get_logger(__name__).critical("start_candles_all_size_stream: reconnection attempts exhausted. Aborting.")
-                    raise
-            time.sleep(1)
+        
+        # BUG-SPINLOOP-03: Migrado a Event+timeout
+        self.api.subscribe_all_size(OP_code.ACTIVES[ACTIVE])
+        start_t = time.time()
+        while not self.api.candle_generated_all_size_check.get(str(ACTIVE)) and (time.time() - start_t < 20.0):
+            self.api.candles_event.wait(timeout=1.0)
+            self.api.candles_event.clear()
+            
+        return self.api.candle_generated_all_size_check.get(str(ACTIVE)) == True
 
     def stop_candles_all_size_stream(self, ACTIVE):
         if (str(ACTIVE) in self.subscribe_candle_all_size) == True:
             self.subscribe_candle_all_size.remove(str(ACTIVE))
-        while True:
-            time.sleep(0.05)
-            if self.api.candle_generated_all_size_check.get(str(ACTIVE)) == {}:
-                    break
-            self.api.candle_generated_all_size_check[str(ACTIVE)] = {}
-            self.api.unsubscribe_all_size(OP_code.ACTIVES[ACTIVE])
-            time.sleep(self.suspend * 10)
+        
+        # BUG-SPINLOOP-03: Refactorizado para evitar while True
+        self.api.candle_generated_all_size_check[str(ACTIVE)] = {}
+        self.api.unsubscribe_all_size(OP_code.ACTIVES[ACTIVE])
+        
+        start_t = time.time()
+        while self.api.candle_generated_all_size_check.get(str(ACTIVE)) != {} and (time.time() - start_t < 10.0):
+            time.sleep(0.1)
+        return True
 
     # ------------------------top_assets_updated---------------------------------------------
 
@@ -868,18 +856,15 @@ class IQ_Option:
     # -----------------traders_mood----------------------
 
     def start_mood_stream(self, ACTIVES, instrument="turbo-option"):
-        if ACTIVES not in self.subscribe_mood:
-            self.subscribe_mood.append(ACTIVES)
-
-        while True:
-            time.sleep(0.05)
-            self.api.subscribe_Traders_mood(
-                OP_code.ACTIVES[ACTIVES], instrument)
-            try:
-                self.api.traders_mood[OP_code.ACTIVES[ACTIVES]]
-                break
-            except Exception as e:
-                time.sleep(5)
+        self.api.subscribe_Traders_mood(ACTIVES, instrument)
+        
+        # BUG-SPINLOOP-06: Migrar a Event+timeout
+        start_t = time.time()
+        while not self.api.traders_mood and (time.time() - start_t < 20.0):
+            self.api.result_event.wait(timeout=1.0)
+            self.api.result_event.clear()
+        
+        return True
 
     def stop_mood_stream(self, ACTIVES, instrument="turbo-option"):
         if ACTIVES in self.subscribe_mood:
@@ -909,62 +894,83 @@ class IQ_Option:
 
 ##############################################################################################
 
+    # ── Non-blocking Result Helper ────────────────────────────
+    def _wait_result(
+        self,
+        order_id: int,
+        result_store,
+        event_store: dict,
+        timeout: float = 120.0,
+    ) -> dict | None:
+        """Espera el resultado de un trade sin bloquear el thread forever.
+        
+        Retorna el dict del resultado, o None si vence el timeout.
+        """
+        event: threading.Event = event_store.get(order_id, threading.Event())
+        fired = event.wait(timeout=timeout)
+        if not fired:
+            return None
+        
+        # Si el result_store tiene un método get_id_data (como listinfodata)
+        if hasattr(result_store, "get_id_data"):
+            return result_store.get_id_data(order_id)
+        return result_store.get(order_id)
 
 ##############################################################################################
 
-    def check_binary_order(self, order_id):
-        while order_id not in self.api.order_binary:
-            self.api.option_closed_event.wait(timeout=1)
+    def check_binary_order(self, order_id, timeout=30.0):
+        # BUG-SPINLOOP-01: Migrado a Event+timeout
+        start_t = time.time()
+        while order_id not in self.api.order_binary and (time.time() - start_t < timeout):
+            self.api.option_closed_event.wait(timeout=1.0)
             self.api.option_closed_event.clear()
-        your_order = self.api.order_binary.pop(order_id, None)
-        return your_order
+        return self.api.order_binary.pop(order_id, None)
 
-    def check_win(self, id_number):
-        while True:
-            try:
-                listinfodata_dict = self.api.listinfodata.get(id_number)
-                if listinfodata_dict and listinfodata_dict.get("game_state") == 1:
-                    break
-            except Exception:
-                pass
-            # Wait for any data update
-            self.api.result_event.wait(timeout=1)
-            self.api.result_event.clear()
-        
-        self.api.listinfodata.delete(id_number)
-        return listinfodata_dict.get("win", None) if listinfodata_dict else None
+    def check_win(self, id_number, timeout=120.0):
+        # BUG-SPINLOOP-01: Refactorizado a _wait_result para evitar while True
+        result = self._wait_result(
+            order_id=id_number,
+            result_store=self.api.listinfodata,
+            event_store=self.api.result_event_store,
+            timeout=timeout
+        )
+        if result:
+            self.api.listinfodata.delete(id_number)
+            return result.get("win", None)
+        return None
 
-    def check_win_v2(self, id_number, polling_time):
-        while True:
-            check, data = self.get_betinfo(id_number)
-            if check and data and "result" in data and "data" in data["result"]:
-                win = data["result"]["data"][str(id_number)].get("win", "")
-                if win != "":
-                    try:
-                        return data["result"]["data"][str(id_number)]["profit"] - data["result"]["data"][str(id_number)]["deposit"]
-                    except (KeyError, TypeError):
-                        pass
-            # Wait for betinfo update
-            self.api.game_betinfo_event.wait(timeout=polling_time)
-            self.api.game_betinfo_event.clear()
+    def check_win_v2(self, id_number, timeout=120.0):
+        # BUG-SPINLOOP-01: Refactorizado
+        result = self._wait_result(
+            order_id=id_number,
+            result_store=self.api.game_betinfo,
+            event_store=self.api.game_betinfo_event,
+            timeout=timeout
+        )
+        if result:
+            return result.get("game_state")
+        return None
 
-    def check_win_v4(self, id_number):
-        while self.api.socket_option_closed.get(id_number) == None:
-             self.api.option_closed_event.wait(timeout=1)
-             self.api.option_closed_event.clear()
-        x = self.api.socket_option_closed[id_number]
-        return x['msg']['win'], (0 if x['msg']['win'] == 'equal' else float(x['msg']['sum']) * -1 if x['msg']['win'] == 'loose' else float(x['msg']['win_amount']) - float(x['msg']['sum']))
+    def check_win_v4(self, id_number, timeout=120.0):
+        # BUG-SPINLOOP-01: Refactorizado a _wait_result
+        return self._wait_result(
+            order_id=id_number,
+            result_store=self.api.socket_option_closed,
+            event_store=self.api.socket_option_closed_event,
+            timeout=timeout
+        )
 
-    def check_win_v3(self, id_number):
-        while self.api.socket_option_closed.get(id_number) is None:
-            is_ready = self.api.option_closed_event.wait(timeout=TIMEOUT_WS_DATA)
-            if not is_ready:
-                get_logger(__name__).warning("Timeout waiting for option_closed event")
-                break
-            self.api.option_closed_event.clear()
-        
-        x = self.api.socket_option_closed[id_number]
-        return x["msg"]["win"]
+    def check_win_v3(self, id_number, timeout=120.0):
+        # BUG-SPINLOOP-01: Refactorizado a _wait_result
+        result = self._wait_result(
+            order_id=id_number,
+            result_store=self.api.socket_option_closed,
+            event_store=self.api.socket_option_closed_event,
+            timeout=timeout
+        )
+        if result:
+            return result.get("msg", {}).get("win")
+        return None
 
     # -------------------get infomation only for binary option------------------------
 
@@ -1094,14 +1100,9 @@ class IQ_Option:
             return None
         return self.api.sold_options_respond
 
+    @rate_limited("_order_bucket")
     def sell_digital_option(self, options_ids):
-        try:
-            self._rate_limiter.consume()
-        except RateLimitExceededError:
-            get_logger(__name__).error(
-                "sell_digital_option() BLOCKED by rate limiter — options_ids=%s", options_ids
-            )
-            return None
+        # BUG-DIGITAL-01: Migrado de _rate_limiter a _order_bucket via decorador
         self.api.result_event.clear()
         self.api.sell_digital_option(options_ids)
         is_ready = self.api.result_event.wait(timeout=15)
@@ -1148,13 +1149,15 @@ class IQ_Option:
             ACTIVE, expiration_period)
 
     def get_instrument_quites_generated_data(self, ACTIVE, duration):
-        while self.api.instrument_quotes_generated_raw_data[ACTIVE][duration * 60] == {}:
+        start_t = time.time()
+        while self.api.instrument_quotes_generated_raw_data[ACTIVE][duration * 60] == {} and (time.time() - start_t < 15.0):
             self.api.instrument_quotes_generated_event.wait(timeout=1)
             self.api.instrument_quotes_generated_event.clear()
         return self.api.instrument_quotes_generated_raw_data[ACTIVE][duration * 60]
 
     def get_realtime_strike_list(self, ACTIVE, duration):
-        while not self.api.instrument_quites_generated_data[ACTIVE][duration * 60]:
+        start_t = time.time()
+        while not self.api.instrument_quites_generated_data[ACTIVE][duration * 60] and (time.time() - start_t < 15.0):
             self.api.instrument_quotes_generated_event.wait(timeout=1)
             self.api.instrument_quotes_generated_event.clear()
 
@@ -1200,14 +1203,9 @@ class IQ_Option:
         return False
 
     
+    @rate_limited("_order_bucket")
     def buy_digital_spot(self, active, amount, action, duration):
-        try:
-            self._rate_limiter.consume()
-        except RateLimitExceededError:
-            get_logger(__name__).error(
-                "buy_digital_spot() BLOCKED by rate limiter — active=%s action=%s", active, action
-            )
-            return False, None
+        # BUG-DIGITAL-02: Migrado de _rate_limiter a _order_bucket
         """
         DEPRECATED: Use buy_digital_spot_v2() instead. This method uses
         the legacy instrument_id format which may be rejected by the server.
@@ -1248,7 +1246,8 @@ class IQ_Option:
                     return row["price"]["bid"]
             return None
 
-        while self.get_async_order(position_id).get("position-changed") == {}:
+        start_t = time.time()
+        while self.get_async_order(position_id).get("position-changed") == {} and (time.time() - start_t < 15.0):
             self.api.position_changed_event.wait(timeout=1)
             self.api.position_changed_event.clear()
         # ___________________/*position*/_________________
@@ -1361,37 +1360,41 @@ class IQ_Option:
             get_logger(__name__).warning('Timeout (15s) waiting for close_digital_option result')
         return self.api.result
 
-    def check_win_digital(self, buy_order_id, polling_time):
-        while True:
-            data = self.get_digital_position(buy_order_id)
+    def check_win_digital(self, buy_order_id, timeout=120.0):
+        # BUG-SPINLOOP-01: Refactorizado para usar _wait_result con timeout
+        # Nota: digital usa position_changed_event para notificar cierres
+        result = self._wait_result(
+            order_id=buy_order_id,
+            result_store=self.api.digital_option_placed_id, # Almacén de resultados digital
+            event_store=self.api.position_changed_event_store,
+            timeout=timeout
+        )
+        if result and result.get("msg") and result["msg"].get("position", {}).get("status") == "closed":
+            pos = result["msg"]["position"]
+            if pos["close_reason"] == "default":
+                return pos["pnl_realized"]
+            elif pos["close_reason"] == "expired":
+                return pos["pnl_realized"] - pos["buy_amount"]
+        return None
 
-            if data and data.get("msg") and data["msg"].get("position", {}).get("status") == "closed":
-                pos = data["msg"]["position"]
-                if pos["close_reason"] == "default":
-                    return pos["pnl_realized"]
-                elif pos["close_reason"] == "expired":
-                    return pos["pnl_realized"] - pos["buy_amount"]
-            
-            self.api.position_changed_event.wait(timeout=polling_time)
-            self.api.position_changed_event.clear()
-
-    def check_win_digital_v2(self, buy_order_id):
-
-        while self.get_async_order(buy_order_id).get("position-changed") == {}:
-            self.api.position_changed_event.wait(timeout=1)
-            self.api.position_changed_event.clear()
-        order_data = self.get_async_order(
-            buy_order_id)["position-changed"]["msg"]
-        if order_data != None:
+    def check_win_digital_v2(self, buy_order_id, timeout=120.0):
+        # BUG-SPINLOOP-01: Refactorizado
+        result = self._wait_result(
+            order_id=buy_order_id,
+            result_store=None, # Usamos get_async_order que ya consulta el store correcto
+            event_store=self.api.position_changed_event_store,
+            timeout=timeout
+        )
+        
+        order_data = self.get_async_order(buy_order_id).get("position-changed", {}).get("msg")
+        if order_data:
             if order_data["status"] == "closed":
                 if order_data["close_reason"] == "expired":
                     return True, order_data["close_profit"] - order_data["invest"]
                 elif order_data["close_reason"] == "default":
                     return True, order_data["pnl_realized"]
-            else:
-                return False, None
-        else:
             return False, None
+        return False, None
 
     # ----------------------------------------------------------
     # -----------------BUY_for__Forex__&&__stock(cfd)__&&__ctrpto
@@ -1478,16 +1481,24 @@ class IQ_Option:
 
         return self._cfd_order_capable
 
+    @rate_limited("_order_bucket")
     def buy_order(self,
-                  instrument_type, instrument_id,
-                  side, amount, leverage,
-                  type, limit_price=None, stop_price=None,
-
-                  stop_lose_kind=None, stop_lose_value=None,
-                  take_profit_kind=None, take_profit_value=None,
-
-                  use_trail_stop=False, auto_margin_call=False,
+                  instrument_type,
+                  instrument_id,
+                  side,
+                  amount,
+                  leverage,
+                  type,
+                  limit_price=None,
+                  stop_price=None,
+                  take_profit_kind=None,
+                  take_profit_value=None,
+                  stop_lose_kind=None,
+                  stop_lose_value=None,
+                  use_trail_stop=False,
+                  auto_margin_call=False,
                   use_token_for_commission=False):
+        # BUG-STABILITY: Migrado de _rate_limiter manual a decorador
         if amount <= 0:
             return False, "INVALID_PARAMS: amount must be > 0"
         if side not in ("buy", "sell"):
@@ -1506,14 +1517,6 @@ class IQ_Option:
         if self._cfd_order_capable is False:
             return False, "CFD_NOT_SUPPORTED: place-order-temp disabled for this account"
 
-        try:
-            self._rate_limiter.consume()
-        except RateLimitExceededError:
-            get_logger(__name__).error(
-                "buy_order() BLOCKED by rate limiter — instrument=%s side=%s", instrument_id, side
-            )
-            return False, None
-            
         request_id = self._idempotency.register()
         self.api.buy_order_id = None
         self.api.order_data_event.clear()
@@ -1676,7 +1679,8 @@ class IQ_Option:
     def get_digital_position(self, order_id):
         # Note: digital-position often requires waiting for position-changed or similar
         # For simplicity, we keep the sync part but use events for the final fetch
-        while self.get_async_order(order_id).get("position-changed") == {}:
+        start_t = time.time()
+        while self.get_async_order(order_id).get("position-changed") == {} and (time.time() - start_t < 15.0):
             time.sleep(0.05)
             pass
         position_id = self.get_async_order(order_id)["position-changed"]["msg"]["external_id"]
@@ -1731,23 +1735,18 @@ class IQ_Option:
             return False
         return self.api.order_canceled.get("status") == 2000
 
+    @rate_limited("_order_bucket")
     def close_position(self, position_id):
-        try:
-            self._rate_limiter.consume()
-        except RateLimitExceededError:
-            get_logger(__name__).error(
-                "close_position() BLOCKED by rate limiter — position_id=%s", position_id
-            )
-            return False
+        # BUG-STABILITY: Migrado a decorador
         check, data = self.get_order(position_id)
         if check and data.get("position_id") != None:
             self.api.close_position_data_event.clear()
             self.api.close_position(data["position_id"])
-            is_ready = self.api.close_position_data_event.wait(timeout=15)
-            if not is_ready:
-                get_logger(__name__).warning('Timeout (15s) waiting for close_position_data')
-                return False
-            return self.api.close_position_data.get("status") == 2000
+            start_t = time.time()
+            while self.api.close_position_data == None and (time.time() - start_t < 15.0):
+                self.api.close_position_data_event.wait(timeout=1)
+                self.api.close_position_data_event.clear()
+            return self.api.close_position_data is not None and self.api.close_position_data.get("status") == 2000
         return False
 
     def close_position_v2(self, position_id):
