@@ -869,7 +869,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         return response
 
     def send_ssid(self) -> bool:
-        from iqoptionapi.config import TIMEOUT_SSID_AUTH, POLLING_FAST
+        from iqoptionapi.config import TIMEOUT_SSID_AUTH, POLLING_INTERVAL_FAST
         self.profile.msg = None
         if hasattr(self, 'profile_msg_event'):
             self.profile_msg_event.clear()
@@ -887,7 +887,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             import time
             start = time.time()
             while self.profile.msg is None:
-                time.sleep(POLLING_FAST)
+                time.sleep(POLLING_INTERVAL_FAST)
                 if time.time() - start > TIMEOUT_SSID_AUTH:
                     get_logger(__name__).error("send_ssid: legacy timeout")
                     return False

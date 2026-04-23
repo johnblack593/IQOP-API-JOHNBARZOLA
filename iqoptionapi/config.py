@@ -17,7 +17,7 @@ requieran valores distintos — pasa los valores como parámetros.
 TIMEOUT_WS_CONNECT: int = 15
 TIMEOUT_WS_DATA: int = 30
 TIMEOUT_CANDLE_STREAM: int = 20
-TIMEOUT_LEADERBOARD: int = 15
+TIMEOUT_LEADER_BOARD: int = 15
 TIMEOUT_BALANCE_RESET: int = 15
 TIMEOUT_SSID_AUTH: int = 15
 TIMEOUT_ALL_INIT: int = 30      # para get_all_init
@@ -30,8 +30,8 @@ HEARTBEAT_CHECK_INTERVAL: float = 10.0  # cada cuántos segundos el watchdog rev
 # --- Polling intervals (segundos) ---
 # ADVERTENCIA: estos valores existen solo para compatibilidad
 # con código legacy. Todo código nuevo usa threading.Event.wait().
-POLLING_FAST: float = 0.05   # 50ms — eventos de datos WS
-POLLING_SLOW: float = 0.5    # 500ms — operaciones lentas
+POLLING_INTERVAL_FAST: float = 0.05   # 50ms — eventos de datos WS
+POLLING_INTERVAL_SLOW: float = 0.5    # 500ms — operaciones lentas
 
 # MIGRACIÓN: estos valores se eliminan cuando todos los spin-loops
 # sean migrados a threading.Event.wait(). Ver S1-02 tracking.
@@ -53,7 +53,7 @@ ORDER_COOLDOWN_SECS: float = 2.0
 # --- Reconexión ---
 RECONNECT_BASE_DELAY: float = 2.0   # base exponencial (segundos)
 RECONNECT_MAX_DELAY: float = 60.0   # techo máximo (segundos)
-RECONNECT_MAX_ATTEMPTS: int = 10    # intentos antes de error
+MAX_RECONNECT_ATTEMPTS: int = 10    # intentos antes de error
 RECONNECT_JITTER: float = 0.5       # ±50% jitter
 
 # --- Candle sizes válidos (segundos) ---
