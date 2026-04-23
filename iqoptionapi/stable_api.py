@@ -965,7 +965,7 @@ class IQ_Option:
     # ── Non-blocking Result Helper ────────────────────────────
     def _wait_result(
         self,
-        order_id: int,
+        order_id: int | str,
         result_store,
         event_store: dict,
         timeout: float = 120.0,
@@ -974,7 +974,18 @@ class IQ_Option:
         
         Retorna el dict del resultado, o None si vence el timeout.
         """
-        event: threading.Event = event_store.get(order_id, threading.Event())
+        # S7: Asegurar que el ID sea int para coincidir con las llaves del event_store (defaultdict)
+        try:
+            order_id = int(order_id)
+        except (ValueError, TypeError):
+            pass
+
+        # S7: Manejar tanto dicts/defaultdicts de eventos como eventos únicos (legacy)
+        if isinstance(event_store, threading.Event):
+            event = event_store
+        else:
+            event = event_store[order_id]
+
         fired = event.wait(timeout=timeout)
         if not fired:
             return None
@@ -982,7 +993,20 @@ class IQ_Option:
         # Si el result_store tiene un método get_id_data (como listinfodata)
         if hasattr(result_store, "get_id_data"):
             return result_store.get_id_data(order_id)
-        return result_store.get(order_id)
+        
+        # S7: Intentar obtener del store con el ID procesado
+        res = result_store.get(order_id) if result_store is not None else None
+        
+        # Fallback para Digital/CFD: si res es None y es un check_win que usa order_async
+        if res is None and hasattr(self, "get_async_order"):
+            async_data = self.get_async_order(order_id)
+            # Retornar el primer mensaje disponible (ej: position-changed)
+            for k in ["position-changed", "option-closed", "option"]:
+                if k in async_data:
+                    return async_data[k]
+        
+        return res
+
 
 ##############################################################################################
 
@@ -1499,20 +1523,27 @@ class IQ_Option:
 
     def check_win_digital(self, buy_order_id, timeout=120.0):
         # BUG-SPINLOOP-01: Refactorizado para usar _wait_result con timeout
-        # Nota: digital usa position_changed_event para notificar cierres
+        # S7: Ahora usa el store reactivo position_changed_event_store
         result = self._wait_result(
             order_id=buy_order_id,
-            result_store=self.api.digital_option_placed_id, # Almacén de resultados digital
+            result_store=None, # _wait_result usará get_async_order internamente
             event_store=self.api.position_changed_event_store,
             timeout=timeout
         )
-        if result and result.get("msg") and result["msg"].get("position", {}).get("status") == "closed":
-            pos = result["msg"]["position"]
+        
+        if not result:
+            return None
+
+        # El resultado puede venir directo del message['msg'] si _wait_result hizo fallback a get_async_order
+        msg = result.get("msg") if "msg" in result else result
+        pos = msg.get("position") if isinstance(msg, dict) else None
+        
+        if pos and pos.get("status") == "closed":
             profit = 0.0
-            if pos["close_reason"] == "default":
-                profit = pos["pnl_realized"]
-            elif pos["close_reason"] == "expired":
-                profit = pos["pnl_realized"] - pos["buy_amount"]
+            if pos.get("close_reason") == "default":
+                profit = pos.get("pnl_realized", 0.0)
+            elif pos.get("close_reason") == "expired":
+                profit = pos.get("pnl_realized", 0.0) - pos.get("buy_amount", 0.0)
             
             if hasattr(self, 'trade_journal') and self.trade_journal is not None:
                 res_str = "win" if profit > 0 else ("loose" if profit < 0 else "equal")
@@ -1528,6 +1559,7 @@ class IQ_Option:
                     get_logger(__name__).warning("trade_journal.record failed: %s", e)
             return profit
         return None
+
 
     def check_win_digital_v2(self, buy_order_id, timeout=120.0):
         # BUG-SPINLOOP-01: Refactorizado
@@ -1779,8 +1811,14 @@ class IQ_Option:
             return False, None
 
     def get_async_order(self, buy_order_id):
+        # S7: Asegurar int-casting para búsqueda en defaultdict/dict
+        try:
+            buy_order_id = int(buy_order_id)
+        except (ValueError, TypeError):
+            pass
         # name': 'position-changed', 'microserviceName': "portfolio"/"digital-options"
-        return self.api.order_async[buy_order_id]
+        return self.api.order_async.get(buy_order_id, {})
+
 
     def get_order(self, buy_order_id):
         self.api.order_data_event.clear()
