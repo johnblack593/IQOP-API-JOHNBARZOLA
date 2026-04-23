@@ -69,7 +69,37 @@ ENV_PASSWORD: str = "IQ_PASSWORD"
 ENV_ACCOUNT_TYPE: str = "IQ_ACCOUNT_TYPE"
 
 # --- Signal Engine ---
-SIGNAL_MIN_CONFIDENCE: float = 0.5    # umbral m�nimo para ejecutar se�al
-SIGNAL_MAX_AMOUNT:     float = 10.0   # monto m�ximo por operaci�n (USD)
-SIGNAL_DEFAULT_DURATION: int = 60     # duraci�n por defecto (segundos)
-CANDLE_HISTORY_SIZE:   int = 100      # velas a cargar para an�lisis
+SIGNAL_MIN_CONFIDENCE: float = 0.5    # umbral mínimo para ejecutar señal
+SIGNAL_MAX_AMOUNT:     float = 10.0   # monto máximo por operación (USD)
+SIGNAL_DEFAULT_DURATION: int = 60     # duración por defecto (segundos)
+CANDLE_HISTORY_SIZE:   int = 100      # velas a cargar para análisis
+
+# --- Circuit Breaker ---
+CB_MAX_CONSECUTIVE_LOSSES: int   = 3
+CB_MAX_SESSION_LOSS_USD:   float = 10.0
+CB_MAX_DRAWDOWN_PCT:       float = 0.10
+CB_RECOVERY_WAIT_SECS:     float = 300.0
+
+# --- Trade Journal ---
+JOURNAL_DIR: str = "data/journal"
+
+# --- Asset Scanner ---
+SCANNER_MIN_PAYOUT:       float = 0.80   # 80% mínimo
+SCANNER_OPTIMAL_VOL:      float = 0.40   # volatilidad óptima normalizada
+SCANNER_MIN_SCORE:        float = 0.60   # score mínimo para operar
+
+# --- Money Management ---
+MM_DEFAULT_STRATEGY:   str   = "flat"
+MM_BASE_AMOUNT:        float = 1.0
+MM_MAX_STEPS:          int   = 4
+MM_MAX_AMOUNT_USD:     float = 50.0
+MM_MAX_BALANCE_PCT:    float = 0.05
+
+# --- Signal Consensus ---
+CONSENSUS_MIN_AGREEMENT: float = 0.66
+CONSENSUS_MIN_SCORE:     float = 0.60
+
+# --- Candle Cache ---
+CACHE_DIR:           str = "data/candles"
+CACHE_MAX_RAM:       int = 500
+CACHE_MAX_DISK_DAYS: int = 30
