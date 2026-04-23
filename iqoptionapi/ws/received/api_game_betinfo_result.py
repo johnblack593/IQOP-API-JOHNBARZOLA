@@ -4,11 +4,10 @@ def api_game_betinfo_result(api, message):
     if message["name"] == "api_game_betinfo_result":
         msg = message.get("msg", {})
         # ensure defaults
-        api.game_betinfo.isSuccessful = msg.get("isSuccessful", True)  
-        api.game_betinfo.dict = msg
-        
-        # S7: Notificación reactiva por order_id
+        # S7: Almacenamiento reactivo por order_id
         order_id = msg.get("id") or (msg.get("result", {}).get("id") if isinstance(msg.get("result"), dict) else None)
+        if order_id:
+            api.game_betinfo[order_id] = msg
         
         ev_store = getattr(api, "game_betinfo_event", None)
         if ev_store:
