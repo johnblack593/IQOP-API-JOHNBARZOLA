@@ -917,7 +917,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                 try:
                     self.SSID = response.cookies["ssid"]
                 except Exception as e:
-                    return False, response.text
+                    return False, response.text if hasattr(response, "text") else str(response)
                 atexit.register(self.logout)
                 self.start_websocket()
                 self.send_ssid()
@@ -929,7 +929,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                 self.SSID = response.cookies["ssid"]
             except Exception as e:
                 self.close()
-                return False, response.text
+                return False, response.text if hasattr(response, "text") else str(response)
             atexit.register(self.logout)
             self.send_ssid()
 
