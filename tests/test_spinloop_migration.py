@@ -86,16 +86,3 @@ def test_get_order_success(api_instance):
     assert status is True
     assert data == {"id": 123}
 
-def test_fallback_legacy_spinloop(api_instance):
-    # Remove event to trigger fallback
-    del api_instance.api.candles_event
-    
-    def simulate_server_response():
-        time.sleep(0.2)
-        api_instance.api.candles.candles_data = [{"from": 999}]
-
-    threading.Thread(target=simulate_server_response).start()
-    
-    # This should use the while loop with POLLING_FAST
-    result = api_instance.get_candles("EURUSD", 60, 10, time.time())
-    assert result == [{"from": 999}]

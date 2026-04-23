@@ -67,3 +67,9 @@ VALID_CANDLE_SIZES: tuple[int, ...] = (
 ENV_EMAIL: str = "IQ_EMAIL"
 ENV_PASSWORD: str = "IQ_PASSWORD"
 ENV_ACCOUNT_TYPE: str = "IQ_ACCOUNT_TYPE"
+
+# --- Signal Engine ---
+SIGNAL_MIN_CONFIDENCE: float = 0.5    # umbral mínimo para ejecutar señal
+SIGNAL_MAX_AMOUNT:     float = 10.0   # monto máximo por operación (USD)
+SIGNAL_DEFAULT_DURATION: int = 60     # duración por defecto (segundos)
+CANDLE_HISTORY_SIZE:   int = 100      # velas a cargar para análisis

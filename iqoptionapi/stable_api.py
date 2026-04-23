@@ -1627,6 +1627,9 @@ class IQ_Option:
         if not is_ready or self.api.order_data is None:
             get_logger(__name__).warning('Timeout (15s) waiting for order_data')
             return False, None
+        
+        if self.api.order_data.get("status") == 2000:
+            return True, self.api.order_data.get("msg")
         return True, self.api.order_data
 
     def get_pending(self, instrument_type):
