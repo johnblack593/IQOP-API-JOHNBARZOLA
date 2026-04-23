@@ -5,6 +5,7 @@ Prevents runaway bots from flooding the API with orders.
 """
 import threading
 import time
+import functools
 from iqoptionapi.logger import get_logger
 from iqoptionapi.config import (
     RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL
@@ -83,3 +84,21 @@ class TokenBucket:
         with self._lock:
             self._refill()
             return self._tokens
+
+
+def rate_limited(bucket_attr: str):
+    """
+    Decorator to apply rate limiting using a bucket stored in an instance attribute.
+    :param bucket_attr: Name of the attribute containing the TokenBucket instance.
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            bucket = getattr(self, bucket_attr, None)
+            if bucket and isinstance(bucket, TokenBucket):
+                bucket.consume()
+            return func(self, *args, **kwargs)
+        return wrapper
+    return decorator
+
+

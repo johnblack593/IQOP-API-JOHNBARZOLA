@@ -33,3 +33,4 @@ examples/debug_sprint*
 
 # Extras
 .ruff_cache
+examples/debug_output.txt

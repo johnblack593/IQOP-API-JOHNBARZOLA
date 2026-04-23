@@ -9,7 +9,7 @@ from iqoptionapi.logger import get_logger
 from iqoptionapi.reconnect import ReconnectManager, MaxReconnectAttemptsError
 from iqoptionapi.idempotency import IdempotencyRegistry
 from iqoptionapi.security import CredentialStore, generate_user_agent
-from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
+from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError, rate_limited
 from iqoptionapi.config import (
     TIMEOUT_WS_DATA, TIMEOUT_CANDLE_STREAM, TIMEOUT_SSID_AUTH,
     TIMEOUT_BALANCE_RESET, TIMEOUT_ALL_INIT
@@ -38,7 +38,7 @@ class IQ_Option:
         self._credential_store = CredentialStore(email, password)
         self._reconnect_manager = ReconnectManager()
         self._idempotency = IdempotencyRegistry()
-        self._rate_limiter = TokenBucket(capacity=5.0, refill_rate=0.5, block=False)
+        self._order_bucket = TokenBucket(block=True) 
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
@@ -93,7 +93,7 @@ class IQ_Option:
                 pass
 
         self.api = IQOptionAPI(
-            "iqoption.com", self.email)
+            "ws.iqoption.com", self.email)
         check = None
 
         # 2FA--
@@ -142,15 +142,19 @@ class IQ_Option:
             self._start_heartbeat_watchdog()
             return True, None
         else:
-            if json.loads(reason)['code'] == 'verify':
-                response = self.api.send_sms_code(json.loads(reason)['token'])
+            try:
+                reason_dict = json.loads(reason)
+                if reason_dict.get('code') == 'verify':
+                    response = self.api.send_sms_code(reason_dict['token'])
 
-                if response.json()['code'] != 'success':
-                    return False, response.json()['message']
+                    if response.json()['code'] != 'success':
+                        return False, response.json()['message']
 
-                # token_sms
-                self.resp_sms = response
-                return False, "2FA"
+                    # token_sms
+                    self.resp_sms = response
+                    return False, "2FA"
+            except (json.JSONDecodeError, TypeError, KeyError):
+                pass
             return False, reason
 
     # self.update_ACTIVES_OPCODE()
@@ -558,9 +562,9 @@ class IQ_Option:
     # ______________________________________self.api.getprofile() https________________________________
 
     def get_profile_ansyc(self):
-        self.api.profile_event.clear()
-        self.api.get_profile()
-        is_ready = self.api.profile_event.wait(timeout=TIMEOUT_WS_DATA)
+        self.api.profile_msg_event.clear()
+        self.api.getprofile()
+        is_ready = self.api.profile_msg_event.wait(timeout=TIMEOUT_WS_DATA)
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for profile")
         return self.api.profile.msg
@@ -1006,6 +1010,7 @@ class IQ_Option:
 
     # __________________FOR OPTION____________________________
 
+    @rate_limited("_order_bucket")
     def buy_multi(self, price, ACTIVES, ACTION, expirations):
         self.api.buy_multi_option = {}
         if len(price) == len(ACTIVES) == len(ACTION) == len(expirations):
@@ -1050,14 +1055,8 @@ class IQ_Option:
         id = self.api.buy_multi_option.get(req_id, {}).get("id")
         return self.api.result, id
 
+    @rate_limited("_order_bucket")
     def buy(self, price, ACTIVES, ACTION, expirations):
-        try:
-            self._rate_limiter.consume()
-        except RateLimitExceededError:
-            get_logger(__name__).error(
-                "buy() BLOCKED by rate limiter — asset=%s action=%s", ACTIVES, ACTION
-            )
-            return False, None
         request_id = self._idempotency.register()
         get_logger(__name__).info(
             "buy(): request_id=%s | asset=%s | action=%s | amount=%s",
@@ -1085,14 +1084,8 @@ class IQ_Option:
         self._idempotency.confirm(request_id, id)
         return self.api.result, id
 
+    @rate_limited("_order_bucket")
     def sell_option(self, options_ids):
-        try:
-            self._rate_limiter.consume()
-        except RateLimitExceededError:
-            get_logger(__name__).error(
-                "sell_option() BLOCKED by rate limiter — options_ids=%s", options_ids
-            )
-            return None
         self.api.sold_options_respond_event.clear()
         self.api.sell_option(options_ids)
         is_ready = self.api.sold_options_respond_event.wait(timeout=30)
@@ -1350,6 +1343,7 @@ class IQ_Option:
             get_logger(__name__).warning("Timeout waiting for buy_digital")
         return self.api.digital_option_placed_id.get(request_id)
 
+    @rate_limited("_order_bucket")
     def close_digital_option(self, position_id):
         # Wait for position info
         while self.get_async_order(position_id).get("position-changed") == {}:
@@ -1873,14 +1867,8 @@ class IQ_Option:
     def logout(self):
         self.api.logout()
 
+    @rate_limited("_order_bucket")
     def buy_digital_spot_v2(self, active, amount, action, duration):
-        try:
-            self._rate_limiter.consume()
-        except RateLimitExceededError:
-            get_logger(__name__).error(
-                "buy_digital_spot_v2() BLOCKED by rate limiter — active=%s action=%s", active, action
-            )
-            return False, None
         action = action.lower()
 
         if action == 'put':
