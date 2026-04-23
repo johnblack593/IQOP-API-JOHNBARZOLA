@@ -27,8 +27,17 @@ WebsocketClient.on_message = capturing_on_message
 
 print(f"Connecting with email: {email}")
 api = IQ_Option(email, password)
-api.connect()
-api.change_balance("PRACTICE")
+check, reason = api.connect()
+if not check:
+    print(f"Failed to connect: {reason}")
+    exit(1)
+
+print("Connected successfully. Changing balance to PRACTICE...")
+try:
+    api.change_balance("PRACTICE")
+except Exception as e:
+    print(f"Warning: change_balance failed: {e}")
+
 
 # 1. Dump completo de open_time
 open_times = api.get_all_open_time()
