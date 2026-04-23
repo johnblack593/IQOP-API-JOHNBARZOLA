@@ -13,19 +13,26 @@ LOG_FORMAT = (
 )
 DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
-def configure_root_logger(level: int = logging.INFO) -> None:
+def configure_root_logger(level: Optional[int] = None) -> None:
     """
     Call once at application startup to configure the root logger.
     Sets up a StreamHandler to stdout with structured format.
     """
     root = logging.getLogger("iqoptionapi")
     if root.handlers:
-        return  # Prevent duplicate handlers if called multiple times
+        if level is not None:
+            root.setLevel(level)
+        return
+        
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
-    root.setLevel(level)
     root.addHandler(handler)
     root.propagate = False
+    
+    # Honor environment or default to INFO
+    if level is None:
+        level = logging.INFO
+    root.setLevel(level)
 
 def get_logger(name: str) -> logging.Logger:
     """

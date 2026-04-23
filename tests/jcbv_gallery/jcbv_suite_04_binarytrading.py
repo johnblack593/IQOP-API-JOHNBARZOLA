@@ -23,8 +23,13 @@ class TestSuite_04_BinaryTrading(unittest.TestCase):
         if not EMAIL or not PASSWORD:
             raise unittest.SkipTest("IQ_EMAIL / IQ_PASSWORD not set")
         cls.api = IQ_Option(EMAIL, PASSWORD)
-        cls.api.connect()
-        cls.api.change_balance("PRACTICE")
+        status, reason = cls.api.connect()
+        if not status:
+            raise unittest.SkipTest(f"Connect failed: {reason}")
+            
+        if not cls.api.change_balance("PRACTICE"):
+            log.warning("Could not change to PRACTICE balance, might already be there or failed.")
+            
         log.info("═══ MODULE 4: Binary Trading ═══")
 
         # Determine best available asset
@@ -123,3 +128,5 @@ class TestSuite_04_BinaryTrading(unittest.TestCase):
         else:
             log.warning("⚠️ 4.5 Option info returned None")
 
+if __name__ == "__main__":
+    unittest.main()

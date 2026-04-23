@@ -136,6 +136,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     # --for binary option multi buy
     buy_multi_result = None
     buy_multi_option = {}
+    pending_buy_ids = deque()
     #
     result = None
     training_balance_reset_request = None
@@ -332,12 +333,13 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         """
 
         logger = get_logger(__name__)
+        if isinstance(msg, dict) and msg.get("name") == "binary-options.open-option":
+            self.pending_buy_ids.append(str(request_id))
 
         data = json.dumps(dict(name=name,
                                msg=msg, request_id=request_id))
-
+        logger.debug("WS SEND: %s", data)
         self.websocket.send(data)
-        logger.debug(data)
 
     @property
     def logout(self):
@@ -884,9 +886,13 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
     def send_ssid(self) -> bool:
         from iqoptionapi.config import TIMEOUT_SSID_AUTH, POLLING_INTERVAL_FAST
+        logger = get_logger(__name__)
+        logger.info("Sending SSID for authentication: %s", self.SSID[:10] + "..." if self.SSID else "None")
+        
         self.profile.msg = None
         if hasattr(self, 'profile_msg_event'):
             self.profile_msg_event.clear()
+        
         self.ssid(self.SSID)  # pylint: disable=not-callable
         if hasattr(self, 'profile_msg_event'):
             is_ready = self.profile_msg_event.wait(timeout=TIMEOUT_SSID_AUTH)

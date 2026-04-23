@@ -13,6 +13,7 @@ class SocketOptionClosed:
         try:
             msg = message.get("msg", {})
             order_id = msg.get("id")
+            logger.info("RECEIVED socket_option_closed order_id=%r", order_id)
             
             if order_id is None:
                 return
