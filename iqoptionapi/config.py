@@ -12,6 +12,7 @@ con parámetros explícitos:
 NUNCA importar constantes de este módulo en tests unitarios que
 requieran valores distintos — pasa los valores como parámetros.
 """
+import os
 
 # --- Timeouts (segundos) ---
 TIMEOUT_WS_CONNECT: int = 15
