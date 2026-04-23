@@ -177,6 +177,11 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.websocket_error_reason = None
         self.balance_id = None
         self.blitz_instruments = {}
+        
+        # S3-T2: Guard for session data initialization
+        self._init_data_received = False
+        # S3-T3: Dynamic candle callbacks
+        self._candle_callbacks = {}
 
         # Events for async logic
         self.balance_id_event = threading.Event()
@@ -937,10 +942,10 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             atexit.register(self.logout)
             self.send_ssid()
 
-        # set ssis cookie
         requests.utils.add_dict_to_cookiejar(
             self.session.cookies, {"ssid": self.SSID})
 
+        self._init_data_received = False
         self.timesync.server_timestamp = None
         start_t = time.time()
         while self.timesync.server_timestamp is None:

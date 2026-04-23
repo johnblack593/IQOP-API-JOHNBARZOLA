@@ -101,5 +101,6 @@ CONSENSUS_MIN_SCORE:     float = 0.60
 
 # --- Candle Cache ---
 CACHE_DIR:           str = "data/candles"
-CACHE_MAX_RAM:       int = 500
+CANDLE_BUFFER_MAX:   int = int(os.getenv("CANDLE_BUFFER_MAX", "500"))
+CANDLE_TTL_SECONDS:  int = int(os.getenv("CANDLE_TTL_SECONDS", "86400"))  # 24h
 CACHE_MAX_DISK_DAYS: int = 30

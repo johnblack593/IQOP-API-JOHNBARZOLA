@@ -17,5 +17,19 @@ def candle_generated_v2(api, message, dict_queue_add):
             maxdict = api.real_time_candles_maxdict_table[Active_name][size]
             msg = v
             dict_queue_add(api.real_time_candles, maxdict, active, size, from_, msg)
+            
+            # S3-T1: Integration with CandleCache
+            if hasattr(api, 'candle_cache'):
+                api.candle_cache.add_candle(v["active_id"], size, msg)
+
+            # S3-T3: Fire dynamic callbacks
+            key = (v["active_id"], size)
+            cb = getattr(api, '_candle_callbacks', {}).get(key)
+            if cb is not None:
+                try:
+                    cb(msg)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning("on_candle callback error: %s", e)
 
         api.candle_generated_all_size_check[active] = True

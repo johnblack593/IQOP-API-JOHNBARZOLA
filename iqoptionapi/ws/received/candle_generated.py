@@ -14,4 +14,19 @@ def candle_generated_realtime(api, message, dict_queue_add):
 
         dict_queue_add(api.real_time_candles,
                             maxdict, active, size, from_, msg)
+        
+        # S3-T1: Integration with CandleCache
+        if hasattr(api, 'candle_cache'):
+            api.candle_cache.add_candle(message["msg"]["active_id"], size, msg)
+
+        # S3-T3: Fire dynamic callbacks
+        key = (message["msg"]["active_id"], size)
+        cb = getattr(api, '_candle_callbacks', {}).get(key)
+        if cb is not None:
+            try:
+                cb(msg)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("on_candle callback error: %s", e)
+
         api.candle_generated_check[active][size] = True
