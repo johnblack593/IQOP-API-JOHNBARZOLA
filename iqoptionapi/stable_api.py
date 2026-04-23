@@ -157,13 +157,10 @@ class IQ_Option:
         self.api = IQOptionAPI(
             "ws.iqoption.com", self.email)
         
-        # Initialize event stores required for non-blocking result waits
-        if not hasattr(self.api, "socket_option_closed_event"):
-            self.api.socket_option_closed_event = defaultdict(threading.Event)
-        if not hasattr(self.api, "result_event_store"):
-            self.api.result_event_store = defaultdict(threading.Event)
-        if not hasattr(self.api, "position_changed_event_store"):
-            self.api.position_changed_event_store = defaultdict(threading.Event)
+        # Initialize event stores required for non-blocking result waits (Sprint 1)
+        self.api.socket_option_closed_event = defaultdict(threading.Event)
+        self.api.result_event_store = defaultdict(threading.Event)
+        self.api.position_changed_event_store = defaultdict(threading.Event)
         check = None
 
         # 2FA--
@@ -547,6 +544,17 @@ class IQ_Option:
                 end = schedule_time.get("close", 0)
                 if start < time.time() < end:
                     self.OPEN_TIME["digital"][name]["open"] = True
+
+        if not digital_data:
+            try:
+                insts = self.get_instruments("digital-option")
+                if insts and "instruments" in insts:
+                    for detail in insts["instruments"]:
+                        n = detail.get("name")
+                        if not n: continue
+                        self.OPEN_TIME["digital"][n]["open"] = any(s.get("open", 0) < time.time() < s.get("close", 0) for s in detail.get("schedule", []))
+            except Exception:
+                pass
 
     def __get_other_open(self):
         # Crypto and etc pairs
@@ -1035,6 +1043,13 @@ class IQ_Option:
                     if k in async_data:
                         return async_data[k]
             
+            # S1-T6: Cleanup event store to prevent memory leaks
+            if not isinstance(event_store, threading.Event):
+                try:
+                    del event_store[order_id]
+                except KeyError:
+                    pass
+
             return res
         except Exception as e:
             get_logger(__name__).error("_wait_result error: %s", e)
@@ -1141,8 +1156,10 @@ class IQ_Option:
         if not hasattr(self.api, "game_betinfo_event"):
             self.api.game_betinfo_event = defaultdict(threading.Event)
             
-        self.api.game_betinfo.isSuccessful = None
-        self.api.game_betinfo_event.clear()
+        if isinstance(self.api.game_betinfo_event, dict):
+            self.api.game_betinfo_event[id_number].clear()
+        else:
+            self.api.game_betinfo_event.clear()
         
         try:
             self.api.get_betinfo(id_number)
