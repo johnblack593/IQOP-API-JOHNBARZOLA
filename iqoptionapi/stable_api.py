@@ -34,7 +34,6 @@ class IQ_Option:
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
-        self._password = password # Harding 3A: will be cleared in connect()
         self._credential_store = CredentialStore(email, password)
         self._reconnect_manager = ReconnectManager()
         self._idempotency = IdempotencyRegistry()
@@ -957,10 +956,11 @@ class IQ_Option:
         return x['msg']['win'], (0 if x['msg']['win'] == 'equal' else float(x['msg']['sum']) * -1 if x['msg']['win'] == 'loose' else float(x['msg']['win_amount']) - float(x['msg']['sum']))
 
     def check_win_v3(self, id_number):
-        while True:
-            if self.api.socket_option_closed.get(id_number) is not None:
+        while self.api.socket_option_closed.get(id_number) is None:
+            is_ready = self.api.option_closed_event.wait(timeout=TIMEOUT_WS_DATA)
+            if not is_ready:
+                get_logger(__name__).warning("Timeout waiting for option_closed event")
                 break
-            self.api.option_closed_event.wait(timeout=1)
             self.api.option_closed_event.clear()
         
         x = self.api.socket_option_closed[id_number]
@@ -1347,8 +1347,11 @@ class IQ_Option:
     def close_digital_option(self, position_id):
         # Wait for position info
         while self.get_async_order(position_id).get("position-changed") == {}:
-            time.sleep(0.05)
-            pass
+            is_ready = self.api.position_changed_event.wait(timeout=TIMEOUT_WS_DATA)
+            if not is_ready:
+                get_logger(__name__).warning("Timeout waiting for position_changed in close_digital_option")
+                break
+            self.api.position_changed_event.clear()
         position_changed = self.get_async_order(position_id)["position-changed"]["msg"]
         
         self.api.result_event.clear()
@@ -1854,11 +1857,9 @@ class IQ_Option:
 
         self.api.subscribe_digital_price_splitter(asset_id)
 
-        start = time.time()
-        while self.api.digital_payout is None:
-            time.sleep(0.05)
-            if seconds and int(time.time() - start) > seconds:
-                break
+        is_ready = self.api.digital_payout_event.wait(timeout=seconds or TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for digital_payout")
 
         self.api.unsubscribe_digital_price_splitter(asset_id)
 
@@ -1904,13 +1905,10 @@ class IQ_Option:
         logger.info(instrument_id)
         request_id = self.api.place_digital_option_v2(instrument_id, active_id, amount)
 
-        _ts = time.time()
-        while self.api.digital_option_placed_id.get(request_id) is None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).error('Timeout (15s) waiting for digital_option_placed_id')
-                return False, None
-
+        is_ready = self.api.digital_option_placed_id_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).error('Timeout (15s) waiting for digital_option_placed_id')
+            return False, None
         digital_order_id = self.api.digital_option_placed_id.get(request_id)
         if isinstance(digital_order_id, int):
             return True, digital_order_id
