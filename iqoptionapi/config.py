@@ -15,8 +15,8 @@ requieran valores distintos — pasa los valores como parámetros.
 import os
 
 # --- Timeouts (segundos) ---
-TIMEOUT_WS_CONNECT: int = 15
-TIMEOUT_WS_DATA: int = 30
+TIMEOUT_WS_CONNECT: int = 30
+TIMEOUT_WS_DATA: int = 60
 TIMEOUT_CANDLE_STREAM: int = 20
 TIMEOUT_LEADER_BOARD: int = 15
 TIMEOUT_BALANCE_RESET: int = 15
@@ -25,7 +25,7 @@ TIMEOUT_ALL_INIT: int = 30      # para get_all_init
 TIMEOUT_THREAD_JOIN: float = 5.0  # para api.py close() BUG-WS-01
 
 # --- Heartbeat watchdog ---
-HEARTBEAT_TIMEOUT_SECS: float = 30.0   # segundos sin heartbeat antes de forzar reconexión
+HEARTBEAT_TIMEOUT_SECS: float = 120.0   # segundos sin heartbeat antes de forzar reconexión
 HEARTBEAT_CHECK_INTERVAL: float = 10.0  # cada cuántos segundos el watchdog revisa
 
 # --- Polling intervals (segundos) ---

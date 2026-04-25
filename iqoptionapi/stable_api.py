@@ -112,7 +112,8 @@ class IQ_Option:
         self.get_realtime_strike_list_temp_data = {}
         self.get_realtime_strike_list_temp_expiration = 0
         self.SESSION_HEADER = {
-            "User-Agent": generate_user_agent()}
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
+
         self.SESSION_COOKIE = {}
         #
 
@@ -147,7 +148,10 @@ class IQ_Option:
         close_shared_session()
         get_logger(__name__).info("IQ_Option instance closed cleanly.")
 
-    def connect(self, sms_code=None):
+    def connect(self, sms_code=None, ssid=None):
+        if ssid:
+            self.ssid = ssid
+
         if hasattr(self, 'api') and hasattr(self.api, 'websocket_client'):
             try:
                 self.api.close()
@@ -156,6 +160,9 @@ class IQ_Option:
 
         self.api = IQOptionAPI(
             "ws.iqoption.com", self.email)
+        
+        if hasattr(self, 'ssid') and self.ssid:
+            self.api.SSID = self.ssid
         
         # Initialize event stores required for non-blocking result waits (Sprint 1)
         self.api.socket_option_closed_event = defaultdict(threading.Event)
@@ -257,7 +264,9 @@ class IQ_Option:
 
             try:
                 logger.info("Auto-reconnect: calling self.connect()...")
-                status, reason = self.connect()
+                ssid = getattr(self, 'ssid', None)
+                status, reason = self.connect(ssid=ssid)
+
                 if status:
                     logger.info("Auto-reconnect: SUCCESS.")
                     self._reconnect_manager.reset()
@@ -452,14 +461,14 @@ class IQ_Option:
         self.instruments_input_to_ACTIVES("cfd")
 
     def get_ALL_Binary_ACTIVES_OPCODE(self):
-        init_info = self.get_all_init()
-        if not init_info or not isinstance(init_info, dict) or "result" not in init_info:
+        init_info = self.get_all_init_v2()
+        if not init_info or not isinstance(init_info, dict):
             return
 
         for dirr in (["binary", "turbo"]):
-            if dirr in init_info["result"]:
-                for i in init_info["result"][dirr]["actives"]:
-                    OP_code.ACTIVES[(init_info["result"][dirr]
+            if dirr in init_info:
+                for i in init_info[dirr]["actives"]:
+                    OP_code.ACTIVES[(init_info[dirr]
                                      ["actives"][i]["name"]).split(".")[1]] = int(i)
 
     # _________________________self.api.get_api_option_init_all() wss______________
@@ -2230,9 +2239,11 @@ class IQ_Option:
 
         date_formated = str(datetime.utcfromtimestamp(exp).strftime("%Y%m%d%H%M"))
         active_id = str(OP_code.ACTIVES[active])
-        # S4-T4: Probar con -op para activos OTC en Digital
-        clean_active = active.replace("-OTC", "-op") if "-OTC" in active else active
+        # S5-T2: Digital instrument_id MUST NOT include -OTC suffix even if the asset name has it.
+        # Format: do + base_asset + date + PT + duration + M + action + SPT
+        clean_active = active.replace("-OTC", "")
         instrument_id = "do" + clean_active + date_formated + "PT" + str(duration) + "M" + action + "SPT"
+
         
         print(f"DEBUG_INSTRUMENT_ID: {instrument_id}")
         
@@ -2245,7 +2256,10 @@ class IQ_Option:
                 if attempt == 0:
                     get_logger(__name__).warning("Connection lost before trade, waiting for recovery...")
                     time.sleep(2)
-                    if not self.check_connect(): self.connect()
+                    if not self.check_connect():
+                        ssid = getattr(self, 'ssid', None)
+                        self.connect(ssid=ssid)
+
                 else:
                     raise e
 
@@ -2414,16 +2428,26 @@ class IQ_Option:
         Los instrumentos Blitz SOLO se obtienen de initialization-data.
         Retorna (True, order_id) en éxito, (False, None) en fallo.
         """
+        if not self.api.blitz_instruments:
+            self.get_blitz_instruments()
+            
         if active not in self.api.blitz_instruments:
             get_logger(__name__).error(f"buy_blitz: asset '{active}' not found in blitz catalog. "
-                                       "Ensure initialization-data has been received.")
+                                       f"Available: {list(self.api.blitz_instruments.keys())[:5]}")
             return False, None
             
         active_data = self.api.blitz_instruments[active]
         active_id = active_data["id"]
         
-        # Blitz duration is in seconds
-        expired = int(self.api.timesync.server_timestamp) + duration
+        # Blitz duration is in seconds — align to next valid window
+        now = int(self.api.timesync.server_timestamp)
+        # Round up to the next multiple of duration
+        expired = now - (now % duration) + duration
+        # Ensure at least 2s buffer before the window closes
+        if expired - now < 2:
+            expired += duration
+        get_logger(__name__).info("buy_blitz: now=%d expired=%d delta=%ds duration=%ds",
+                                  now, expired, expired - now, duration)
         
         self.api.buy_multi_option = {}
         self.api.result_event.clear()
@@ -2433,12 +2457,24 @@ class IQ_Option:
         # S2-T1: Blitz uses option_type_id 3 (turbo) and binary-options.open-option
         self.api.buyv3_by_raw_expired(
             float(amount), active_id, str(action), "turbo", int(expired), req_id)
+        
+        # Wait for either result (success=False) or correlated ID
+        start_t = time.time()
+        id = None
+        while time.time() - start_t < 15:
+            id = self.api.buy_multi_option.get(req_id, {}).get("id")
+            if id:
+                break
             
-        is_ready = self.api.result_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for buy_blitz result")
+            if self.api.buy_multi_option.get(req_id, {}).get("success") == False:
+                break
+                
+            if self.api.result_event.wait(timeout=0.1):
+                self.api.result_event.clear()
+        
+        if id is None:
+            get_logger(__name__).warning("buy_blitz: no order_id received for req_id=%s", req_id)
             
-        id = self.api.buy_multi_option.get(req_id, {}).get("id")
         return self.api.result, id
 
     # ── S3: Memory & Stream Stabilization ─────────────────────────
