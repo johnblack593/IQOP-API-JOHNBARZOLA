@@ -41,7 +41,8 @@ class Buy_place_order_temp(Base):
 
             "use_token_for_commission":bool(use_token_for_commission),
             "user_balance_id":int(self.api.balance_id),
-            "client_platform_id":"9",#important can not delete,9 mean your platform is linux
+            "client_platform_id":"1",# S5-T3: Test if platform 1 is accepted
+
             }
         }
         self.send_websocket_request(self.name, data)

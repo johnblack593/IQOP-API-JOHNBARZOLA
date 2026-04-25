@@ -699,7 +699,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     def get_api_option_init_all_v2(self):
 
         msg = {"name": "get-initialization-data",
-               "version": "2.0",
+               "version": "3.0",
                "body": {}
                }
         self.send_websocket_request(name="sendMessage", msg=msg)
@@ -851,6 +851,8 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     @property
     def heartbeat(self):
         return Heartbeat(self)
+
+
 # -------------------------------------------------------
 
     def set_session(self, cookies, headers):
