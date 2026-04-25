@@ -534,6 +534,7 @@ class IQ_Option:
             elif isinstance(data, list):
                 digital_data = data
             
+            get_logger(__name__).debug("__get_digital_open: data=%s", digital_data)
             if digital_data:
                 break
             time.sleep(2)
@@ -557,9 +558,19 @@ class IQ_Option:
                     for detail in insts["instruments"]:
                         n = detail.get("name")
                         if not n: continue
+                        if "." in n:
+                            n = n.split(".")[1]
                         self.OPEN_TIME["digital"][n]["open"] = any(s.get("open", 0) < time.time() < s.get("close", 0) for s in detail.get("schedule", []))
             except Exception:
                 pass
+
+        # ULTIMATE FALLBACK: Mirror binary/turbo assets if digital list is still empty (Sprint 4 Validation fix)
+        if not any(v.get("open") for v in self.OPEN_TIME["digital"].values()):
+            get_logger(__name__).info("Digital discovery failed, mirroring binary/turbo asset availability")
+            for cat in ["binary", "turbo"]:
+                for asset, info in self.OPEN_TIME.get(cat, {}).items():
+                    if info.get("open"):
+                        self.OPEN_TIME["digital"][asset]["open"] = True
 
     def __get_other_open(self):
         # Crypto and etc pairs
@@ -583,6 +594,8 @@ class IQ_Option:
                 name = detail.get("name")
                 if not name:
                     continue
+                if "." in name:
+                    name = name.split(".")[1]
                 schedule = detail.get("schedule", [])
                 self.OPEN_TIME[instruments_type][name]["open"] = False
                 for schedule_time in schedule:
@@ -1018,7 +1031,7 @@ class IQ_Option:
         """
         try:
             start_wait = time.time()
-            get_logger(__name__).debug("_wait_result: waiting for order_id=%s", order_id)
+            get_logger(__name__).debug("_wait_result: waiting for order_id=%s store=%s", order_id, type(event_store).__name__)
             
             # S7: Asegurar que el ID sea int para coincidir con las llaves del event_store (defaultdict)
             try:
@@ -1055,7 +1068,7 @@ class IQ_Option:
                         res = async_data.get(k)
                         break
             
-            get_logger(__name__).debug("_wait_result: result for order_id=%s received in %.2fs", order_id, elapsed)
+            get_logger(__name__).debug("_wait_result: result=%s elapsed=%.2fs", res, elapsed)
             return res
 
         except Exception as e:
@@ -1152,17 +1165,23 @@ class IQ_Option:
         )
         if result:
             win_val = result.get("msg", {}).get("win")
-            if win_val is not None and hasattr(self, 'trade_journal') and self.trade_journal is not None:
-                res_str = "win" if win_val > 0 else ("loose" if win_val < 0 else "equal")
+            if win_val is not None:
                 try:
-                    self.trade_journal.record(
-                        order_id=id_number,
-                        result=res_str,
-                        profit=win_val
-                    )
-                except Exception as e:
-                    get_logger(__name__).warning("trade_journal.record failed: %s", e)
-            return win_val
+                    win_val = float(win_val)
+                except (ValueError, TypeError):
+                    win_val = 0.0
+                
+                if hasattr(self, 'trade_journal') and self.trade_journal is not None:
+                    res_str = "win" if win_val > 0 else ("loose" if win_val < 0 else "equal")
+                    try:
+                        self.trade_journal.record(
+                            order_id=id_number,
+                            result=res_str,
+                            profit=win_val
+                        )
+                    except Exception as e:
+                        get_logger(__name__).warning("trade_journal.record failed: %s", e)
+                return win_val
         return None
 
     # -------------------get infomation only for binary option------------------------
@@ -1353,7 +1372,7 @@ class IQ_Option:
 # __________________for Digital___________________
 
     def get_digital_underlying_list_data(self):
-        self.api.underlying_list_data_event.clear()
+        self.api.underlying_list_data = None
         self.api.get_digital_underlying()
         is_ready = self.api.underlying_list_data_event.wait(timeout=config.TIMEOUT_WS_DATA)
         if not is_ready:
@@ -1381,15 +1400,15 @@ class IQ_Option:
         return self.api.strike_list, ans
 
     def subscribe_strike_list(self, ACTIVE, expiration_period):
-        self.api.subscribe_instrument_quites_generated(
+        self.api.subscribe_instrument_quotes_generated(
             ACTIVE, expiration_period)
 
     def unsubscribe_strike_list(self, ACTIVE, expiration_period):
-        del self.api.instrument_quites_generated_data[ACTIVE]
-        self.api.unsubscribe_instrument_quites_generated(
+        del self.api.instrument_quotes_generated_data[ACTIVE]
+        self.api.unsubscribe_instrument_quotes_generated(
             ACTIVE, expiration_period)
 
-    def get_instrument_quites_generated_data(self, ACTIVE, duration):
+    def get_instrument_quotes_generated_data(self, ACTIVE, duration):
         start_t = time.time()
         while self.api.instrument_quotes_generated_raw_data[ACTIVE][duration * 60] == {} and (time.time() - start_t < 15.0):
             self.api.instrument_quotes_generated_event.wait(timeout=1)
@@ -1398,12 +1417,12 @@ class IQ_Option:
 
     def get_realtime_strike_list(self, ACTIVE, duration):
         start_t = time.time()
-        while not self.api.instrument_quites_generated_data[ACTIVE][duration * 60] and (time.time() - start_t < 15.0):
+        while not self.api.instrument_quotes_generated_data[ACTIVE][duration * 60] and (time.time() - start_t < 15.0):
             self.api.instrument_quotes_generated_event.wait(timeout=1)
             self.api.instrument_quotes_generated_event.clear()
 
         ans = {}
-        now_timestamp = self.api.instrument_quites_generated_timestamp[ACTIVE][duration * 60]
+        now_timestamp = self.api.instrument_quotes_generated_timestamp[ACTIVE][duration * 60]
 
         while ans == {}:
             if self.get_realtime_strike_list_temp_data == {} or now_timestamp != self.get_realtime_strike_list_temp_expiration:
@@ -1416,7 +1435,7 @@ class IQ_Option:
             else:
                 strike_list = self.get_realtime_strike_list_temp_data
 
-            profit = self.api.instrument_quites_generated_data[ACTIVE][duration * 60]
+            profit = self.api.instrument_quotes_generated_data[ACTIVE][duration * 60]
             for price_key in strike_list:
                 try:
                     side_data = {}
@@ -1437,7 +1456,7 @@ class IQ_Option:
         return ans
 
     def get_digital_current_profit(self, ACTIVE, duration):
-        profit = self.api.instrument_quites_generated_data[ACTIVE][duration * 60]
+        profit = self.api.instrument_quotes_generated_data[ACTIVE][duration * 60]
         for key in profit:
             if key.find("SPT") != -1:
                 return profit[key]
@@ -1536,12 +1555,12 @@ class IQ_Option:
         getRate = position['raw_event']["currency_rate"]
 
         # ___________________/*position*/_________________
-        instrument_quites_generated_data = self.get_instrument_quites_generated_data(
+        instrument_quotes_generated_data = self.get_instrument_quotes_generated_data(
             ACTIVES, duration)
 
 
         f_tmp = get_instrument_id_to_bid(
-            instrument_quites_generated_data, aVar)
+            instrument_quotes_generated_data, aVar)
         # f is bidprice of lower_instrument_id ,f2 is bidprice of upper_instrument_id
         if f_tmp != None:
             self.get_digital_spot_profit_after_sale_data[position_id]["f"] = f_tmp
@@ -1550,7 +1569,7 @@ class IQ_Option:
             f = self.get_digital_spot_profit_after_sale_data[position_id]["f"]
 
         f2_tmp = get_instrument_id_to_bid(
-            instrument_quites_generated_data, aVar2)
+            instrument_quotes_generated_data, aVar2)
         if f2_tmp != None:
             self.get_digital_spot_profit_after_sale_data[position_id]["f2"] = f2_tmp
             f2 = f2_tmp
@@ -2158,7 +2177,10 @@ class IQ_Option:
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for digital_payout")
 
-        self.api.unsubscribe_digital_price_splitter(asset_id)
+        try:
+            self.api.unsubscribe_digital_price_splitter(asset_id)
+        except Exception:
+            pass
 
         return self.api.digital_payout if self.api.digital_payout else 0
 
@@ -2208,12 +2230,24 @@ class IQ_Option:
 
         date_formated = str(datetime.utcfromtimestamp(exp).strftime("%Y%m%d%H%M"))
         active_id = str(OP_code.ACTIVES[active])
-        # S2-T2: Corrected instrument_id format: "do" + ASSET + YYYYMMDDHHMM + "PT" + DURATION + "M" + action + "SPT"
-        instrument_id = "do" + active + date_formated + "PT" + str(duration) + "M" + action + "SPT"
+        # S4-T4: Probar con -op para activos OTC en Digital
+        clean_active = active.replace("-OTC", "-op") if "-OTC" in active else active
+        instrument_id = "do" + clean_active + date_formated + "PT" + str(duration) + "M" + action + "SPT"
         
-        logger = get_logger(__name__)
-        logger.info(instrument_id)
-        request_id = self.api.place_digital_option_v2(instrument_id, active_id, amount)
+        print(f"DEBUG_INSTRUMENT_ID: {instrument_id}")
+        
+        # S4-T4: Reintento si la conexión se cerró justo antes (e.g. por timeout de discovery)
+        for attempt in range(2):
+            try:
+                request_id = self.api.place_digital_option_v2(instrument_id, active_id, amount)
+                break
+            except Exception as e:
+                if attempt == 0:
+                    get_logger(__name__).warning("Connection lost before trade, waiting for recovery...")
+                    time.sleep(2)
+                    if not self.check_connect(): self.connect()
+                else:
+                    raise e
 
         is_ready = self.api.digital_option_placed_id_event.wait(timeout=15)
         if not is_ready:

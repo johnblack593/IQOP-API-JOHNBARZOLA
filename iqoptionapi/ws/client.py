@@ -45,6 +45,7 @@ from iqoptionapi.ws.received.sold_options import sold_options
 from iqoptionapi.ws.received.tpsl_changed import tpsl_changed
 from iqoptionapi.ws.received.auto_margin_call_changed import auto_margin_call_changed
 from iqoptionapi.ws.received.digital_option_placed import digital_option_placed
+from iqoptionapi.ws.received.digital_payout import digital_payout
 from iqoptionapi.ws.received.result import result
 from iqoptionapi.ws.received.instrument_quotes_generated import instrument_quotes_generated
 from iqoptionapi.ws.received.training_balance_reset import training_balance_reset
@@ -87,6 +88,7 @@ _MESSAGE_ROUTER: dict = {
     'commission-changed': [commission_changed],
     'deferred-orders': [deferred_orders],
     'digital-option-placed': [lambda api, msg: digital_option_placed(api, msg, api.websocket_client.api_dict_clean)],
+    'digital-payout': [digital_payout],
     'financial-information': [financial_information],
     'heartbeat': [heartbeat],
     'history-positions': [history_positions],
@@ -192,6 +194,11 @@ class WebsocketClient(object):
                         except Exception as e:
                             logger.error("Handler error for message '%s': %s", msg_name, e, exc_info=True)
                 elif parsed is not None:
+                    # Instrumentación temporal (T3 PASO A)
+                    if parsed.get("microserviceName") or (msg_name and msg_name.startswith("option")):
+                        logger.info("WS_RAW: name=%r micro=%r status=%r",
+                            msg_name, parsed.get("microserviceName"),
+                            parsed.get("msg", {}).get("status"))
                     logger.debug("No handler registered for message name: %s", msg_name)
 
             except Exception as e:

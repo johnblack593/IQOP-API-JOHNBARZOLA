@@ -90,9 +90,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     # for digital
     underlying_list_data = None
     position_changed = None
-    instrument_quites_generated_data = nested_dict(2, dict)
+    instrument_quotes_generated_data = nested_dict(2, dict)
     instrument_quotes_generated_raw_data = nested_dict(2, dict)
-    instrument_quites_generated_timestamp = nested_dict(2, dict)
+    instrument_quotes_generated_timestamp = nested_dict(2, dict)
     strike_list = None
     leaderboard_deals_client = None
     #position_changed_data = nested_dict(2, dict)
@@ -699,7 +699,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     def get_api_option_init_all_v2(self):
 
         msg = {"name": "get-initialization-data",
-               "version": "3.0",
+               "version": "2.0",
                "body": {}
                }
         self.send_websocket_request(name="sendMessage", msg=msg)
@@ -747,10 +747,13 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 # ____________________for_______digital____________________
 
     def get_digital_underlying(self):
-        msg = {"name": "get-underlying-list",
-               "version": "2.0",
-               "body": {"type": "digital-option"}
-               }
+        msg = {
+            "name": "trading-instruments.get-underlying-list",
+            "version": "5.0",
+            "body": {
+                "type": "digital-option"
+            }
+        }
         self.send_websocket_request(name="sendMessage", msg=msg)
 
     @property
@@ -758,16 +761,30 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         return Strike_list(self)
 
     @property
-    def subscribe_instrument_quites_generated(self):
-        return Subscribe_Instrument_Quites_Generated(self)
+    def subscribe_instrument_quotes_generated(self):
+        return Subscribe_Instrument_Quotes_Generated(self)
 
     @property
-    def unsubscribe_instrument_quites_generated(self):
-        return Unsubscribe_Instrument_Quites_Generated(self)
+    def unsubscribe_instrument_quotes_generated(self):
+        return Unsubscribe_Instrument_Quotes_Generated(self)
 
     @property
     def place_digital_option(self):
         return Digital_options_place_digital_option(self)
+
+    def place_digital_option_v2(self, instrument_id, active_id, amount):
+        data = {
+            "name": "digital-options.place-digital-option",
+            "version": "2.0",
+            "body": {
+                "instrument_id": instrument_id,
+                "asset_id": int(active_id),
+                "amount": str(amount),
+                "instrument_index": 0,
+                "user_balance_id": int(self.balance_id)
+            }
+        }
+        return self.send_websocket_request(name="sendMessage", msg=data)
 
     @property
     def close_digital_option(self):

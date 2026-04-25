@@ -45,7 +45,7 @@ class Subscribe_candles(Base):
         self.send_websocket_request(self.name, data)
 
 
-class Subscribe_Instrument_Quites_Generated(Base):
+class Subscribe_Instrument_Quotes_Generated(Base):
     name = "subscribeMessage"
 
     def __call__(self, ACTIVE, expiration_period):
