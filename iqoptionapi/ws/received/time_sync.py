@@ -1,9 +1,13 @@
 import time
+from iqoptionapi.time_sync import _clock
 
 def time_sync(api, message):
     if message["name"] == "timeSync":
         api.timesync.server_timestamp = message["msg"]
-        # SPRINT 6: Guardar timestamp local para calcular offset en tiempo real
+        
+        # SPRINT 7: Actualizar el singleton global de sincronización
+        _clock.update(message["msg"])
+        
+        # Backward compatibility para Sprint 6
         api._local_time_at_sync = time.time()
-        # También guardar server_timestamp directamente en api para fácil acceso
         api.server_timestamp = message["msg"] / 1000
