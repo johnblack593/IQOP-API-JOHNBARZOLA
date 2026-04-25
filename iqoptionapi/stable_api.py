@@ -465,7 +465,7 @@ class IQ_Option:
         if not init_info or not isinstance(init_info, dict):
             return
 
-        for dirr in (["binary", "turbo"]):
+        for dirr in (["binary", "turbo", "blitz"]):
             if dirr in init_info:
                 for i in init_info[dirr]["actives"]:
                     OP_code.ACTIVES[(init_info[dirr]
@@ -2237,12 +2237,22 @@ class IQ_Option:
 
             exp = time.mktime(now_date.timetuple())
 
-        date_formated = str(datetime.utcfromtimestamp(exp).strftime("%Y%m%d%H%M"))
-        active_id = str(OP_code.ACTIVES[active])
-        # S5-T2: Digital instrument_id MUST NOT include -OTC suffix even if the asset name has it.
-        # Format: do + base_asset + date + PT + duration + M + action + SPT
-        clean_active = active.replace("-OTC", "")
-        instrument_id = "do" + clean_active + date_formated + "PT" + str(duration) + "M" + action + "SPT"
+        # S6: Smart ID Reconstruction (KYC/Modern Account Support)
+        # We now prioritize the numeric ID format: do{ID}A{YYYYMMDD}D{HHMMSS}T{min}M{dir}SPT
+        dt_exp = datetime.utcfromtimestamp(exp)
+        date_formated = dt_exp.strftime("%Y%m%d")
+        time_formated = dt_exp.strftime("%H%M%S")
+        
+        active_id = OP_code.ACTIVES.get(active)
+        if active_id:
+            instrument_id = f"do{active_id}A{date_formated}D{time_formated}T{duration}M{action}SPT"
+        else:
+            # Fallback legacy format
+            clean_active = active.replace("-OTC", "")
+            legacy_date = dt_exp.strftime("%Y%m%d%H%M")
+            instrument_id = f"do{clean_active}{legacy_date}PT{duration}M{action}SPT"
+
+        get_logger(__name__).debug("Digital Instrument ID generated: %s", instrument_id)
 
         
         print(f"DEBUG_INSTRUMENT_ID: {instrument_id}")
@@ -2439,12 +2449,21 @@ class IQ_Option:
         active_data = self.api.blitz_instruments[active]
         active_id = active_data["id"]
         
+        # SPRINT 6: Usar server_timestamp con offset local para precisión milimétrica
+        server_time = getattr(self.api, "server_timestamp", None)
+        local_sync = getattr(self.api, "_local_time_at_sync", None)
+        
+        if server_time and local_sync:
+            now = server_time + (time.time() - local_sync)
+        else:
+            now = self.api.timesync.server_timestamp
+            
         # Blitz duration is in seconds — align to next valid window
-        now = int(self.api.timesync.server_timestamp)
-        # Round up to the next multiple of duration
-        expired = now - (now % duration) + duration
-        # Ensure at least 2s buffer before the window closes
-        if expired - now < 2:
+        now_int = int(now)
+        expired = now_int - (now_int % duration) + duration
+        
+        # Ensure at least 2s buffer before the window closes (dead time prevention)
+        if expired - now < 2.0:
             expired += duration
         get_logger(__name__).info("buy_blitz: now=%d expired=%d delta=%ds duration=%ds",
                                   now, expired, expired - now, duration)
