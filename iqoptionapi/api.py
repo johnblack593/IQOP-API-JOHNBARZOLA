@@ -775,12 +775,12 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     def place_digital_option_v2(self, instrument_id, active_id, amount):
         data = {
             "name": "digital-options.place-digital-option",
-            "version": "2.0",
+            "version": "3.0",
             "body": {
                 "instrument_id": instrument_id,
                 "asset_id": int(active_id),
                 "amount": str(amount),
-                "instrument_index": 0,
+                "instrument_index": 0, # Note: Browser uses a dynamic index, but 0 or timestamp usually works
                 "user_balance_id": int(self.balance_id)
             }
         }
