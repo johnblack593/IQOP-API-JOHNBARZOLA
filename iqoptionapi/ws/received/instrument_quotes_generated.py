@@ -32,9 +32,9 @@ def instrument_quotes_generated(api, message):
             for symble in data.get("symbols", []):
                 ans[symble] = ProfitPercent
 
-        api.instrument_quites_generated_timestamp[Active_name][
+        api.instrument_quotes_generated_timestamp[Active_name][
             period] = msg.get("expiration", {}).get("timestamp")
-        api.instrument_quites_generated_data[Active_name][period] = ans
+        api.instrument_quotes_generated_data[Active_name][period] = ans
         api.instrument_quotes_generated_raw_data[Active_name][period] = message
         
         ev = getattr(api, "instrument_quotes_generated_event", None)

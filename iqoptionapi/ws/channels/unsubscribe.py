@@ -44,7 +44,7 @@ class Unsubscribe_candles(Base):
         self.send_websocket_request(self.name, data)
 
 
-class Unsubscribe_Instrument_Quites_Generated(Base):
+class Unsubscribe_Instrument_Quotes_Generated(Base):
     name = "unsubscribeMessage"
 
     def __call__(self, ACTIVE, expiration_period):
