@@ -2186,8 +2186,8 @@ class IQ_Option:
         if duration == 1:
             exp, _ = get_expiration_time(timestamp, duration)
         else:
-            now_date = datetime.fromtimestamp(
-                timestamp) + timedelta(minutes=1, seconds=30)
+            now_date = datetime.fromtimestamp(timestamp).replace(second=0, microsecond=0) + \
+                       timedelta(minutes=1, seconds=30)
 
             # Refactored to avoid infinite loop and follow S2 stability rules
             for _ in range(100):
@@ -2195,17 +2195,18 @@ class IQ_Option:
                     break
                 now_date = now_date + timedelta(minutes=1)
 
-            exp = time.mktime(now_date.timetuple())
+            exp = time.mktime(now_date.replace(second=0, microsecond=0).timetuple())
 
         # S6: Smart ID Reconstruction (KYC/Modern Account Support)
         # We now prioritize the numeric ID format: do{ID}A{YYYYMMDD}D{HHMMSS}T{min}M{dir}SPT
+        # USAMOS UTC SIEMPRE para coincidir con el servidor IQ
         dt_exp = datetime.utcfromtimestamp(exp)
         date_formated = dt_exp.strftime("%Y%m%d")
         time_formated = dt_exp.strftime("%H%M%S")
         
         active_id = OP_code.ACTIVES.get(active)
         if active_id:
-            instrument_id = f"do{active_id}A{date_formated}D{time_formated}T{duration}M{action}SPT"
+            instrument_id = f"do{active_id}A{date_formated}D{time_formated}PT{duration}M{action}SPT"
         else:
             # Fallback legacy format
             clean_active = active.replace("-OTC", "")

@@ -55,3 +55,7 @@ scripts/
 # Otros
 .ruff_cache
 examples/debug_output.txt
+
+# JCBV-NEXUS Integration Reports
+tests/reports/*.json
+!tests/reports/*.md
