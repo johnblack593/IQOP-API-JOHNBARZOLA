@@ -1,0 +1,734 @@
+{
+  "cfd": {
+    "JP225-OTC": {
+      "open": true
+    },
+    "US2000 Spot Index": {
+      "open": true
+    },
+    "GOOGL": {
+      "open": false
+    },
+    "AMZN/ALIBABA-OTC": {
+      "open": true
+    },
+    "GER30/UK100-OTC": {
+      "open": true
+    },
+    "MORSTAN": {
+      "open": true
+    },
+    "BIDU": {
+      "open": false
+    },
+    "XAUUSD": {
+      "open": false
+    },
+    "NVDA/AMD-OTC": {
+      "open": true
+    },
+    "MSFT": {
+      "open": false
+    },
+    "USOUSD-OTC": {
+      "open": true
+    },
+    "GS": {
+      "open": false
+    },
+    "BABA": {
+      "open": false
+    },
+    "Platinum": {
+      "open": true
+    },
+    "JXY": {
+      "open": true
+    },
+    "Palladium": {
+      "open": true
+    },
+    "GER30-OTC": {
+      "open": true
+    },
+    "GEV-OTC": {
+      "open": true
+    },
+    "INTEL": {
+      "open": true
+    },
+    "SNAP": {
+      "open": false
+    },
+    "XAU/XAG-OTC": {
+      "open": true
+    },
+    "MU-OTC": {
+      "open": true
+    },
+    "TESLA/FORD": {
+      "open": false
+    },
+    "CXY": {
+      "open": true
+    },
+    "COKE": {
+      "open": true
+    },
+    "META/GOOGLE": {
+      "open": false
+    },
+    "COFFEE-OTC": {
+      "open": true
+    },
+    "INDU": {
+      "open": true
+    },
+    "AMZN/EBAY": {
+      "open": false
+    },
+    "SUGAR-OTC": {
+      "open": true
+    },
+    "PLTR-OTC": {
+      "open": true
+    },
+    "FR40-OTC": {
+      "open": true
+    },
+    "KLAR": {
+      "open": true
+    },
+    "AMZN/ALIBABA": {
+      "open": false
+    },
+    "Dollar Index": {
+      "open": true
+    },
+    "NIKE": {
+      "open": true
+    },
+    "US500/JP225-OTC": {
+      "open": true
+    },
+    "GS-OTC": {
+      "open": true
+    },
+    "MSFT/AAPL-OTC": {
+      "open": true
+    },
+    "HK33-OTC": {
+      "open": true
+    },
+    "TESLA": {
+      "open": false
+    },
+    "MCDON-op": {
+      "open": false
+    },
+    "US100/JP225-OTC": {
+      "open": true
+    },
+    "META/GOOGLE-OTC": {
+      "open": true
+    },
+    "FWONA-OTC": {
+      "open": true
+    },
+    "IBEX": {
+      "open": true
+    },
+    "SNAP-OTC": {
+      "open": true
+    },
+    "INTEL/IBM": {
+      "open": false
+    },
+    "NVDA-OTC": {
+      "open": true
+    },
+    "NFLX/AMZN-OTC": {
+      "open": true
+    },
+    "XAGUSD-OTC": {
+      "open": true
+    },
+    "AIG": {
+      "open": false
+    },
+    "GS-op": {
+      "open": false
+    },
+    "S&P 500": {
+      "open": true
+    },
+    "COCOA-OTC": {
+      "open": true
+    },
+    "AS51": {
+      "open": true
+    },
+    "GOOGLE/MSFT": {
+      "open": false
+    },
+    "USO/USD": {
+      "open": false
+    },
+    "AMZN": {
+      "open": false
+    },
+    "XAUUSD-OTC": {
+      "open": true
+    },
+    "NFLX/AMZN": {
+      "open": false
+    },
+    "AIG-OTC": {
+      "open": true
+    },
+    "MSFT/AAPL": {
+      "open": false
+    },
+    "AAPL": {
+      "open": true
+    },
+    "AXY": {
+      "open": true
+    },
+    "FB-OTC": {
+      "open": true
+    },
+    "USNDAQ 100 (NDX) Spot Index": {
+      "open": true
+    },
+    "COTTON-OTC": {
+      "open": true
+    },
+    "ALIBABA": {
+      "open": true
+    },
+    "BXY": {
+      "open": true
+    },
+    "INTC": {
+      "open": false
+    },
+    "MCDON": {
+      "open": true
+    },
+    "GOOGLE/MSFT-OTC": {
+      "open": true
+    },
+    "UK100-OTC": {
+      "open": true
+    },
+    "UKOUSD-OTC": {
+      "open": true
+    },
+    "WDC-OTC": {
+      "open": true
+    },
+    "JPM-op": {
+      "open": false
+    },
+    "AMZN/EBAY-OTC": {
+      "open": true
+    },
+    "NVDA/AMD": {
+      "open": false
+    },
+    "INTEL/IBM-OTC": {
+      "open": true
+    },
+    "MORSTAN-op": {
+      "open": false
+    },
+    "BIDU-OTC": {
+      "open": true
+    },
+    "CITI": {
+      "open": true
+    },
+    "SNDK-OTC": {
+      "open": true
+    },
+    "CITI-op": {
+      "open": false
+    },
+    "US30/JP225-OTC": {
+      "open": true
+    },
+    "AIG-op": {
+      "open": false
+    },
+    "JPM-OTC": {
+      "open": true
+    },
+    "XNGUSD-OTC": {
+      "open": true
+    },
+    "COKE-op": {
+      "open": false
+    },
+    "FACEBOOK-op": {
+      "open": false
+    },
+    "Euro Currency Index": {
+      "open": true
+    },
+    "TESLA/FORD-OTC": {
+      "open": true
+    },
+    "CISCO": {
+      "open": false
+    },
+    "SX5E": {
+      "open": true
+    },
+    "URA-OTC": {
+      "open": true
+    },
+    "Casinos": {
+      "open": true
+    },
+    "AIR-OTC": {
+      "open": true
+    },
+    "MAG7-OTC": {
+      "open": true
+    },
+    "CANNABIS-OTC": {
+      "open": true
+    }
+  },
+  "forex": {
+    "GBPUSD-OTC": {
+      "open": true
+    },
+    "USDNOK-OTC": {
+      "open": true
+    },
+    "USDINR-OTC": {
+      "open": true
+    },
+    "EURGBP": {
+      "open": true
+    },
+    "NOKJPY-OTC": {
+      "open": true
+    },
+    "EURCHF-OTC": {
+      "open": true
+    },
+    "NZDUSD": {
+      "open": true
+    },
+    "EURTHB-OTC": {
+      "open": true
+    },
+    "EURCAD": {
+      "open": false
+    },
+    "AUDCHF": {
+      "open": true
+    },
+    "USDMXN-OTC": {
+      "open": true
+    },
+    "GBPCAD-OTC": {
+      "open": true
+    },
+    "NZDCAD": {
+      "open": true
+    },
+    "USDBRL": {
+      "open": false
+    },
+    "USDBRL-OTC": {
+      "open": true
+    },
+    "USDJPY": {
+      "open": true
+    },
+    "AUDCHF-OTC": {
+      "open": true
+    },
+    "EURJPY": {
+      "open": true
+    },
+    "EURAUD-OTC": {
+      "open": true
+    },
+    "EURUSD-OTC": {
+      "open": true
+    },
+    "CADCHF-OTC": {
+      "open": true
+    },
+    "EURCHF": {
+      "open": true
+    },
+    "AUDNZD": {
+      "open": false
+    },
+    "USDCAD": {
+      "open": false
+    },
+    "GBPAUD": {
+      "open": true
+    },
+    "GBPNZD-OTC": {
+      "open": true
+    },
+    "EURNZD": {
+      "open": true
+    },
+    "USDTRY": {
+      "open": false
+    },
+    "JPYTHB-OTC": {
+      "open": true
+    },
+    "USDJPY-OTC": {
+      "open": true
+    },
+    "USDHKD": {
+      "open": false
+    },
+    "EURUSD": {
+      "open": true
+    },
+    "CADCHF": {
+      "open": false
+    },
+    "EURJPY-OTC": {
+      "open": true
+    },
+    "AUDJPY": {
+      "open": false
+    },
+    "GBPNZD": {
+      "open": true
+    },
+    "USDHKD-OTC": {
+      "open": true
+    },
+    "GBPUSD": {
+      "open": true
+    },
+    "GBPJPY": {
+      "open": true
+    },
+    "USDTHB-OTC": {
+      "open": true
+    },
+    "EURCAD-OTC": {
+      "open": true
+    },
+    "AUDCAD": {
+      "open": false
+    },
+    "AUDUSD": {
+      "open": true
+    },
+    "EURGBP-OTC": {
+      "open": true
+    },
+    "GBPCAD": {
+      "open": false
+    },
+    "EURAUD": {
+      "open": true
+    },
+    "NZDUSD-OTC": {
+      "open": true
+    },
+    "USDSGD-OTC": {
+      "open": true
+    },
+    "USD/SEK": {
+      "open": false
+    },
+    "USDTRY-OTC": {
+      "open": true
+    },
+    "USDPLN": {
+      "open": false
+    },
+    "AUDNZD-OTC": {
+      "open": true
+    },
+    "NZDCHF-OTC": {
+      "open": true
+    },
+    "NZDCAD-OTC": {
+      "open": true
+    },
+    "USDCAD-OTC": {
+      "open": true
+    },
+    "CADJPY-OTC": {
+      "open": true
+    },
+    "USDSEK-OTC": {
+      "open": true
+    },
+    "EURNZD-OTC": {
+      "open": true
+    },
+    "GBPCHF-OTC": {
+      "open": true
+    },
+    "GBPCHF": {
+      "open": true
+    },
+    "AUDCAD-OTC": {
+      "open": true
+    },
+    "USDSGD": {
+      "open": false
+    },
+    "GBPJPY-OTC": {
+      "open": true
+    },
+    "USDIDR": {
+      "open": true
+    },
+    "USDZAR-OTC": {
+      "open": true
+    },
+    "CHFJPY": {
+      "open": false
+    },
+    "USDCHF-OTC": {
+      "open": true
+    },
+    "NZDJPY": {
+      "open": true
+    },
+    "CHFNOK-OTC": {
+      "open": true
+    },
+    "USDINR": {
+      "open": false
+    },
+    "USDNOK": {
+      "open": false
+    },
+    "NZDJPY-OTC": {
+      "open": true
+    },
+    "USDCHF": {
+      "open": false
+    },
+    "CHFJPY-OTC": {
+      "open": true
+    },
+    "AUDUSD-OTC": {
+      "open": true
+    },
+    "AUDJPY-OTC": {
+      "open": true
+    },
+    "USDPLN-OTC": {
+      "open": true
+    },
+    "USDCOP-OTC": {
+      "open": true
+    },
+    "GBPAUD-OTC": {
+      "open": true
+    },
+    "PENUSD-OTC": {
+      "open": true
+    },
+    "CADJPY": {
+      "open": false
+    },
+    "Yen_Index": {
+      "open": true
+    },
+    "Dollar Index": {
+      "open": true
+    }
+  },
+  "crypto": {
+    "WIFUSD-OTC": {
+      "open": true
+    },
+    "DYDXUSD-OTC": {
+      "open": true
+    },
+    "RENDERUSD-OTC": {
+      "open": true
+    },
+    "WLDUSD-OTC": {
+      "open": true
+    },
+    "SATSUSD-OTC": {
+      "open": true
+    },
+    "IMXUSD-OTC": {
+      "open": true
+    },
+    "TON/USD-OTC": {
+      "open": true
+    },
+    "FARTCOINUSD-OTC": {
+      "open": true
+    },
+    "GALAUSD-OTC": {
+      "open": true
+    },
+    "NEARUSD-OTC": {
+      "open": true
+    },
+    "SEIUSD-OTC": {
+      "open": true
+    },
+    "XRPUSD": {
+      "open": true
+    },
+    "SUIUSD-OTC": {
+      "open": true
+    },
+    "DOTUSD-OTC": {
+      "open": true
+    },
+    "ONYXCOINUSD-OTC": {
+      "open": true
+    },
+    "SANDUSD-OTC": {
+      "open": true
+    },
+    "ARBUSD-OTC": {
+      "open": true
+    },
+    "MANAUSD-OTC": {
+      "open": true
+    },
+    "PYTHUSD-OTC": {
+      "open": true
+    },
+    "ETHUSD": {
+      "open": true
+    },
+    "TrumpCoin OTC": {
+      "open": true
+    },
+    "ATOMUSD-OTC": {
+      "open": true
+    },
+    "NOTCOIN-OTC": {
+      "open": true
+    },
+    "STXUSD-OTC": {
+      "open": true
+    },
+    "BCHUSD-OTC": {
+      "open": true
+    },
+    "EOSUSD": {
+      "open": true
+    },
+    "EOSUSD-OTC": {
+      "open": true
+    },
+    "JUPUSD-OTC": {
+      "open": true
+    },
+    "IOTAUSD-OTC": {
+      "open": true
+    },
+    "TIAUSD-OTC": {
+      "open": true
+    },
+    "LTCUSDT": {
+      "open": true
+    },
+    "FETUSD-OTC": {
+      "open": true
+    },
+    "PENGUUSD-OTC": {
+      "open": true
+    },
+    "MATICUSD-OTC": {
+      "open": true
+    },
+    "LABUBUUSD-OTC": {
+      "open": true
+    },
+    "ONDOUSD-OTC": {
+      "open": true
+    },
+    "SHIBUSDT": {
+      "open": true
+    },
+    "LTCUSD-OTC": {
+      "open": true
+    },
+    "BTCUSD": {
+      "open": true
+    },
+    "RONINUSD-OTC": {
+      "open": true
+    },
+    "GRTUSD-OTC": {
+      "open": true
+    },
+    "LINKUSD-OTC": {
+      "open": true
+    },
+    "DASHUSD-OTC": {
+      "open": true
+    },
+    "ICPUSD-OTC": {
+      "open": true
+    },
+    "TAOUSD-OTC": {
+      "open": true
+    },
+    "FLOKIUSD-OTC": {
+      "open": true
+    },
+    "PEPEUSD-OTC": {
+      "open": true
+    },
+    "MelaniaCoin OTC": {
+      "open": true
+    },
+    "BONKUSD-OTC": {
+      "open": true
+    },
+    "INJUSD-OTC": {
+      "open": true
+    },
+    "HBARUSD-OTC": {
+      "open": true
+    },
+    "RAYDIUMUSD-OTC": {
+      "open": true
+    },
+    "ORDIUSD-OTC": {
+      "open": true
+    },
+    "ETHBTC-OTC": {
+      "open": true
+    },
+    "ADAUSD": {
+      "open": true
+    },
+    "SOLUSD": {
+      "open": true
+    },
+    "ETHUSD-OTC": {
+      "open": true
+    },
+    "TRON-OTC": {
+      "open": true
+    },
+    "BTCUSD-OTC-op": {
+      "open": true
+    }
+  }
+}

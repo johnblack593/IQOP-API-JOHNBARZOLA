@@ -1,4 +1,4 @@
-# Python overrides
+# Python
 *.py[cod]
 __pycache__/
 *.egg-info/
@@ -14,25 +14,44 @@ tests/__pycache__/
 build/
 dist/
 
-# Env & Config
+# Env & Config — NUNCA al repo
 venv/
 .env
+*.env
+.env.*
 
 # IDEs
 .vscode/
 /.vs
-.idea
+.idea/
 
-# Custom test scripts
-test.py
-scripts/
-examples/debug_*.json
-
-# Sprint debug files
-examples/debug_sprint*
-
-# Extras
-.ruff_cache
-examples/debug_output.txt
+# ============================================================
+# DATOS SENSIBLES — NUNCA AL REPOSITORIO
+# Contienen order_ids reales, sesiones WS, datos de cuenta
+# ============================================================
 scratch/
 
+# JSONs con resultados de trades (order_ids reales)
+**/certification_result*.json
+**/trade_result*.json
+**/cfd_certification*.json
+**/digital_certification*.json
+
+# Volcados crudos de WebSocket (pueden contener tokens de sesión)
+examples/debug_msg_*.json
+examples/debug_sprint*.json   # ← scripts de sprint también, son temporales
+
+# ============================================================
+# PERMITIDOS — datos del sistema sin PII (subir con git add -f)
+# ============================================================
+# open_time.json                → NO ignorar, es catálogo del sistema
+# examples/debug_actives_kyc_map.json → NO ignorar, es mapa de IDs
+# iqoptionapi/constants.py      → NO ignorar, es crítico
+
+# Custom test scripts temporales
+test.py
+scripts/
+
+# Otros
+.ruff_cache
+examples/debug_output.txt
