@@ -20,6 +20,7 @@ from collections import deque, defaultdict
 from iqoptionapi.utils import nested_dict
 from iqoptionapi.expiration import get_expiration_time, get_remaning_time
 from datetime import datetime, timedelta
+from iqoptionapi.time_sync import _clock
 from random import randint
 
 
@@ -1474,52 +1475,10 @@ class IQ_Option:
     
     @rate_limited("_order_bucket")
     def buy_digital_spot(self, active, amount, action, duration):
-        # Gate de validación
-        if hasattr(self, 'validator') and self.validator is not None:
-            is_valid, reason = self.validator.validate_order(
-                active=active,
-                amount=amount,
-                action=action,
-                duration=duration,
-                instrument_type="digital"
-            )
-            if not is_valid:
-                get_logger(__name__).error("buy_digital_spot rejected by validator: %s", reason)
-                return False, None
-
-        # BUG-DIGITAL-02: Migrado de _rate_limiter a _order_bucket
         """
-        DEPRECATED: Use buy_digital_spot_v2() instead. This method uses
-        the legacy instrument_id format which may be rejected by the server.
+        Alias para buy_digital_spot_v2, garantizando el uso del Smart ID engine (S6).
         """
-        # Expiration time need to be formatted like this: YYYYMMDDHHII
-        # And need to be on GMT time
-
-        # Type - P or C
-        action = action.lower()
-        if action == 'put':
-            action = 'P'
-        elif action == 'call':
-            action = 'C'
-        else:
-            get_logger(__name__).error('buy_digital_spot active error')
-            return -1, None
-        
-        exp, _ = get_expiration_time(int(self.api.timesync.server_timestamp), duration)
-        dateFormated = str(datetime.utcfromtimestamp(exp).strftime("%Y%m%d%H%M"))
-        instrument_id = "do" + active + dateFormated + "PT" + str(duration) + "M" + action + "SPT"
-
-        self.api.digital_option_placed_id_event.clear()
-        request_id = self.api.place_digital_option(instrument_id, amount)
-
-        is_ready = self.api.digital_option_placed_id_event.wait(timeout=15)
-        digital_order_id = self.api.digital_option_placed_id.get(request_id)
-        
-        if not is_ready or digital_order_id is None:
-            get_logger(__name__).warning('Timeout (15s) waiting for digital_option_placed_id')
-            return False, digital_order_id
-            
-        return True, digital_order_id
+        return self.buy_digital_spot_v2(active, amount, action, duration)
 
     def get_digital_spot_profit_after_sale(self, position_id):
         def get_instrument_id_to_bid(data, instrument_id):
@@ -2221,7 +2180,8 @@ class IQ_Option:
             get_logger(__name__).error('buy_digital_spot_v2 active error')
             return -1, None
 
-        timestamp = int(self.api.timesync.server_timestamp)
+        # SPRINT 7: Usar reloj sincronizado global
+        timestamp = int(_clock.now())
 
         if duration == 1:
             exp, _ = get_expiration_time(timestamp, duration)
@@ -2449,14 +2409,9 @@ class IQ_Option:
         active_data = self.api.blitz_instruments[active]
         active_id = active_data["id"]
         
-        # SPRINT 6: Usar server_timestamp con offset local para precisión milimétrica
-        server_time = getattr(self.api, "server_timestamp", None)
-        local_sync = getattr(self.api, "_local_time_at_sync", None)
-        
-        if server_time and local_sync:
-            now = server_time + (time.time() - local_sync)
-        else:
-            now = self.api.timesync.server_timestamp
+        # SPRINT 7: Usar ServerClockSync para precisión milimétrica (Línea de ref: S7-T0)
+        # Reemplaza la lógica manual de SPRINT 6
+        now = _clock.now()
             
         # Blitz duration is in seconds — align to next valid window
         now_int = int(now)
