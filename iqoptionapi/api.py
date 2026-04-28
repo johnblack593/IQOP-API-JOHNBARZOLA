@@ -339,7 +339,8 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         data = json.dumps(dict(name=name,
                                msg=msg, request_id=request_id))
         logger.debug("WS SEND: %s", data)
-        self.websocket.send(data)
+        with self._ws_lock:
+            self.websocket.send(data)
 
     def remove_pending_buy_id(self, request_id):
         """Remove a specific request_id from the pending queue if it exists."""
