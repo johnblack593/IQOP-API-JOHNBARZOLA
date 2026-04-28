@@ -7,6 +7,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+_last_rotation_time: float = 0.0
+_MIN_ROTATION_COOLDOWN: float = 45.0  # segundos mínimos entre rotaciones
+
 # Señales de rate limit de IQ Option
 RATE_LIMIT_SIGNALS = [
     "auth timeout", "connection refused", "429",
@@ -30,32 +33,52 @@ def get_current_ip() -> Optional[str]:
     except Exception:
         return None
 
+def is_warp_available() -> bool:
+    """Verifica si warp-cli está instalado y accesible en el PATH."""
+    try:
+        result = subprocess.run(
+            ["warp-cli", "--version"],
+            capture_output=True, text=True, timeout=3
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
 def rotate_ip_warp(wait_seconds: int = 5) -> bool:
-    """
-    Rota la IP desconectando y reconectando WARP.
-    Requiere WARP CLI instalado:
-      Windows: warp-cli disconnect && warp-cli connect
-    Retorna True si la IP cambió exitosamente.
-    """
+    global _last_rotation_time
+    
+    # Respetar cooldown mínimo entre rotaciones
+    elapsed = time.time() - _last_rotation_time
+    if elapsed < _MIN_ROTATION_COOLDOWN:
+        logger.info(
+            "Rotación omitida: cooldown activo (%.0fs restantes)", 
+            _MIN_ROTATION_COOLDOWN - elapsed
+        )
+        return False
+    
+    if not is_warp_available():
+        logger.warning("warp-cli no disponible en PATH. Rotación no posible.")
+        return False
+    
     ip_before = get_current_ip()
     logger.info(f"IP antes de rotación: {ip_before}")
     try:
-        # Desconectar WARP
         subprocess.run(["warp-cli", "disconnect"], capture_output=True, timeout=10)
         time.sleep(2)
-        # Reconectar WARP
         subprocess.run(["warp-cli", "connect"], capture_output=True, timeout=10)
         time.sleep(wait_seconds)
         ip_after = get_current_ip()
         logger.info(f"IP después de rotación: {ip_after}")
         if ip_after and ip_after != ip_before:
-            logger.info("Rotacion de IP exitosa.")
+            logger.info("Rotación de IP exitosa.")
+            _last_rotation_time = time.time()  # actualizar cooldown
             return True
         else:
-            logger.warning("IP no cambio tras rotacion WARP.")
+            logger.warning("IP no cambió tras rotación WARP.")
+            _last_rotation_time = time.time()  # evitar spam aunque falle
             return False
     except FileNotFoundError:
-        logger.error("warp-cli no encontrado. Instalar WARP CLI.")
+        logger.error("warp-cli no encontrado.")
         return False
     except Exception as e:
         logger.error(f"Error en rotate_ip_warp: {e}")

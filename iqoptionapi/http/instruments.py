@@ -39,10 +39,15 @@ GROUP_ID_TO_TYPE = {
 }
 
 # All other group_ids map to "cfd"
-_CFD_GROUP_IDS = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-                  17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-                  29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-                  41, 42, 43, 44, 45, 46}
+_CFD_GROUP_IDS = {
+    # Solo IDs sin clasificación explícita en GROUP_ID_TO_TYPE
+    5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+    29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+    42, 43, 44, 45, 46
+    # NOTA: 1=forex, 2=stocks, 3=commodities, 4=indices, 16=crypto, 41=etf 
+    # quedan EXCLUIDOS de este set porque ya tienen tipo propio
+}
 
 
 def _classify_type(group_id: int) -> str:
