@@ -2156,7 +2156,281 @@ class IQ_Option:
     def del_option_open_by_other_pc(self, id):
         del self.api.socket_option_opened[id]
 
-    # -----------------------------------------------------------------
+    # =================================================================
+    # =================== MARGIN TRADING (Modern Protocol) =============
+    # =================================================================
+    # Uses marginal-{type}.place-market-order (v1.0) — browser-parity
+    # Reverse-engineered from Chrome 124 (2026-04-28)
+    # =================================================================
+
+    # Mapping from short instrument type to internal prefixes
+    _MARGIN_TYPE_MAP = {
+        "forex":  "marginal-forex",
+        "cfd":    "marginal-cfd",
+        "crypto": "marginal-crypto",
+        "marginal-forex":  "marginal-forex",
+        "marginal-cfd":    "marginal-cfd",
+        "marginal-crypto": "marginal-crypto",
+    }
+
+    def open_margin_position(
+        self,
+        instrument_type,      # "forex", "cfd", "crypto"
+        active_id,            # Numeric active ID (e.g., 1 for EURUSD)
+        direction,            # "buy" or "sell"
+        amount,               # Amount in USD (margin)
+        leverage,             # Leverage multiplier (e.g., 50, 100, 1000)
+        take_profit=None,     # {"type": "pnl"|"price"|"percent", "value": <number>} or None
+        stop_loss=None,       # {"type": "pnl"|"price"|"percent", "value": <number>} or None
+        timeout=30.0,
+    ):
+        """
+        Opens a margin position using the modern marginal-{type}.place-market-order protocol.
+
+        Args:
+            instrument_type: "forex", "cfd", or "crypto"
+            active_id: Numeric active ID (e.g., 1 for EURUSD)
+            direction: "buy" or "sell"
+            amount: Amount in USD (the margin)
+            leverage: Leverage multiplier (e.g., 50, 100, 1000)
+            take_profit: dict with "type" and "value", or None
+                         Example: {"type": "pnl", "value": 5}  -> +$5 profit
+                         Example: {"type": "price", "value": 1.17200}
+                         Example: {"type": "percent", "value": 50}
+            stop_loss: dict with "type" and "value", or None
+                       Example: {"type": "pnl", "value": 3}  -> -$3 loss (auto-negated)
+                       Example: {"type": "price", "value": 1.16800}
+            timeout: Max wait time in seconds
+
+        Returns:
+            (True, position_dict) on success
+            (False, error_string) on failure
+        """
+        if amount <= 0:
+            return False, "INVALID_PARAMS: amount must be > 0"
+        if direction not in ("buy", "sell"):
+            return False, f"INVALID_PARAMS: invalid direction '{direction}'"
+        if instrument_type.lower() not in self._MARGIN_TYPE_MAP:
+            return False, f"INVALID_PARAMS: unknown instrument_type '{instrument_type}'"
+
+        self.api.margin_order_result = None
+        self.api.margin_order_event.clear()
+
+        try:
+            self.api.place_margin_order(
+                instrument_type=instrument_type,
+                active_id=active_id,
+                side=direction,
+                margin=amount,
+                leverage=leverage,
+                take_profit=take_profit,
+                stop_loss=stop_loss,
+            )
+        except Exception as e:
+            get_logger(__name__).error("open_margin_position send failed: %s", e)
+            return False, f"SEND_ERROR: {e}"
+
+        # Wait for position confirmation via the 'position' message handler
+        is_ready = self.api.margin_order_event.wait(timeout=timeout)
+
+        if is_ready and self.api.margin_order_result is not None:
+            order_result = self.api.margin_order_result
+            if order_result.get("id") is not None:
+                get_logger(__name__).info(
+                    "Margin position opened: id=%s type=%s side=%s amount=%s leverage=%s",
+                    order_result.get("id"),
+                    instrument_type, direction, amount, leverage,
+                )
+                return True, order_result
+            else:
+                # Server responded but rejected the order
+                return False, f"REJECTED: {order_result.get('error', order_result)}"
+        else:
+            get_logger(__name__).error(
+                "open_margin_position TIMEOUT (%.0fs) for %s %s",
+                timeout, instrument_type, direction,
+            )
+            return False, f"TIMEOUT after {timeout}s"
+
+    def close_margin_position(self, order_id, timeout=15.0):
+        """
+        Closes a margin position by its order ID.
+
+        """
+        # Resolve order_id to position_id and margin type
+        position_id, m_type = self._resolve_margin_position_id(order_id)
+        
+        get_logger(__name__).info("Closing margin position: id=%s (type=%s)", position_id, m_type)
+
+        self.api.close_position_data = None
+        self.api.close_position_data_event.clear()
+        
+        # Modern protocol: marginal-{type}.close-position
+        data = {
+            "name": f"marginal-{m_type}.close-position",
+            "version": "1.0",
+            "body": {
+                "position_id": int(position_id)
+            }
+        }
+        self.api.send_websocket_request("sendMessage", data)
+
+        start_t = time.time()
+        while self.api.close_position_data is None and (time.time() - start_t < timeout):
+            self.api.close_position_data_event.wait(timeout=1)
+            self.api.close_position_data_event.clear()
+
+        if self.api.close_position_data is not None:
+            status = self.api.close_position_data.get("status")
+            if status == 2000:
+                get_logger(__name__).info("Margin position closed: %s", position_id)
+                return True, self.api.close_position_data
+            else:
+                return False, f"SERVER_ERROR: status={status}"
+        return False, f"TIMEOUT after {timeout}s"
+
+    def get_margin_positions(self, instrument_type="forex"):
+        """
+        Gets all open margin positions for a given instrument type.
+
+        Args:
+            instrument_type: "forex", "cfd", or "crypto"
+
+        Returns:
+            list of position dicts, or empty list on error
+        """
+        full_type = self._MARGIN_TYPE_MAP.get(instrument_type.lower(), instrument_type)
+        return self.get_open_positions(instrument_type=full_type, timeout=10.0)
+
+    def _resolve_margin_position_id(self, order_id):
+        try:
+            for m_type in ["marginal-forex", "marginal-cfd", "marginal-crypto"]:
+                positions = self.get_open_positions(instrument_type=m_type, timeout=5.0)
+                for pos in positions:
+                    pos_id = pos.get("id")
+                    ext_id = pos.get("external_id")
+                    
+                    order_ids = []
+                    raw_event = pos.get("raw_event", {})
+                    for k, v in raw_event.items():
+                        if isinstance(v, dict) and "order_ids" in v:
+                            order_ids.extend(v["order_ids"])
+                    
+                    if str(order_id) == str(ext_id) or order_id in order_ids or str(order_id) in [str(o) for o in order_ids]:
+                        actual_id = ext_id if ext_id is not None else pos_id
+                        m_prefix = m_type.replace("marginal-", "")
+                        return actual_id, m_prefix
+        except Exception as e:
+            get_logger(__name__).warning("Portfolio search failed: %s", e)
+        return order_id, "forex" # Default fallback
+
+    def modify_margin_tp_sl(
+        self,
+        order_id,
+        take_profit=None,     # {"type": "pnl", "value": 5} or None
+        stop_loss=None,       # {"type": "pnl", "value": 3} or None
+    ):
+        """
+        Modifies TP/SL of an open margin position using the modern protocol.
+        """
+        position_id, m_type = self._resolve_margin_position_id(order_id)
+        
+        results = []
+        
+        # 1. Update Take Profit if provided
+        if take_profit is not None:
+            get_logger(__name__).info("Updating margin TP: pos=%s, val=%s", position_id, take_profit)
+            tp_data = {
+                "name": f"marginal-{m_type}.change-position-take-profit-order",
+                "version": "1.0",
+                "body": {
+                    "position_id": int(position_id),
+                    "level": {
+                        "type": str(take_profit.get("type", "pnl")),
+                        "value": float(take_profit.get("value", 0))
+                    }
+                }
+            }
+            self.api.result = None
+            self.api.result_event.clear()
+            self.api.send_websocket_request("sendMessage", tp_data)
+            if not self.api.result_event.wait(timeout=10):
+                get_logger(__name__).warning("Timeout waiting for TP update result")
+                results.append(False)
+            else:
+                results.append(self.api.result)
+
+        # 2. Update Stop Loss if provided
+        if stop_loss is not None:
+            get_logger(__name__).info("Updating margin SL: pos=%s, val=%s", position_id, stop_loss)
+            sl_value = float(stop_loss.get("value", 0))
+            # Ensure negative for pnl type if positive value provided
+            if str(stop_loss.get("type", "pnl")) == "pnl" and sl_value > 0:
+                sl_value = -abs(sl_value)
+                
+            sl_data = {
+                "name": f"marginal-{m_type}.change-position-stop-loss-order",
+                "version": "1.0",
+                "body": {
+                    "position_id": int(position_id),
+                    "level": {
+                        "type": str(stop_loss.get("type", "pnl")),
+                        "value": sl_value
+                    }
+                }
+            }
+            self.api.result = None
+            self.api.result_event.clear()
+            self.api.send_websocket_request("sendMessage", sl_data)
+            if not self.api.result_event.wait(timeout=10):
+                get_logger(__name__).warning("Timeout waiting for SL update result")
+                results.append(False)
+            else:
+                results.append(self.api.result)
+
+        if not results:
+            return True, "NO_CHANGES"
+            
+        final_success = all(results)
+        return final_success, {"results": results}
+
+    def get_available_leverages(self, instrument_type, active_id):
+        """
+        Gets available leverages for a specific margin instrument.
+
+        Args:
+            instrument_type: "forex", "cfd", or "crypto"
+            active_id: Numeric active ID
+
+        Returns:
+            list of available leverages (e.g., [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000])
+            or empty list on error
+        """
+        # The API expects "forex", not "marginal-forex" for leverages endpoint
+        raw_type = instrument_type.lower()
+        if raw_type.startswith("marginal-"):
+            raw_type = raw_type.replace("marginal-", "")
+
+        self.api.available_leverages = None
+        self.api.available_leverages_event.clear()
+        self.api.get_available_leverages(raw_type, active_id)
+
+        is_ready = self.api.available_leverages_event.wait(timeout=10)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for available_leverages")
+            return []
+
+        if self.api.available_leverages is not None:
+            msg = self.api.available_leverages.get("msg", {})
+            get_logger(__name__).info("RAW LEVERAGES MSG: %s", msg)
+            leverages = msg.get("leverages", [])
+            if isinstance(leverages, list):
+                # Extract just the multiplier or value
+                return [l.get("value", l.get("multiplier", l)) if isinstance(l, dict) else l for l in leverages]
+            return leverages
+        return []
+
+    # =================================================================
 
     def opcode_to_name(self, opcode):
         return list(OP_code.ACTIVES.keys())[list(OP_code.ACTIVES.values()).index(opcode)]
@@ -2340,14 +2614,21 @@ class IQ_Option:
         instrument_type: "binary-option" | "turbo-option" | "digital-option" | "blitz"
         Retorna lista vacía si timeout o sin posiciones.
         """
-        self.api.open_positions_event.clear()
-        self.api.open_positions[instrument_type] = None
+        is_marginal = instrument_type.startswith("marginal")
+        version = "4.0" if is_marginal else "3.0"
+        
+        if is_marginal:
+            self.api.positions_event.clear()
+            self.api.positions = None
+        else:
+            self.api.open_positions_event.clear()
+            self.api.open_positions[instrument_type] = None
 
         self.api.send_websocket_request(
             name="sendMessage",
             msg={
                 "name": "portfolio.get-positions",
-                "version": "1.0",
+                "version": version,
                 "body": {
                     "instrument_type": instrument_type,
                     "user_balance_id": self.api.balance_id,
@@ -2357,15 +2638,26 @@ class IQ_Option:
             }
         )
 
-        is_ready = self.api.open_positions_event.wait(timeout=timeout)
-        if not is_ready:
-            get_logger(__name__).warning(
-                "Timeout (%.1fs) waiting for get_open_positions(%s)", timeout, instrument_type
-            )
-            return []
+        if is_marginal:
+            is_ready = self.api.positions_event.wait(timeout=timeout)
+            if not is_ready:
+                get_logger(__name__).warning(
+                    "Timeout (%.1fs) waiting for positions(%s)", timeout, instrument_type
+                )
+                return []
+            
+            result = self.api.positions.get("msg", {}).get("positions", [])
+            return result if isinstance(result, list) else []
+        else:
+            is_ready = self.api.open_positions_event.wait(timeout=timeout)
+            if not is_ready:
+                get_logger(__name__).warning(
+                    "Timeout (%.1fs) waiting for get_open_positions(%s)", timeout, instrument_type
+                )
+                return []
 
-        result = self.api.open_positions.get(instrument_type, [])
-        return result if isinstance(result, list) else []
+            result = self.api.open_positions.get(instrument_type, [])
+            return result if isinstance(result, list) else []
 
     def get_all_open_positions(self, timeout: float = 10.0) -> dict:
         """

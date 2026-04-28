@@ -58,6 +58,7 @@ from iqoptionapi.ws.received.leaderboard_userinfo_deals_client import leaderboar
 from iqoptionapi.ws.received.client_price_generated import client_price_generated
 from iqoptionapi.ws.received.users_availability import users_availability
 from iqoptionapi.ws.received.portfolio_get_positions import portfolio_get_positions
+from iqoptionapi.ws.received.margin_order_result import margin_order_result
 
 # SPRINT 7: Reactive Event Handlers (Classes)
 from iqoptionapi.ws.received.option_closed import OptionClosed
@@ -106,6 +107,7 @@ _MESSAGE_ROUTER: dict = {
     'option-closed': [_option_closed_handler],
     'option-opened': [option_opened],
 
+    'market-order-placed': [margin_order_result],
     'order': [order],
     'order-canceled': [order_canceled],
     'order-placed-temp': [order_placed_temp], # order_placed_temp: called once — duplicate removed (audit SPRINT-02)

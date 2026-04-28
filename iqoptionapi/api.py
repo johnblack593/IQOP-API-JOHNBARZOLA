@@ -62,6 +62,7 @@ from iqoptionapi.ws.channels.sell_option import Sell_Option
 from iqoptionapi.ws.channels.sell_digital_option import Sell_Digital_Option
 from iqoptionapi.ws.channels.change_tpsl import Change_Tpsl
 from iqoptionapi.ws.channels.change_auto_margin_call import ChangeAutoMarginCall
+from iqoptionapi.ws.channels.place_margin_order import PlaceMarginOrder
 
 from iqoptionapi.ws.objects.timesync import TimeSync
 from iqoptionapi.ws.objects.profile import Profile
@@ -117,6 +118,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     order_canceled = None
     close_position_data = None
     overnight_fee = None
+    margin_order_result = None
     # ---for real time
     digital_option_placed_id = {}
     live_deal_data = nested_dict(3, deque)
@@ -242,9 +244,14 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.technical_indicators_event = threading.Event()
         self.digital_payout_event = threading.Event()
         self.open_positions_event = threading.Event()
+        self.margin_order_event = threading.Event()
+        self.margin_positions_event = threading.Event()
+        self.trading_group_params_event = threading.Event()
 
         # Portfolio storage
         self.open_positions = {}
+        self.margin_positions = {}
+        self.trading_group_params = None
         
         # Callbacks for S1-03 Resilience
         self._reconnect_callback: callable | None = None
@@ -883,6 +890,10 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     @property
     def get_overnight_fee(self):
         return Get_overnight_fee(self)
+
+    @property
+    def place_margin_order(self):
+        return PlaceMarginOrder(self)
 # -------------------------------------------------------
 
     @property
@@ -1010,6 +1021,40 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             is_ready = self.profile_msg_event.wait(timeout=2.0)
             if not is_ready or self.profile.msg is None:
                 get_logger(__name__).debug("send_ssid: no profile response within 2s, but authentication succeeded.")
+
+        # Sprint 6 SP1: Request balances if balance_id is still None
+        # The modern authenticate protocol does not auto-push profile/balances.
+        if self.balance_id is None:
+            get_logger(__name__).debug("send_ssid: balance_id is None, requesting internal-billing.get-balances")
+            self.send_websocket_request("sendMessage", {
+                "name": "internal-billing.get-balances",
+                "version": "1.0",
+                "body": {
+                    "types_ids": [1, 4, 2],
+                    "tournaments_statuses_ids": [3, 2]
+                }
+            })
+            # Wait briefly for balances
+            if hasattr(self, 'balances_raw_event'):
+                self.balances_raw_event.clear()
+            is_bal = getattr(self, 'balances_raw_event', threading.Event()).wait(timeout=5.0)
+            if is_bal and self.balances_raw is not None:
+                msg = self.balances_raw.get("msg", [])
+                if isinstance(msg, list):
+                    for b in msg:
+                        if b.get("type") == 4:  # type 4 = demo/practice
+                            self.balance_id = b["id"]
+                            get_logger(__name__).info("Balance ID set from balances: %s (type=%s)", b["id"], b.get("type"))
+                            if hasattr(self, 'balance_id_event'):
+                                self.balance_id_event.set()
+                            break
+                    # Fallback to first balance if no type 4 found
+                    if self.balance_id is None and msg:
+                        self.balance_id = msg[0]["id"]
+                        get_logger(__name__).info("Balance ID set from first balance: %s", msg[0]["id"])
+                        if hasattr(self, 'balance_id_event'):
+                            self.balance_id_event.set()
+
         return True
 
     def connect(self, password):

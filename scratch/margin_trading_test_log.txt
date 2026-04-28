@@ -1,0 +1,74 @@
+2026-04-28 12:32:59,682 - MARGIN_TEST - INFO - ============================================================
+2026-04-28 12:32:59,683 - MARGIN_TEST - INFO -   MARGIN TRADING TEST SUITE (v8.9.999-SP1)
+2026-04-28 12:32:59,683 - MARGIN_TEST - INFO - ============================================================
+2026-04-28 12:33:01,822 - MARGIN_TEST - INFO - Connecting (demo account, no WARP)...
+2026-04-28 12:33:01,822 - iqoptionapi.http.session - INFO - HTTP session initialized — TLS verify=C:\Users\JCBV\AppData\Local\Programs\Python\Python311\Lib\site-packages\certifi\cacert.pem
+2026-04-28 12:33:02,519 - iqoptionapi.ip_rotation - INFO - IP diagnostico: 104.28.153.74 (US/Miami) org=AS13335 Cloudflare, Inc.
+2026-04-28 12:33:02,519 - iqoptionapi.ip_rotation - INFO - Intento de conexion 1/3
+2026-04-28 12:33:04,446 - websocket - INFO - Websocket connected
+2026-04-28 12:33:07,365 - iqoptionapi.api - INFO - Sending SSID for authentication: 9baa28e0ae...
+2026-04-28 12:33:09,861 - iqoptionapi.api - INFO - Balance ID set from balances: 987654321 (type=4)
+2026-04-28 12:33:10,463 - iqoptionapi.reconnect - INFO - ReconnectManager: connection restored — counter reset.
+2026-04-28 12:33:14,225 - iqoptionapi.ws.received.initialization_data - INFO - Received initialization-data keys: ['turbo', 'binary', 'blitz', 'currency', 'is_buyback', 'groups']
+2026-04-28 12:33:15,035 - iqoptionapi.stable_api - WARNING - Failed to auto-update asset catalogs: 'id'
+2026-04-28 12:33:15,036 - iqoptionapi.stable_api - INFO - _wait_for_init_data: OK — binary=266 turbo=222 actives loaded
+2026-04-28 12:33:15,036 - iqoptionapi.stable_api - INFO - Heartbeat watchdog started.
+2026-04-28 12:33:15,037 - MARGIN_TEST - INFO - [PASS] Connection -- Connected successfully
+2026-04-28 12:33:16,895 - iqoptionapi.stable_api - INFO - HTTP profile missing balances, waiting for WS profile...
+2026-04-28 12:34:16,896 - iqoptionapi.stable_api - WARNING - Timeout waiting for profile via WS
+2026-04-28 12:34:16,896 - MARGIN_TEST - WARNING - Could not change balance (continuing with default): 'NoneType' object is not subscriptable
+2026-04-28 12:34:17,140 - MARGIN_TEST - INFO - Current balance: $10009.84
+2026-04-28 12:34:17,141 - MARGIN_TEST - INFO - ------------------------------------------------------------
+2026-04-28 12:34:17,141 - MARGIN_TEST - INFO - TEST 1: Get available leverages for EURUSD (forex)
+2026-04-28 12:34:17,432 - iqoptionapi.stable_api - INFO - RAW LEVERAGES MSG: {'instrument_type': 'forex', 'group_id': 191, 'leverages': [{'active_id': 1, 'unregulated': [50, 100, 200, 300, 500, 1000], 'unregulated_default': 200, 'regulated': [50, 100, 200, 300, 500, 1000], 'regulated_default': 200}]}
+2026-04-28 12:34:17,433 - MARGIN_TEST - INFO - [PASS] T1_Get_Leverages -- Leverages: [{'active_id': 1, 'unregulated': [50, 100, 200, 300, 500, 1000], 'unregulated_default': 200, 'regulated': [50, 100, 200, 300, 500, 1000], 'regulated_default': 200}]
+2026-04-28 12:34:17,433 - MARGIN_TEST - INFO - ------------------------------------------------------------
+2026-04-28 12:34:17,433 - MARGIN_TEST - INFO - TEST 2: Open EURUSD margin position (buy, $10, x50, TP=+$5, SL=-$3)
+2026-04-28 12:34:17,728 - iqoptionapi.ws.received.margin_order_result - INFO - Margin order placed: id=101093598502 status=2000
+2026-04-28 12:34:17,728 - iqoptionapi.stable_api - INFO - Margin position opened: id=101093598502 type=forex side=buy amount=10 leverage=50
+2026-04-28 12:34:17,728 - MARGIN_TEST - INFO - [PASS] T2_Open_Position_TPSL -- position_id=101093598502 open_price=None leverage=None
+2026-04-28 12:34:17,728 - MARGIN_TEST - INFO - ------------------------------------------------------------
+2026-04-28 12:34:17,728 - MARGIN_TEST - INFO - TEST 3: Verify position in get_margin_positions()
+2026-04-28 12:34:19,005 - MARGIN_TEST - INFO - [PASS] T3_List_Positions -- Total positions: 18, found ours: False
+2026-04-28 12:34:19,005 - MARGIN_TEST - INFO - ------------------------------------------------------------
+2026-04-28 12:34:19,005 - MARGIN_TEST - INFO - TEST 4: Modify TP/SL (TP=$8, SL=$5)
+2026-04-28 12:34:19,263 - iqoptionapi.stable_api - INFO - Updating margin TP: pos=100157587735, val={'type': 'pnl', 'value': 8}
+2026-04-28 12:34:19,468 - iqoptionapi.stable_api - INFO - Updating margin SL: pos=100157587735, val={'type': 'pnl', 'value': 5}
+2026-04-28 12:34:19,659 - MARGIN_TEST - INFO - [PASS] T4_Modify_TPSL -- {'results': [True, True]}
+2026-04-28 12:34:19,659 - MARGIN_TEST - INFO - ------------------------------------------------------------
+2026-04-28 12:34:19,659 - MARGIN_TEST - INFO - TEST 5: Close margin position
+2026-04-28 12:34:20,956 - iqoptionapi.stable_api - INFO - Closing margin position: id=100157587735 (type=forex)
+2026-04-28 12:34:21,970 - iqoptionapi.stable_api - INFO - Margin position closed: 100157587735
+2026-04-28 12:34:21,970 - MARGIN_TEST - INFO - [PASS] T5_Close_Position -- {'request_id': '', 'name': 'position-closed', 'msg': {'id': 100157587735}, 'status': 2000}
+2026-04-28 12:34:21,970 - MARGIN_TEST - INFO - ------------------------------------------------------------
+2026-04-28 12:34:21,970 - MARGIN_TEST - INFO - TEST 6: Open GBPUSD margin position (buy, $10, x100, NO TP/SL)
+2026-04-28 12:34:22,258 - iqoptionapi.ws.received.margin_order_result - INFO - Margin order placed: id=101093598515 status=2000
+2026-04-28 12:34:22,259 - iqoptionapi.stable_api - INFO - Margin position opened: id=101093598515 type=forex side=buy amount=10 leverage=100
+2026-04-28 12:34:22,259 - MARGIN_TEST - INFO - [PASS] T6_Open_No_TPSL -- position_id=101093598515
+2026-04-28 12:34:23,540 - iqoptionapi.stable_api - INFO - Closing margin position: id=100157587738 (type=forex)
+2026-04-28 12:34:24,546 - iqoptionapi.stable_api - INFO - Margin position closed: 100157587738
+2026-04-28 12:34:24,546 - MARGIN_TEST - INFO - ============================================================
+2026-04-28 12:34:24,546 - MARGIN_TEST - INFO -   TEST RESULTS SUMMARY
+2026-04-28 12:34:24,547 - MARGIN_TEST - INFO - ============================================================
+2026-04-28 12:34:24,547 - MARGIN_TEST - INFO -   [PASS] Connection
+2026-04-28 12:34:24,547 - MARGIN_TEST - INFO -          Connected successfully
+2026-04-28 12:34:24,547 - MARGIN_TEST - INFO -   [PASS] T1_Get_Leverages
+2026-04-28 12:34:24,547 - MARGIN_TEST - INFO -          Leverages: [{'active_id': 1, 'unregulated': [50, 100, 200, 300, 500, 1000], 'unregulated_default': 200, 'regulated': [50
+2026-04-28 12:34:24,547 - MARGIN_TEST - INFO -   [PASS] T2_Open_Position_TPSL
+2026-04-28 12:34:24,547 - MARGIN_TEST - INFO -          position_id=101093598502 open_price=None leverage=None
+2026-04-28 12:34:24,548 - MARGIN_TEST - INFO -   [PASS] T3_List_Positions
+2026-04-28 12:34:24,548 - MARGIN_TEST - INFO -          Total positions: 18, found ours: False
+2026-04-28 12:34:24,548 - MARGIN_TEST - INFO -   [PASS] T4_Modify_TPSL
+2026-04-28 12:34:24,548 - MARGIN_TEST - INFO -          {'results': [True, True]}
+2026-04-28 12:34:24,548 - MARGIN_TEST - INFO -   [PASS] T5_Close_Position
+2026-04-28 12:34:24,548 - MARGIN_TEST - INFO -          {'request_id': '', 'name': 'position-closed', 'msg': {'id': 100157587735}, 'status': 2000}
+2026-04-28 12:34:24,548 - MARGIN_TEST - INFO -   [PASS] T6_Open_No_TPSL
+2026-04-28 12:34:24,548 - MARGIN_TEST - INFO -          position_id=101093598515
+2026-04-28 12:34:24,549 - MARGIN_TEST - INFO - ------------------------------------------------------------
+2026-04-28 12:34:24,549 - MARGIN_TEST - INFO -   7/7 PASSED
+2026-04-28 12:34:24,549 - MARGIN_TEST - INFO - ============================================================
+2026-04-28 12:34:25,218 - iqoptionapi.ws.client - WARNING - WS disconnected. Code=None Msg=None
+2026-04-28 12:34:25,221 - iqoptionapi.stable_api - INFO - Auto-reconnect started.
+2026-04-28 12:34:25,223 - iqoptionapi.reconnect - WARNING - ReconnectManager: attempt 1/10 — waiting 5.87s before reconnect.
+2026-04-28 12:34:25,227 - iqoptionapi.http.session - INFO - HTTP session closed.
+2026-04-28 12:34:25,228 - iqoptionapi.stable_api - INFO - IQ_Option instance closed cleanly.
