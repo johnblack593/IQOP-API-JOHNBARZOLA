@@ -9,6 +9,9 @@ from iqoptionapi.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Backward compatibility alias
+Session = httpx.Client
+
 _shared_client: httpx.Client | None = None
 
 CHROME_HEADERS = {

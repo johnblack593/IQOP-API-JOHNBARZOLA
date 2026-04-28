@@ -23,10 +23,7 @@ from datetime import datetime, timedelta
 from iqoptionapi.time_sync import _clock
 from random import randint
 from concurrent.futures import ThreadPoolExecutor
-from iqoptionapi.mixins.orders_mixin import OrdersMixin
-from iqoptionapi.mixins.positions_mixin import PositionsMixin
-from iqoptionapi.mixins.streams_mixin import StreamsMixin
-from iqoptionapi.mixins.management_mixin import ManagementMixin
+from iqoptionapi.mixins import OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin
 
 
 

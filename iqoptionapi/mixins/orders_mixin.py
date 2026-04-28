@@ -193,3 +193,17 @@ class OrdersMixin:
             return True, self.api.result
         
         return False, "Timeout"
+
+    def delete_price_alert(self, alert_id):
+        """
+        SPRINT 8: Elimina una alerta de precio existente.
+        """
+        get_logger(__name__).info("Deleting price alert: %s", alert_id)
+        self.api.result = None
+        self.api.result_event.clear()
+        self.api.delete_alert(alert_id)
+        
+        if self.api.result_event.wait(timeout=10):
+            return True, self.api.result
+            
+        return False, "Timeout"

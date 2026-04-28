@@ -45,11 +45,12 @@ class PositionsMixin:
 
     def monitor_positions(self, callback, interval=1.0):
         """
-        SPRINT 5: Inicia monitoreo de posiciones.
-        Llama callback(positions_list) cada N segundos.
+        SPRINT 5/8: Inicia monitoreo de posiciones.
+        Evita fugas de memoria deteniendo hilos previos.
         """
-        if hasattr(self, "_monitor_stop"):
-            self._monitor_stop.set()
+        if hasattr(self, '_monitor_thread') and self._monitor_thread.is_alive():
+            get_logger(__name__).warning("monitor_positions: ya existe un monitor activo. Re-iniciando...")
+            self.stop_monitor_positions()
         
         self._monitor_stop = threading.Event()
         
@@ -62,8 +63,8 @@ class PositionsMixin:
                 except Exception as e:
                     get_logger(__name__).error("Monitor positions error: %s", e)
 
-        t = threading.Thread(target=monitor_loop, name="PositionMonitor", daemon=True)
-        t.start()
+        self._monitor_thread = threading.Thread(target=monitor_loop, name="PositionMonitor", daemon=True)
+        self._monitor_thread.start()
 
     def stop_monitor_positions(self):
         """Detiene el hilo de monitoreo."""

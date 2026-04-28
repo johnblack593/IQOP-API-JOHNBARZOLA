@@ -42,10 +42,10 @@ from iqoptionapi.ws.channels.get_financial_information import GetFinancialInform
 from iqoptionapi.ws.channels.strike_list import Strike_list
 from iqoptionapi.ws.channels.leaderboard import Leader_Board
 
-from iqoptionapi.ws.channels.traders_mood import Traders_mood_subscribe
-from iqoptionapi.ws.channels.traders_mood import Traders_mood_unsubscribe
+from iqoptionapi.ws.channels.streams.traders_mood import Traders_mood_subscribe
+from iqoptionapi.ws.channels.streams.traders_mood import Traders_mood_unsubscribe
 from iqoptionapi.ws.channels.technical_indicators import Technical_indicators
-from iqoptionapi.ws.channels.buy_place_order_temp import Buy_place_order_temp
+from iqoptionapi.ws.channels.orders.buy_place_order_temp import Buy_place_order_temp
 from iqoptionapi.ws.channels.get_order import Get_order
 from iqoptionapi.ws.channels.get_deferred_orders import GetDeferredOrders
 from iqoptionapi.ws.channels.positions.get_positions import *
@@ -59,16 +59,17 @@ from iqoptionapi.ws.channels.heartbeat import Heartbeat
 
 from iqoptionapi.ws.channels.orders.buy_digital import *
 from iqoptionapi.ws.channels.api_game_getoptions import *
-from iqoptionapi.ws.channels.sell_option import Sell_Option
-from iqoptionapi.ws.channels.sell_digital_option import Sell_Digital_Option
+from iqoptionapi.ws.channels.orders.sell_option import Sell_Option
+from iqoptionapi.ws.channels.orders.sell_digital_option import Sell_Digital_Option
 from iqoptionapi.ws.channels.positions.change_tpsl import Change_Tpsl
-from iqoptionapi.ws.channels.change_auto_margin_call import ChangeAutoMarginCall
+from iqoptionapi.ws.channels.positions.change_auto_margin_call import ChangeAutoMarginCall
 from iqoptionapi.ws.channels.orders.buy_order import PlaceMarginOrder
 from iqoptionapi.ws.channels.orders.buy_blitz import BuyBlitz
 from iqoptionapi.ws.channels.orders.place_stop_order import PlaceStopOrder
 from iqoptionapi.ws.channels.streams.subscribe_instruments_list import SubscribeInstrumentsList, UnsubscribeInstrumentsList
 from iqoptionapi.ws.channels.streams.short_active_info import SubscribeShortActiveInfo
 from iqoptionapi.ws.channels.orders.create_alert import CreateAlert
+from iqoptionapi.ws.channels.orders.delete_alert import DeleteAlert
 
 from iqoptionapi.ws.objects.timesync import TimeSync
 from iqoptionapi.ws.objects.profile import Profile
@@ -946,6 +947,11 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     def heartbeat(self):
         return Heartbeat(self)
 
+
+# -------------------------------------------------------
+    @property
+    def delete_alert(self):
+        return DeleteAlert(self)
 
 # -------------------------------------------------------
 
