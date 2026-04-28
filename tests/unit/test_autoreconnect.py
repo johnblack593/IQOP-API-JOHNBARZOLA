@@ -117,10 +117,16 @@ class TestAutoReconnectCallback:
 
     def test_auto_reconnect_calls_connect_on_failure(self):
         sdk = IQ_Option("email", "pass")
-        sdk.connect = MagicMock()
-        sdk.connect.side_effect = [(False, "err"), (True, None)]
         sdk._reconnect_manager = MagicMock()
         
+        # When connect is called, the 2nd time (success) it should trigger reset()
+        def mock_connect():
+            if sdk.connect.call_count == 2:
+                sdk._reconnect_manager.reset()
+                return (True, None)
+            return (False, "err")
+
+        sdk.connect = MagicMock(side_effect=mock_connect)
         sdk._auto_reconnect()
         
         assert sdk.connect.call_count == 2

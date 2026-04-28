@@ -4,9 +4,9 @@ import threading
 import time
 from collections import defaultdict
 from unittest.mock import MagicMock
-from iqoptionapi.ws.received.option_closed import OptionClosed
-from iqoptionapi.ws.received.position_changed import PositionChanged
-from iqoptionapi.ws.received.socket_option_closed import SocketOptionClosed
+from iqoptionapi.ws.received.orders.option_closed import OptionClosed
+from iqoptionapi.ws.received.positions.position_changed import PositionChanged
+from iqoptionapi.ws.received.orders.socket_option_closed import SocketOptionClosed
 
 class MockInternalAPI:
     """Mock para simular la estructura de IQOptionAPI."""
@@ -103,7 +103,7 @@ def test_type_resilience():
     handler = OptionClosed()
     
     # Server envía string, pero robot espera int (o viceversa)
-    handler(api, {"name": "option", "msg": {"id": "88888"}})
+    handler(api, {"name": "option", "msg": {"id": "88888", "win": "win"}})
     
     # Debería estar guardado como int 88888
     assert 88888 in api.result_event_store

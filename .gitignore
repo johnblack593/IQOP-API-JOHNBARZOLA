@@ -29,7 +29,6 @@ venv/
 # DATOS SENSIBLES — NUNCA AL REPOSITORIO
 # Contienen order_ids reales, sesiones WS, datos de cuenta
 # ============================================================
-//scratch/
 
 # JSONs con resultados de trades (order_ids reales)
 **/certification_result*.json
@@ -59,3 +58,7 @@ examples/debug_output.txt
 # JCBV-NEXUS Integration Reports
 tests/reports/*.json
 !tests/reports/*.md
+
+# Scratch — capturas grandes de sesión (no versionar)
+scratch/*.json
+scratch/logs/

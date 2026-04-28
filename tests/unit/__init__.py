@@ -1,1 +1,1 @@
-# unit tests package
+# Unit test suite
