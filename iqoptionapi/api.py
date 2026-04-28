@@ -26,6 +26,7 @@ from iqoptionapi.http.changebalance import Changebalance
 from iqoptionapi.http.events import Events
 from iqoptionapi.ws.client import WebsocketClient
 from iqoptionapi.ws.channels.get_balances import *
+from iqoptionapi.http.httpx_client import HTTPXClient
 
 from iqoptionapi.ws.channels.ssid import Ssid
 from iqoptionapi.ws.channels.subscribe import *
@@ -169,6 +170,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.token_login2fa = None
         self.token_sms = None
         self.proxies = proxies
+        self.httpx_client = HTTPXClient()
         # is used to determine if a buyOrder was set  or failed. If
         # it is None, there had been no buy order yet or just send.
         # If it is false, the last failed

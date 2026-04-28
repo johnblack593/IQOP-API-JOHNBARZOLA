@@ -62,6 +62,7 @@ from iqoptionapi.ws.received.margin_order_result import margin_order_result
 from iqoptionapi.ws.received.marginal_balance import MarginalBalance
 from iqoptionapi.ws.received.stop_order_placed import StopOrderPlaced
 from iqoptionapi.ws.received.order_changed import OrderChanged
+from iqoptionapi.ws.received.alerts import alerts
 
 # SPRINT 7: Reactive Event Handlers (Classes)
 from iqoptionapi.ws.received.option_closed import OptionClosed
@@ -82,6 +83,7 @@ _position_closed_handler = PositionClosed()
 
 
 _MESSAGE_ROUTER: dict = {
+    'alerts': [alerts],
     'api_game_betinfo_result': [api_game_betinfo_result],
     'api_game_getoptions_result': [api_game_getoptions_result],
     'api_option_init_all_result': [api_option_init_all_result],

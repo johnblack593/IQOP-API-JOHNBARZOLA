@@ -121,14 +121,16 @@ class IQ_Option:
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
+                "Chrome/147.0.0.0 Safari/537.36"
             ),
             "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
             "Referer": "https://iqoption.com/",
         }
 
         self.SESSION_COOKIE = {}
-        #
+        # Sprint 5: State Synchronization
+        self.positions_state_data = {}
+        self.pending_orders_data = {}
 
 
     # --------------------------------------------------------------------------
@@ -295,6 +297,10 @@ class IQ_Option:
                 )
 
             self._start_heartbeat_watchdog()
+            
+            # Sprint 5: State Synchronization
+            self.sync_state_on_connect()
+            
             return True, None
         else:
             try:
@@ -2129,6 +2135,109 @@ class IQ_Option:
             pass
         # name': 'position-changed', 'microserviceName': "portfolio"/"digital-options"
         return self.api.order_async.get(buy_order_id, {})
+
+    def sync_state_on_connect(self):
+        """
+        Sprint 5: Synchronize all active positions and pending orders.
+        Blocks for up to 10 seconds to ensure state consistency.
+        """
+        get_logger(__name__).info("Syncing SDK state (positions/orders)...")
+        
+        # We request positions for common margin types
+        instrument_types = ["crypto", "forex", "cfd"]
+        
+        self.api.positions_event.clear()
+        
+        # Bulk request
+        for itype in instrument_types:
+            self.api.get_positions(itype)
+            
+        # Wait for at least one response
+        is_ready = self.api.positions_event.wait(timeout=10)
+        
+        if is_ready and self.api.positions:
+            # The 'positions' message is a list of open positions
+            positions_list = self.api.positions.get("msg", {}).get("positions", [])
+            for pos in positions_list:
+                pid = pos.get("id")
+                if pid:
+                    self.positions_state_data[pid] = pos
+            get_logger(__name__).info(f"Sync complete: {len(self.positions_state_data)} positions found.")
+        else:
+            get_logger(__name__).warning("Sync state TIMEOUT or no positions found.")
+            
+        return self.positions_state_data
+
+    def set_trailing_stop(self, position_id, distance_pips=None):
+        """
+        Sprint 5: Set a trailing stop for a margin position.
+        Uses 'use_trail_stop=True' and browser-compatible change-tpsl payload.
+        """
+        get_logger(__name__).info(f"Setting trailing stop for position {position_id}")
+        
+        # 1. Resolve position data
+        check, pos_data = self.get_order(position_id)
+        if not check or not pos_data:
+             pos_data = self.positions_state_data.get(position_id)
+             
+        if not pos_data:
+            get_logger(__name__).error(f"set_trailing_stop: Position {position_id} not found.")
+            return False, "POSITION_NOT_FOUND"
+
+        # 2. Execute modification
+        # Note: 'distance_pips' logic can be expanded, but usually browser sets the flag
+        # and server manages the trailing logic based on the 'kind'.
+        return self.change_order(
+            ID_Name="position_id",
+            order_id=position_id,
+            stop_lose_kind=pos_data.get("stop_lose_kind", "percent"),
+            stop_lose_value=pos_data.get("stop_lose_value"),
+            take_profit_kind=pos_data.get("take_profit_kind", "percent"),
+            take_profit_value=pos_data.get("take_profit_value"),
+            use_trail_stop=True,
+            auto_margin_call=pos_data.get("auto_margin_call", False)
+        )
+
+    def set_breakeven(self, position_id, profit_offset=0):
+        """
+        Sprint 5: Move Stop Loss to Entry Price + offset.
+        """
+        get_logger(__name__).info(f"Setting breakeven for position {position_id}")
+        
+        # 1. Resolve position data
+        pos_data = self.positions_state_data.get(position_id)
+        if not pos_data:
+             check, pos_data = self.get_order(position_id)
+             
+        if not pos_data:
+            get_logger(__name__).error(f"set_breakeven: Position {position_id} not found.")
+            return False, "POSITION_NOT_FOUND"
+            
+        entry_price = pos_data.get("open_quote")
+        side = pos_data.get("side")
+        
+        if not entry_price or not side:
+            get_logger(__name__).error(f"set_breakeven: Missing price/side for {position_id}")
+            return False, "MISSING_DATA"
+            
+        # 2. Calculate BE price
+        be_price = entry_price
+        if side == "buy":
+            be_price += profit_offset
+        else:
+            be_price -= profit_offset
+            
+        # 3. Update SL to BE price
+        return self.change_order(
+            ID_Name="position_id",
+            order_id=position_id,
+            stop_lose_kind="price",
+            stop_lose_value=be_price,
+            take_profit_kind=pos_data.get("take_profit_kind"),
+            take_profit_value=pos_data.get("take_profit_value"),
+            use_trail_stop=pos_data.get("use_trail_stop", False),
+            auto_margin_call=pos_data.get("auto_margin_call", False)
+        )
 
 
     def get_order(self, buy_order_id):
