@@ -137,15 +137,30 @@ class IQ_Option:
         return self.api.timesync.server_timestamp
 
     def re_subscribe_stream(self):
-        for ac in self.subscribe_candle:
-                    sp = ac.split(",")
-                    self.start_candles_one_stream(sp[0], sp[1])
-        # -----------------
-        for ac in self.subscribe_candle_all_size:
-                    self.start_candles_all_size_stream(ac)
-        # -------------reconnect subscribe_mood
-        for ac in self.subscribe_mood:
-                    self.start_mood_stream(ac)
+        # SPRINT 4: Stealth re-subscription via SubscriptionManager
+        if hasattr(self, 'subscription_manager'):
+            # Batch subscribe all cached candles
+            for ac in self.subscribe_candle:
+                sp = ac.split(",")
+                active = sp[0]
+                size = int(sp[1])
+                self.subscription_manager.subscribe_candle(active, size)
+            
+            for ac in self.subscribe_candle_all_size:
+                # Assuming this also goes through manager
+                self.start_candles_all_size_stream(ac)
+            
+            for ac in self.subscribe_mood:
+                self.start_mood_stream(ac)
+        else:
+            # Fallback for older instances
+            for ac in self.subscribe_candle:
+                sp = ac.split(",")
+                self.start_candles_one_stream(sp[0], sp[1])
+            for ac in self.subscribe_candle_all_size:
+                self.start_candles_all_size_stream(ac)
+            for ac in self.subscribe_mood:
+                self.start_mood_stream(ac)
 
     def set_session(self, header, cookie):
         self.SESSION_HEADER = header
@@ -1210,7 +1225,7 @@ class IQ_Option:
         )
         return result
 
-    def check_win(self, id_number, timeout=120.0):
+    def check_win(self, id_number, timeout=90.0):
         # BUG-SPINLOOP-01: Refactorizado a _wait_result para evitar while True
         result = self._wait_result(
             order_id=id_number,
@@ -1236,7 +1251,7 @@ class IQ_Option:
             return win_val
         return None
 
-    def check_win_v2(self, id_number, timeout=120.0):
+    def check_win_v2(self, id_number, timeout=90.0):
         # BUG-SPINLOOP-01: Refactorizado
         result = self._wait_result(
             order_id=id_number,
@@ -1248,7 +1263,7 @@ class IQ_Option:
             return result.get("game_state")
         return None
 
-    def check_win_v4(self, id_number, timeout=120.0):
+    def check_win_v4(self, id_number, timeout=90.0):
         # BUG-SPINLOOP-01: Refactorizado a _wait_result
         result = self._wait_result(
             order_id=id_number,
@@ -1270,7 +1285,7 @@ class IQ_Option:
                 get_logger(__name__).warning("trade_journal.record failed: %s", e)
         return result
 
-    def check_win_v3(self, id_number, timeout=120.0):
+    def check_win_v3(self, id_number, timeout=90.0):
         # BUG-SPINLOOP-01: Refactorizado a _wait_result
         result = self._wait_result(
             order_id=id_number,
@@ -1706,7 +1721,7 @@ class IQ_Option:
             get_logger(__name__).warning('Timeout (15s) waiting for close_digital_option result')
         return self.api.result
 
-    def check_win_digital(self, buy_order_id, timeout=120.0):
+    def check_win_digital(self, buy_order_id, timeout=90.0):
         # BUG-SPINLOOP-01: Refactorizado para usar _wait_result con timeout
         # S7: Ahora usa el store reactivo position_changed_event_store
         result = self._wait_result(
@@ -1746,7 +1761,7 @@ class IQ_Option:
         return None
 
 
-    def check_win_digital_v2(self, buy_order_id, timeout=120.0):
+    def check_win_digital_v2(self, buy_order_id, timeout=90.0):
         # BUG-SPINLOOP-01: Refactorizado
         result = self._wait_result(
             order_id=buy_order_id,
@@ -1786,7 +1801,7 @@ class IQ_Option:
     # ── Blitz / Pending Order Protocol (Sprint 3) ────────────────
     def buy_blitz(self, active, amount, direction, current_price, expiration_size=180, profit_percent=83):
         """
-        Realiza una operación Blitz (v2.0) con los parámetros capturados del browser.
+        Realiza una operación Blitz (v2.0) y espera confirmación real.
         """
         active_id = OP_code.ACTIVES.get(active)
         if not active_id:
@@ -1794,24 +1809,25 @@ class IQ_Option:
             return False, None
             
         request_id = str(randint(0, 1000000))
+        
+        # SPRINT 4: Usar event store para buyComplete
+        if not hasattr(self.api, "buy_complete_event"):
+            self.api.buy_complete_event = threading.Event()
+        self.api.buy_complete_event.clear()
+        
         self.api.buy_blitz(active_id, direction, amount, current_price, expiration_size, profit_percent, request_id)
         
-        # Esperar resultado (reutilizando la lógica de buy_multi_option para correlación)
-        self.api.buy_multi_option[request_id] = {"id": None}
-        start_t = time.time()
-        order_id = None
-        while time.time() - start_t < 15:
-            order_id = self.api.buy_multi_option.get(request_id, {}).get("id")
-            if order_id:
-                break
-            if self.api.result_event.wait(timeout=0.1):
-                self.api.result_event.clear()
+        # Esperar confirmación
+        is_ready = self.api.buy_complete_event.wait(timeout=10.0)
+        if is_ready and getattr(self.api, "buy_successful", False):
+            return True, getattr(self.api, "buy_id", None)
         
-        return (True, order_id) if order_id else (False, None)
+        return False, "Timeout or failure in buy_blitz confirmation"
 
     def place_pending_order(self, active, instrument_type, side, amount, leverage, stop_price, take_profit=None, stop_loss=None):
         """
         Coloca una orden pendiente (Stop Order) usando el protocolo marginal-*.place-stop-order.
+        Espera confirmación real via stop-order-placed.
         """
         active_id = OP_code.ACTIVES.get(active)
         if not active_id:
@@ -1819,20 +1835,84 @@ class IQ_Option:
             return False, None
             
         request_id = str(randint(0, 1000000))
+        
+        # SPRINT 4: Usar event store por order_id para stop-order-placed
+        if not hasattr(self.api, "stop_order_placed_event"):
+            self.api.stop_order_placed_event = defaultdict(threading.Event)
+        
         self.api.place_stop_order(instrument_type, active_id, side, amount, leverage, stop_price, take_profit, stop_loss, True, request_id)
         
-        # Esperar resultado (vía margin_order_result)
-        # SPRINT 7: _wait_result helper
-        result = self._wait_result(
-            order_id=request_id,
-            result_store=self.api.margin_order_result,
-            event_store=self.api.margin_order_event,
-            timeout=15.0
-        )
+        # 1. Esperar ACK inmediato del request (market-order-placed)
+        if not hasattr(self.api, "margin_order_event"):
+            self.api.margin_order_event = defaultdict(threading.Event)
+            
+        ack_ev = self.api.margin_order_event[request_id]
+        is_ready = ack_ev.wait(timeout=10.0)
         
-        if result and result.get("status") == "success":
-            return True, result.get("order_id")
-        return False, result.get("message") if result else "Timeout"
+        if not is_ready:
+            return False, "Timeout waiting for ACK (market-order-placed)"
+            
+        result = self.api.margin_order_result.get(request_id)
+        if not result or result.get("status") != 2000:
+            return False, result.get("error") if result else "Unknown error in ACK"
+        
+        order_id = str(result.get("id"))
+        
+        # 2. Esperar confirmación de "placed" (asíncrona)
+        placed_ev = self.api.stop_order_placed_event[order_id]
+        is_placed = placed_ev.wait(timeout=10.0)
+        
+        if not is_placed:
+            get_logger(__name__).warning("Order %s ACKed but stop-order-placed timed out", order_id)
+            # Retornamos el order_id de todas formas porque ya fue aceptada por el socket
+            
+        return True, order_id
+
+    def cancel_pending_order(self, order_id):
+        """
+        Cancela una orden pendiente usando marginal-*.cancel-pending-order.
+        """
+        request_id = str(randint(0, 1000000))
+        
+        if not hasattr(self.api, "order_canceled_event"):
+            self.api.order_canceled_event = defaultdict(threading.Event)
+        
+        self.api.cancel_pending_order(order_id, request_id)
+        
+        # Esperar confirmación via pending-order-canceled o order-changed
+        cancel_ev = self.api.order_canceled_event[str(order_id)]
+        is_ready = cancel_ev.wait(timeout=10.0)
+        
+        return is_ready
+
+    def get_pending_orders(self, instrument_type):
+        """
+        Obtiene la lista actual de órdenes pendientes (bulk sync).
+        """
+        self.api.orders_state_event = threading.Event()
+        self.api.get_orders_state(instrument_type)
+        
+        is_ready = self.api.orders_state_event.wait(timeout=10.0)
+        if is_ready:
+            return getattr(self.api, "orders_state_data", {})
+        return {}
+
+    def get_marginal_balance(self, instrument_type):
+        """
+        Obtiene el balance marginal para un tipo de instrumento.
+        """
+        if not hasattr(self.api, "marginal_balance_event"):
+            self.api.marginal_balance_event = threading.Event()
+        
+        self.api.marginal_balance_event.clear()
+        self.api.get_marginal_balance(instrument_type)
+        
+        is_ready = self.api.marginal_balance_event.wait(timeout=10.0)
+        if is_ready:
+            return self.api.marginal_balance.get(instrument_type)
+        return None
+
+
 
     def check_cfd_order_capability(self, force=False):
         """

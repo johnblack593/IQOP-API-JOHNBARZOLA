@@ -30,7 +30,7 @@ from iqoptionapi.ws.received.top_assets_updated import top_assets_updated
 from iqoptionapi.ws.received.strike_list import strike_list
 from iqoptionapi.ws.received.api_game_betinfo_result import api_game_betinfo_result
 from iqoptionapi.ws.received.traders_mood_changed import traders_mood_changed
-from iqoptionapi.ws.received.order import order
+from iqoptionapi.ws.received.order import OrderState
 from iqoptionapi.ws.received.position import position
 from iqoptionapi.ws.received.positions import positions
 from iqoptionapi.ws.received.order_placed_temp import order_placed_temp
@@ -38,7 +38,7 @@ from iqoptionapi.ws.received.deferred_orders import deferred_orders
 from iqoptionapi.ws.received.history_positions import history_positions
 from iqoptionapi.ws.received.available_leverages import available_leverages
 from iqoptionapi.ws.received.order_canceled import order_canceled
-from iqoptionapi.ws.received.position_closed import position_closed
+from iqoptionapi.ws.received.position_closed import PositionClosed
 from iqoptionapi.ws.received.overnight_fee import overnight_fee
 from iqoptionapi.ws.received.api_game_getoptions_result import api_game_getoptions_result
 from iqoptionapi.ws.received.sold_options import sold_options
@@ -59,6 +59,9 @@ from iqoptionapi.ws.received.client_price_generated import client_price_generate
 from iqoptionapi.ws.received.users_availability import users_availability
 from iqoptionapi.ws.received.portfolio_get_positions import portfolio_get_positions
 from iqoptionapi.ws.received.margin_order_result import margin_order_result
+from iqoptionapi.ws.received.marginal_balance import MarginalBalance
+from iqoptionapi.ws.received.stop_order_placed import StopOrderPlaced
+from iqoptionapi.ws.received.order_changed import OrderChanged
 
 # SPRINT 7: Reactive Event Handlers (Classes)
 from iqoptionapi.ws.received.option_closed import OptionClosed
@@ -69,6 +72,11 @@ from iqoptionapi.ws.received.socket_option_closed import SocketOptionClosed
 _option_closed_handler = OptionClosed()
 _position_changed_handler = PositionChanged()
 _socket_option_closed_handler = SocketOptionClosed()
+_stop_order_placed_handler = StopOrderPlaced()
+_order_changed_handler = OrderChanged()
+_marginal_balance_handler = MarginalBalance()
+_order_state_handler = OrderState()
+_position_closed_handler = PositionClosed()
 
 
 
@@ -109,17 +117,20 @@ _MESSAGE_ROUTER: dict = {
     'option-opened': [option_opened],
 
     'market-order-placed': [margin_order_result],
-    'order': [order],
-    'orders-state': [order],
+    'order': [_order_state_handler],
+    'orders-state': [_order_state_handler],
+    'order-changed': [_order_changed_handler],
     'order-canceled': [order_canceled],
-    'order-placed-temp': [order_placed_temp], # order_placed_temp: called once — duplicate removed (audit SPRINT-02)
+    'order-placed-temp': [order_placed_temp],
+    'stop-order-placed': [_stop_order_placed_handler],
+    'marginal-balance': [_marginal_balance_handler],
     'overnight-fee': [overnight_fee],
     'portfolio.get-positions': [portfolio_get_positions],
     'position': [position],
     'positions': [positions],
     'positions-state': [positions],
     'position-changed': [_position_changed_handler],
-    'position-closed': [position_closed],
+    'position-closed': [_position_closed_handler],
 
     'position-history': [position_history],
     'profile': [profile],
