@@ -237,6 +237,10 @@ class IQ_Option:
             self._idempotency.purge_expired()
 
         if check == True:
+            # Sprint 6: Stealth mode post-auth delay
+            import random
+            time.sleep(random.uniform(config.STEALTH_POST_AUTH_DELAY * 0.8, config.STEALTH_POST_AUTH_DELAY * 1.2))
+            
             # Clear instruments cache to prevent stale data from prior sessions
             if hasattr(self.api, '_instruments_by_category'):
                 self.api._instruments_by_category.clear()
@@ -643,6 +647,11 @@ class IQ_Option:
         # Crypto and etc pairs
         instrument_list = ["cfd", "forex", "crypto", "stocks", "commodities", "indices", "etf"]
         for instruments_type in instrument_list:
+            # Sprint 6: Stealth mode delay
+            if instruments_type != instrument_list[0]:
+                import random
+                time.sleep(random.uniform(config.STEALTH_INSTRUMENT_REQUEST_DELAY * 0.8, config.STEALTH_INSTRUMENT_REQUEST_DELAY * 1.2))
+
             ins_data = []
             for _ in range(3):
                 result = self.get_instruments(instruments_type)

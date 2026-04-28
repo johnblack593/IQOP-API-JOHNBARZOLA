@@ -23,7 +23,11 @@ TIMEOUT_BALANCE_RESET: int = 15
 TIMEOUT_SSID_AUTH: int = 15
 TIMEOUT_ALL_INIT: int = 30      # para get_all_init
 TIMEOUT_THREAD_JOIN: float = 5.0  # para api.py close() BUG-WS-01
-
+# -- STEALTH MODE CONFIGS (Sprint 6) --
+STEALTH_POST_AUTH_DELAY: float = 2.5
+STEALTH_INSTRUMENT_REQUEST_DELAY: float = 1.5
+STEALTH_HEARTBEAT_INTERVAL: float = 5.0
+STEALTH_HEARTBEAT_JITTER: float = 0.5
 # --- Heartbeat watchdog ---
 HEARTBEAT_TIMEOUT_SECS: float = 120.0   # segundos sin heartbeat antes de forzar reconexión
 HEARTBEAT_CHECK_INTERVAL: float = 10.0  # cada cuántos segundos el watchdog revisa

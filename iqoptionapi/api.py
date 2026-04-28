@@ -194,6 +194,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         # Events for async logic
         self.balance_id_event = threading.Event()
         self.instruments_event = threading.Event()
+        self.authenticated_event = threading.Event()
         
         # --- SPRINT 7: Reactive Event Stores (defaultdict) ---
         self.socket_option_closed_event = defaultdict(threading.Event)
@@ -911,6 +912,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                                                  "check_hostname": True, "cert_reqs": ssl.CERT_REQUIRED, "ca_certs": certifi.where()}})  # for fix pyinstall error: cafile, capath and cadata cannot be all omitted
         self.websocket_thread.daemon = True
         self.websocket_thread.start()
+        
+        # Sprint 6: STEALTH MODE Heartbeat Ping Loop
+        self._start_heartbeat_loop()
 
         from iqoptionapi.config import TIMEOUT_WS_CONNECT
         connected = self.ws_connected_event.wait(timeout=TIMEOUT_WS_CONNECT)
@@ -924,6 +928,34 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         if self.check_websocket_if_connect == 0:
             return False, "Websocket connection closed immediately."
         return True, None
+
+    def _start_heartbeat_loop(self):
+        """
+        Envía heartbeat al servidor en el mismo intervalo que el browser.
+        Se detiene automáticamente cuando la conexión se cierra.
+        """
+        import random
+        from iqoptionapi.config import STEALTH_HEARTBEAT_INTERVAL, STEALTH_HEARTBEAT_JITTER
+        
+        def _loop():
+            # Wait for connection to open
+            while self.check_websocket_if_connect is None:
+                time.sleep(0.1)
+                
+            while self.check_websocket_if_connect == 1:
+                delay = STEALTH_HEARTBEAT_INTERVAL + random.uniform(-STEALTH_HEARTBEAT_JITTER, STEALTH_HEARTBEAT_JITTER)
+                time.sleep(delay)
+                if self.check_websocket_if_connect == 1:
+                    payload = {
+                        "resource": "ping",
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    try:
+                        self.websocket_client.wss.send(json.dumps(payload))
+                    except Exception:
+                        pass
+        t = threading.Thread(target=_loop, daemon=True, name="StealthHeartbeat")
+        t.start()
 
     # @tokensms.setter
     def setTokenSMS(self, response):
@@ -956,28 +988,29 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         logger.info("Sending SSID for authentication: %s", self.SSID[:10] + "..." if self.SSID else "None")
         
         self.profile.msg = None
+        if hasattr(self, 'authenticated_event'):
+            self.authenticated_event.clear()
+            
+        self.ssid(self.SSID)  # sends 'authenticate'
+        
+        # Sprint 6: Mimetizar el browser: esperar `authenticated` ANTES de enviar `core.get-profile`
+        if hasattr(self, 'authenticated_event'):
+            is_auth = self.authenticated_event.wait(timeout=TIMEOUT_SSID_AUTH)
+            if not is_auth:
+                get_logger(__name__).error("send_ssid: timeout (%.0fs) — no 'authenticated' response", TIMEOUT_SSID_AUTH)
+                return False
+
         if hasattr(self, 'profile_msg_event'):
             self.profile_msg_event.clear()
+
+        # Sprint 6: Mimetizar el browser explícitamente pidiendo el profile
+        self.send_websocket_request("core.get-profile", {})
         
-        self.ssid(self.SSID)  # pylint: disable=not-callable
         if hasattr(self, 'profile_msg_event'):
-            is_ready = self.profile_msg_event.wait(timeout=TIMEOUT_SSID_AUTH)
+            is_ready = self.profile_msg_event.wait(timeout=2.0)
             if not is_ready or self.profile.msg is None:
-                get_logger(__name__).error(
-                    "send_ssid: timeout (%.0fs) — no profile response",
-                    TIMEOUT_SSID_AUTH
-                )
-                return False
-        else:
-            # Fallback legacy (sin Event disponible)
-            import time
-            start = time.time()
-            while self.profile.msg is None:
-                time.sleep(POLLING_INTERVAL_FAST)
-                if time.time() - start > TIMEOUT_SSID_AUTH:
-                    get_logger(__name__).error("send_ssid: legacy timeout")
-                    return False
-        return self.profile.msg is not False
+                get_logger(__name__).debug("send_ssid: no profile response within 2s, but authentication succeeded.")
+        return True
 
     def connect(self, password):
         """Method for connection to IQ Option API."""

@@ -1,0 +1,41 @@
+{
+  "get_instruments": {
+    "binary": 0,
+    "turbo": 0,
+    "digital-option": 0,
+    "blitz": 0,
+    "cfd": 100,
+    "forex": 83,
+    "crypto": 59
+  },
+  "init_data_categories": {
+    "binary": {
+      "total": 266,
+      "open": 150
+    },
+    "turbo": {
+      "total": 222,
+      "open": 161
+    },
+    "digital": {
+      "total": 0,
+      "open": 0
+    },
+    "blitz": {
+      "total": 0,
+      "open": 0
+    },
+    "cfd": {
+      "total": 0,
+      "open": 0
+    },
+    "forex": {
+      "total": 0,
+      "open": 0
+    },
+    "crypto": {
+      "total": 0,
+      "open": 0
+    }
+  }
+}

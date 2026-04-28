@@ -78,6 +78,7 @@ _MESSAGE_ROUTER: dict = {
     'api_option_init_all_result': [api_option_init_all_result],
     'auto-margin-call-changed': [auto_margin_call_changed],
     'available-leverages': [available_leverages],
+    'authenticated': [__import__('iqoptionapi.ws.received.authenticated', fromlist=['authenticated']).authenticated],
     'balances': [balances],
     'balance-changed': [balance_changed],
     'buyComplete': [buy_complete],

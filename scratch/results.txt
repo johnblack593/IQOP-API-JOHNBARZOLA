@@ -1,0 +1,17 @@
+binary: 266
+turbo: 222
+digital: 181
+forex: 46
+crypto: 90
+cfd: 388
+  binary          266 total /  162 open  (need>100)  ✅ PASS
+  turbo           222 total /  165 open  (need>100)  ✅ PASS
+  blitz           180 total /  166 open  (need>100)  ✅ PASS
+  digital         181 total /  181 open  (need>50)  ✅ PASS
+  forex            46 total /   45 open  (need>20)  ✅ PASS
+  stocks           60 total /   33 open  (need>50)  ✅ PASS
+  crypto           90 total /   90 open  (need>30)  ✅ PASS
+  indices          22 total /   22 open  (need>20)  ✅ PASS
+  commodities      15 total /   13 open  (need>10)  ✅ PASS
+TOTAL: 1082
+ALL PASSED
