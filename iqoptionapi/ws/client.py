@@ -176,6 +176,9 @@ class WebsocketClient(object):
     def on_message(self, wss, message):  # pylint: disable=unused-argument
         """Method to process websocket messages."""
         logger = get_logger(__name__)
+        # Sprint 4 TAREA 1: WS debug sequence capture
+        if hasattr(self.api, '_log_ws_debug'):
+            self.api._log_ws_debug(message)
         with self.api._ws_lock:
             try:
                 logger.debug("WS message received: %s chars", len(message))

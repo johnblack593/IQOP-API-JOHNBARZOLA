@@ -2,6 +2,7 @@ from iqoptionapi.logger import get_logger
 from iqoptionapi.http.session import get_shared_session
 import json
 import time
+import os
 import threading
 import requests
 import certifi
@@ -184,6 +185,12 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         # S3-T3: Dynamic candle callbacks
         self._candle_callbacks = {}
 
+        # Sprint 4 — WS Sequence Debug Logger (TAREA 1)
+        self._connect_time: float = 0.0
+        self._ws_debug_logger = None
+        if os.environ.get("JCBV_WS_DEBUG") == "1":
+            self._init_ws_debug_logger()
+
         # Events for async logic
         self.balance_id_event = threading.Event()
         self.instruments_event = threading.Event()
@@ -241,6 +248,34 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         # Callbacks for S1-03 Resilience
         self._reconnect_callback: callable | None = None
         self._heartbeat_callback: callable | None = None
+
+    # ── Sprint 4 TAREA 1: WS Debug Sequence Logger ──
+    def _init_ws_debug_logger(self):
+        """Initialize file-based WS debug logger. Only called if JCBV_WS_DEBUG=1."""
+        import pathlib
+        from datetime import datetime
+        reports_dir = pathlib.Path("tests/reports")
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_path = reports_dir / f"ws_sequence_debug_{ts}.log"
+        self._ws_debug_file = open(log_path, "w", encoding="utf-8", buffering=1)
+        self._ws_debug_logger = True
+        get_logger(__name__).info("WS DEBUG logger active → %s", log_path)
+
+    def _log_ws_debug(self, message_str: str):
+        """Write a debug line for each WS message received."""
+        if not self._ws_debug_logger:
+            return
+        try:
+            elapsed = time.time() - self._connect_time if self._connect_time else 0.0
+            parsed = json.loads(message_str)
+            msg_name = parsed.get("name", parsed.get("msg", {}).get("name", "UNKNOWN") if isinstance(parsed.get("msg"), dict) else "UNKNOWN")
+            size = len(message_str)
+            keys = list(parsed.keys())[:10]
+            line = f"[T+{elapsed:06.2f}s] {msg_name} | size={size}bytes | keys={keys}\n"
+            self._ws_debug_file.write(line)
+        except Exception:
+            pass
 
     def prepare_http_url(self, resource):
         """Construct http url from resource url.
@@ -865,6 +900,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         requests.utils.add_dict_to_cookiejar(self.session.cookies, cookies)
 
     def start_websocket(self):
+        self._connect_time = time.time()  # Sprint 4: timestamp for debug logger
         self.check_websocket_if_connect = None
         self.check_websocket_if_error = False
         self.websocket_error_reason = None

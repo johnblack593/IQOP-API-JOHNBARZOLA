@@ -52,10 +52,11 @@ RATE_LIMIT_BURST: int = 5
 ORDER_COOLDOWN_SECS: float = 2.0
 
 # --- Reconexión ---
-RECONNECT_BASE_DELAY: float = 2.0   # base exponencial (segundos)
-RECONNECT_MAX_DELAY: float = 60.0   # techo máximo (segundos)
-MAX_RECONNECT_ATTEMPTS: int = 10    # intentos antes de error
-RECONNECT_JITTER: float = 0.5       # ±50% jitter
+# Sprint 4: Production-safe backoff: 5s → 10s → 20s → 40s (max)
+RECONNECT_BASE_DELAY: float = 5.0    # base exponencial (segundos)
+RECONNECT_MAX_DELAY: float = 40.0    # techo máximo (segundos)
+MAX_RECONNECT_ATTEMPTS: int = 10     # intentos antes de error
+RECONNECT_JITTER: float = 0.3        # ±30% jitter (reduced for predictability)
 
 # --- Candle sizes válidos (segundos) ---
 VALID_CANDLE_SIZES: tuple[int, ...] = (

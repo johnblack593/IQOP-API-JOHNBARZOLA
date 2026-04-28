@@ -16,9 +16,15 @@ class Login(Resource):
         """
         if headers is None:
             headers = {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
                 "Origin": "https://iqoption.com",
                 "Referer": "https://iqoption.com/en/login",
-                "Accept": "application/json"
+                "Accept": "application/json",
+                "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
             }
         return self.api.send_http_request_v2(method="POST", url="https://auth.iqoption.com/api/v2/login",data=data, headers=headers)
 

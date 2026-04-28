@@ -112,8 +112,16 @@ class IQ_Option:
         self.get_digital_spot_profit_after_sale_data = nested_dict(2, int)
         self.get_realtime_strike_list_temp_data = {}
         self.get_realtime_strike_list_temp_expiration = 0
+        # Sprint 4 TAREA 4: Browser-compatible session headers
         self.SESSION_HEADER = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"}
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+            "Referer": "https://iqoption.com/",
+        }
 
         self.SESSION_COOKIE = {}
         #
@@ -148,6 +156,35 @@ class IQ_Option:
             pass
         close_shared_session()
         get_logger(__name__).info("IQ_Option instance closed cleanly.")
+
+    # ── Sprint 4 TAREA 2: Wait for initialization-data before returning True ──
+    def _wait_for_init_data(self, timeout: float = 25.0) -> bool:
+        """
+        Espera hasta que el servidor haya enviado initialization-data
+        y el SDK tenga activos cargados en memoria.
+        Retorna True si los datos llegaron, False si timeout.
+        """
+        logger = get_logger(__name__)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            # Verificar que init_data tenga contenido real
+            init = getattr(self.api, 'api_option_init_all_result_v2', None)
+            if init and isinstance(init, dict):
+                # Comprobar que tiene activos de binary o turbo (señal de init completo)
+                binary_actives = init.get("binary", {}).get("actives", {})
+                turbo_actives  = init.get("turbo",  {}).get("actives", {})
+                if len(binary_actives) > 10 or len(turbo_actives) > 10:
+                    logger.info(
+                        "_wait_for_init_data: OK — binary=%d turbo=%d actives loaded",
+                        len(binary_actives), len(turbo_actives)
+                    )
+                    return True
+            time.sleep(0.5)
+        logger.warning(
+            "_wait_for_init_data: timeout after %.0fs — init data may be incomplete",
+            timeout
+        )
+        return False
 
     def connect(self, sms_code=None, ssid=None):
         if ssid:
@@ -221,6 +258,13 @@ class IQ_Option:
             except Exception as e:
                 get_logger(__name__).warning("Failed to auto-update asset catalogs: %s", e)
 
+            # Sprint 4 TAREA 2: Wait for initialization-data before exposing connection
+            init_ready = self._wait_for_init_data(timeout=25.0)
+            if not init_ready:
+                get_logger(__name__).warning(
+                    "connect(): initialization-data no llegó en 25s. "
+                    "get_all_open_time() puede retornar listas vacías."
+                )
 
             self._start_heartbeat_watchdog()
             return True, None

@@ -72,6 +72,14 @@ def _extract_instruments_from_init(init_data: dict, instrument_type: str) -> lis
     instruments = []
     seen_tickers = set()  # Deduplicate across binary/turbo
 
+    # Sprint 4 TAREA 3: Log init_v2 top-level keys for diagnostic
+    logger.debug("init_v2 top-level keys: %s", list(init_data.keys()))
+
+    # CONFIRMED (Sprint 4): init_v2 only contains binary/turbo/blitz/currency/groups/is_buyback.
+    # Margin instruments (forex, cfd, crypto, stocks) are NOT in init_v2.
+    # They come exclusively from WS get_instruments() calls.
+    # We classify margin-type instruments from binary/turbo actives using group_id mapping.
+
     for category in ("binary", "turbo"):
         actives = {}
         cat_data = init_data.get(category, {})
