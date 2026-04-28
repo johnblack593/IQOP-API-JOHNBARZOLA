@@ -182,7 +182,15 @@ class IQ_Option:
         self.api.set_session(headers=self.SESSION_HEADER,
                              cookies=self.SESSION_COOKIE)
 
-        check, reason = self.api.connect(self._credential_store.consume())
+        from iqoptionapi.ip_rotation import connect_with_rotation
+        def _do_connect():
+            return self.api.connect(self._credential_store.consume())
+
+        check, reason = connect_with_rotation(
+            _do_connect,
+            max_attempts=3,
+            rotate_on_fail=True
+        )
         if check:
             # Register callbacks for resilience (S1-03)
             self.api._reconnect_callback = self._auto_reconnect
@@ -512,7 +520,7 @@ class IQ_Option:
         v2_data = self.get_all_init_v2()
         v1_data = self.get_all_init()
         
-        binary_list = ["binary", "turbo"]
+        binary_list = ["binary", "turbo", "blitz"]
         
         # Procesar v2 (initialization-data)
         if v2_data:
@@ -584,7 +592,7 @@ class IQ_Option:
 
     def __get_other_open(self):
         # Crypto and etc pairs
-        instrument_list = ["cfd", "forex", "crypto"]
+        instrument_list = ["cfd", "forex", "crypto", "stocks", "commodities", "indices", "etf"]
         for instruments_type in instrument_list:
             ins_data = []
             for _ in range(3):

@@ -32,6 +32,10 @@ logger = get_logger(__name__)
 GROUP_ID_TO_TYPE = {
     1: "forex",
     16: "crypto",
+    2: "stocks",
+    3: "commodities",
+    4: "indices",
+    41: "etf",
 }
 
 # All other group_ids map to "cfd"
