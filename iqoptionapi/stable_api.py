@@ -31,6 +31,13 @@ class IQ_Option:
     __version__ = iqoptionapi.__version__
 
     def __init__(self, email, password, active_account_type="PRACTICE"):
+        # SPRINT 7: Structured Logging Config
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        
         self._stop_event = threading.Event()
         
         # --- Base Infrastructure ---
@@ -333,43 +340,15 @@ class IQ_Option:
 
     def _auto_reconnect(self) -> None:
         """
-        Auto-reconexión con backoff exponencial.
-        Llamado por WebsocketClient.on_close() en thread daemon.
-        Usa self._reconnect_manager para controlar intentos y delays.
+        Auto-reconexión delegada a _reconnect_with_backoff.
+        Llamado por WebsocketClient.on_close().
         """
-        from iqoptionapi.reconnect import MaxReconnectAttemptsError
         logger = get_logger(__name__)
-        logger.info("Auto-reconnect started.")
-
-        while True:
-            try:
-                self._reconnect_manager.wait()   # backoff + jitter
-            except MaxReconnectAttemptsError:
-                logger.critical(
-                    "Auto-reconnect: max attempts exhausted. "
-                    "Bot requires manual intervention."
-                )
-                return
-
-            logger.info(
-                "Auto-reconnect: attempt %d/%d (waiting finished)",
-                self._reconnect_manager.attempts,
-                self._reconnect_manager._max
-            )
-
-            try:
-                logger.info("Auto-reconnect: calling self.connect()...")
-                ssid = getattr(self, 'ssid', None)
-                status, reason = self.connect(ssid=ssid)
-
-                if status:
-                    logger.info("Auto-reconnect: SUCCESS.")
-                    self._reconnect_manager.reset()
-                    return
-                else:
-                    logger.warning("Auto-reconnect: connect() failed: %s", reason)
-            except Exception as e:
-                logger.error("Auto-reconnect: exception during connect(): %s", e)
+        logger.info("Auto-reconnect triggered.")
+        try:
+            self._reconnect_with_backoff()
+        except Exception as e:
+            logger.error("Auto-reconnect: exception during connect(): %s", e)
 
     def _start_heartbeat_watchdog(self) -> None:
         """
@@ -2198,10 +2177,11 @@ class IQ_Option:
         t = threading.Thread(target=refresh_loop, name="TokenRefreshWorker", daemon=True)
         t.start()
 
-    def get_open_positions(self, instrument_type=None):
+    def get_open_positions(self, instrument_type=None, realtime_pnl=False):
         """
-        SPRINT 5: Retorna posiciones abiertas del snapshot local.
-        instrument_type: "forex" | "crypto" | "cfd" | None (todas)
+        SPRINT 7: Retorna posiciones abiertas.
+        realtime_pnl=True: Usa position_changed_data para PnL dinámico.
+        instrument_type: "forex" | "crypto" | "cfd" | "digital-option" | None
         """
         positions = []
         for pid, pos in self.positions_state_data.items():
@@ -2210,16 +2190,20 @@ class IQ_Option:
                 continue
             
             active_id = pos.get("active_id")
-            # Intento de cálculo de PnL si tenemos precio actual
             pnl_estimate = None
-            if hasattr(self.api, "current_prices") and active_id in self.api.current_prices:
-                current_price = self.api.current_prices[active_id]
-                open_price = pos.get("open_price")
-                direction = pos.get("direction")
-                if open_price and direction:
-                    # Simplified PnL logic for estimation
-                    multiplier = 1 if direction == "buy" else -1
-                    pnl_estimate = (current_price - open_price) / open_price * pos.get("margin", 0) * multiplier
+            
+            if realtime_pnl and hasattr(self.api, "position_changed_data") and pid in self.api.position_changed_data:
+                pnl_estimate = self.api.position_changed_data[pid].get("pnl")
+            
+            # Fallback a estimación estática si no hay dato real-time
+            if pnl_estimate is None:
+                if hasattr(self.api, "current_prices") and active_id in self.api.current_prices:
+                    current_price = self.api.current_prices[active_id]
+                    open_price = pos.get("open_price")
+                    direction = pos.get("direction")
+                    if open_price and direction:
+                        multiplier = 1 if direction == "buy" else -1
+                        pnl_estimate = (current_price - open_price) / open_price * pos.get("margin", 0) * multiplier
             
             positions.append({
                 "id": pid,
@@ -2333,6 +2317,99 @@ class IQ_Option:
             return self.api.exchange_rates.get(pair)
         
         return None
+
+    def create_price_alert(self, active, price, direction):
+        """
+        SPRINT 7: Crea una alerta de precio.
+        active: "EURUSD" etc.
+        price: float
+        direction: "above" | "below"
+        """
+        active_id = OP_code.ACTIVES.get(active)
+        if not active_id:
+            raise ValueError(f"Unknown active '{active}'")
+        
+        self.api.result = None
+        self.api.result_event.clear()
+        self.api.create_alert(active_id, price, direction)
+        
+        if self.api.result_event.wait(timeout=10):
+            # Asumiendo que el servidor retorna el ID de la alerta en result
+            if isinstance(self.api.result, dict) and "id" in self.api.result:
+                return True, self.api.result["id"]
+            return True, self.api.result
+        
+        return False, "Timeout"
+
+    def _reconnect_with_backoff(self, max_attempts=10):
+        """
+        SPRINT 7: Reconexión con Exponential Backoff y Jitter.
+        """
+        import random
+        delay = 1.0
+        for attempt in range(max_attempts):
+            jitter = random.uniform(0.8, 1.2)
+            get_logger(__name__).info(
+                "Reconnect attempt %d/%d — waiting %.2fs", 
+                attempt + 1, max_attempts, delay * jitter
+            )
+            time.sleep(delay * jitter)
+            
+            # Reset credential store for fresh attempt
+            if hasattr(self, "_credentials"):
+                email, password = self._credentials
+                from iqoptionapi.security import CredentialStore
+                self._credential_store = CredentialStore(email, password)
+            
+            status, reason = self.connect()
+            if status:
+                get_logger(__name__).info("Reconnected successfully.")
+                return True
+            
+            delay = min(delay * 2, 60.0)  # Cap at 60s
+            
+        return False
+
+    def get_position_history(self, instrument_type="binary-option", from_date=None, to_date=None, limit=50):
+        """
+        SPRINT 7: Retorna historial de posiciones cerradas.
+        instrument_type: "binary-option" | "digital-option" | "forex" | "crypto" | "cfd"
+        from_date/to_date: datetime objects o timestamps Unix
+        """
+        self.api.result = None
+        self.api.result_event.clear()
+        
+        msg_body = {
+            "instrument_type": instrument_type,
+            "user_balance_id": self.api.balance_id,
+            "limit": limit,
+            "offset": 0
+        }
+        
+        if from_date:
+            if isinstance(from_date, datetime):
+                from_date = int(from_date.timestamp())
+            msg_body["start_time"] = from_date
+            
+        if to_date:
+            if isinstance(to_date, datetime):
+                to_date = int(to_date.timestamp())
+            msg_body["end_time"] = to_date
+
+        msg = {
+            "name": "portfolio.get-history",
+            "version": "2.0",
+            "body": msg_body
+        }
+
+        self.api.send_websocket_request("sendMessage", msg)
+        
+        if self.api.result_event.wait(timeout=10):
+            return self.api.result
+        
+        return None
+
+
 
 
     def set_trailing_stop(self, position_id, distance_pips=None):
@@ -3062,9 +3139,9 @@ class IQ_Option:
             instrument_id = f"do{clean_active}{legacy_date}PT{duration}M{action}SPT"
 
         get_logger(__name__).debug("Digital Instrument ID generated: %s", instrument_id)
-
         
-        print(f"DEBUG_INSTRUMENT_ID: {instrument_id}")
+        
+        get_logger(__name__).debug("DEBUG_INSTRUMENT_ID: %s", instrument_id)
         
         # S4-T4: Reintento si la conexión se cerró justo antes (e.g. por timeout de discovery)
         for attempt in range(2):

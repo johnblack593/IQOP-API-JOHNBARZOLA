@@ -68,6 +68,7 @@ from iqoptionapi.ws.channels.buy_blitz import BuyBlitz
 from iqoptionapi.ws.channels.place_stop_order import PlaceStopOrder
 from iqoptionapi.ws.channels.subscribe_instruments_list import SubscribeInstrumentsList, UnsubscribeInstrumentsList
 from iqoptionapi.ws.channels.short_active_info import SubscribeShortActiveInfo
+from iqoptionapi.ws.channels.create_alert import CreateAlert
 
 from iqoptionapi.ws.objects.timesync import TimeSync
 from iqoptionapi.ws.objects.profile import Profile
@@ -158,6 +159,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     short_active_info_data = {}
     exchange_rates = {}
     trading_params_data = {}
+    position_changed_data = {}
 
     def __init__(self, host, username, proxies=None):
         """
@@ -599,6 +601,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     @property
     def subscribe_short_active_info(self):
         return SubscribeShortActiveInfo(self)
+    @property
+    def create_alert(self):
+        return CreateAlert(self)
 # ----------------------------------------------------------------------------
 
     @property

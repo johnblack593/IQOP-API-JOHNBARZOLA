@@ -1,18 +1,21 @@
-# IQOP-API-JOHNBARZOLA
+# IQOP-API-JOHNBARZOLA (JCBV-NEXUS SDK)
 
-**IQ Option API con esteroides para robots de trading**
+**IQ Option API con esteroides para robots de trading — v8.9.999-PS7**
 
 API wrapper de IQ Option con capa de inteligencia de mercado integrada.
 Diseñada para sistemas como JCBV-NEXUS que requieren control absoluto
 del protocolo y datos enriquecidos en tiempo real.
 
+---
+
 ## Características principales
 
-### Core
-- Conexión WebSocket estable con reconexión automática y backoff
-- Operaciones: Digital, Binary, Turbo, Blitz, CFD/Forex
-- Portfolio: `get_open_positions()`, `get_order_status()`, `reconcile_missed_results()`
-- Rate limiting, idempotencia y circuit breaker integrados
+### Core (Sprint 7 Hardening)
+- **Conexión WebSocket Stealth**: Headers Chrome 147, request_id secuencial y reconexión con Exponential Backoff + Jitter.
+- **Session Hardening**: Background token refresh worker (cada 4h) para evitar expiración de sesión.
+- **Operaciones Completas**: Digital, Binary, Turbo, Blitz, CFD/Forex con `place_stop_order`.
+- **Portfolio Avanzado**: `get_open_positions(realtime_pnl=True)`, `create_price_alert()`, `get_position_history()`.
+- **Resiliencia**: Rate limiting, idempotencia y circuit breaker integrados.
 
 ### Inteligencia de mercado (valor agregado)
 | Módulo | Qué hace | Método principal |
@@ -33,38 +36,26 @@ pip install -e .
 cp .env.example .env   # completar con credenciales reales
 ```
 
-## Uso básico
+## Uso de Nuevas Funciones (Sprint 7)
 
+### Real-time PnL & Positions
 ```python
-from iqoptionapi.stable_api import IQ_Option
-import os
+# Obtener posiciones con PnL actualizado dinámicamente desde WS
+positions = iq.get_open_positions(instrument_type="forex", realtime_pnl=True)
+for pos in positions:
+    print(f"ID: {pos['id']} PnL: {pos['pnl_estimate']}$")
+```
 
-iq = IQ_Option(os.getenv("IQ_EMAIL"), os.getenv("IQ_PASSWORD"))
-check, reason = iq.connect()
+### Alertas de Precio
+```python
+# Crear una alerta cuando el precio suba por encima de 1.0850
+check, alert_id = iq.create_price_alert("EURUSD", 1.0850, "above")
+```
 
-if check:
-  iq.change_balance("PRACTICE")
-
-  # ¿Qué activos puedo operar ahora con mejor calidad?
-  assets = iq.asset_scanner.get_best_payout_assets(
-      instrument_type="turbo-option",
-      top_n=3,
-      min_payout=0.80
-  )
-  for a in assets:
-      print(f"{a['asset']}: payout={a['payout']:.0%} regime={a['regime']}")
-
-  # ¿Está EURUSD-OTC en tendencia o rango?
-  regime = iq.market_regime.get_regime(1, 60)  # active_id=1, 1 minuto
-  direction = iq.market_regime.get_trend_direction(1, 60)
-  print(f"Régimen: {regime}, Dirección: {direction}")
-
-  # Operar si el activo tiene buena calidad
-  if iq.market_quality.is_tradeable(1, 60):
-      status, order_id = iq.buy_digital_spot("EURUSD-OTC", 1.0, "call", 5)
-      if status:
-          result = iq.check_win_digital(order_id)
-          print(f"Resultado: {result}")
+### Historial de Trades
+```python
+# Obtener los últimos 50 trades de Digital Options
+history = iq.get_position_history(instrument_type="digital-option", limit=50)
 ```
 
 ## Módulos disponibles
@@ -85,17 +76,14 @@ iq.correlation_engine    # Correlación entre activos
 iq.asset_scanner         # Scanner de mejores activos
 ```
 
-## Reglas del protocolo (críticas)
-
-- `"loose"` es el typo oficial del servidor IQ Option — nunca corregir
-- Blitz instruments solo via `initialization-data` — nunca llamar `get_instruments("blitz")`
-- `instrument_strike_value` viene en x1,000,000 — siempre dividir por `1e6`
-
 ## Testing
 
 ```bash
-pip install -r requirements-dev.txt
-python -m pytest tests/unit/ -v
+# Test de integración completo (Demo)
+python scratch/test_full_flow.py
+
+# Verificar cumplimiento de Stealth
+python scratch/test_stealth_verify.py
 ```
 
 ## CI/CD

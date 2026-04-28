@@ -38,6 +38,25 @@ class PositionChanged:
             if hasattr(api, "order_async"):
                 api.order_async[order_id][message.get("name")] = message
 
+            # SPRINT 7: Real-time PnL storage
+            if not hasattr(api, "position_changed_data"):
+                api.position_changed_data = {}
+            
+            if order_id not in api.position_changed_data:
+                api.position_changed_data[order_id] = {}
+            
+            pnl = msg.get("pnl", msg.get("pnl_realized", msg.get("profit_amount")))
+            if pnl is not None:
+                api.position_changed_data[order_id]["pnl"] = float(pnl)
+            
+            status = msg.get("status")
+            if status:
+                api.position_changed_data[order_id]["status"] = status
+            
+            # Additional metadata
+            if msg.get("current_price"):
+                api.position_changed_data[order_id]["current_price"] = float(msg["current_price"])
+
             status = msg.get("status")
             logger.debug("position_changed raw status=%r source=%r order_id=%s", status, source, order_id)
             

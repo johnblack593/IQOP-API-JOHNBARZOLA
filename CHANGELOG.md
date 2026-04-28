@@ -1,98 +1,27 @@
-# CHANGELOG
+# CHANGELOG — JCBV-NEXUS SDK
 
-Todos los cambios notables de este proyecto. Formato: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
-***
-
-
-## [2.1.0] - 2026-04-23
+## v8.9.999-PS7 (2026-04-28)
 ### Added
-- **Reactive WS Dispatcher**: Elimination of 120s latency in `check_win*` methods.
-- **Unified Event Notification**: `option`, `option-closed`, `socket-option-closed`, and `position-changed` now trigger real-time events.
-- **Type Resilience**: Robust handling of int/str IDs in event stores via automatic casting.
-- **Test Suite**: Added `tests/unit/test_ws_event_dispatch.py` (100% pass rate).
+- `create_price_alert(active, price, direction)`: Support for creating server-side price alerts.
+- `get_position_history()`: Retrieve closed trade history with filters.
+- `get_open_positions(realtime_pnl=True)`: Real-time PnL tracking via `position-changed` handler.
+- `_reconnect_with_backoff()`: Robust reconnection strategy with exponential backoff and jitter.
+- `setup.py` & updated `pyproject.toml` for standard installation.
 
 ### Fixed
-- `check_win_digital` correctly accesses result data from `order_async` fallback.
-- `_wait_result` now supports both single events (legacy) and event stores (dict).
-- Type mismatch bug where string IDs from WS caused missing events in int-keyed stores.
+- Replaced `print()` statements with structured `logging`.
+- Fixed synchronization gaps in `get_open_positions` snapshot.
+- Enhanced `position_changed.py` to track dynamic PnL updates.
 
-## [2.0.0] — 2026-04-22 — "API con esteroides"
+## v8.9.999-PS6 (2026-04-28)
+### Added
+- `HTTPXClient` with HTTP/2 support.
+- Chrome 147 User-Agent parity for improved stealth.
+- Reactive Handlers for `overnight-fee`, `alerts`, `short-active-info`, and `exchange-rate`.
+- Background `TokenRefreshWorker` for session persistence.
 
-### 🔴 Crítico — Bug fixes de runtime
-
-- **fix(digital):** Corregido `AttributeError` en `buy_digital_spot()` y
-`sell_digital_option()` por referencia rota a `self._rate_limiter` →
-migrado a `self._order_bucket` con decorador `@rate_limited`
-- **fix(spinloop):** Eliminados todos los `while True` en lógica de espera de trades.
-`check_win*()` ahora usa `threading.Event + timeout` — retorna `None` en lugar de
-congelar el robot indefinidamente
-- **fix(spinloop):** Migrados streams de candles y mood a `Event.wait(timeout=20s)`
-- **fix(hardening):** Timeouts de seguridad (15s) en `get_strike_list`,
-`get_digital_position`, `close_position_v2`
-- **fix(cache):** `candle_cache.py` reemplaza dict sin límite por `deque(maxlen=500)`
-— elimina memory leak garantizado en bots de larga duración
-- **fix(init):** Deduplicado `get_all_init()` — una sola llamada WS por sesión
-con guard `_init_data_received`
-- **fix(digital):** Corregido formato de `instrument_id` en `buy_digital_spot_v2()`
-al estándar: `do{ASSET}{YYYYMMDDHHMM}PT{DUR}M{DIR}SPT`
-- **fix(buy):** Corregido typo `buyv3_by_raw_expirations` → `buyv3_by_raw_expired`
-
-### ✅ Nuevas funcionalidades — Portfolio control
-
-- **feat(portfolio):** `get_open_positions(instrument_type)` — snapshot de trades vivos
-- **feat(portfolio):** `get_all_open_positions()` — todos los tipos en paralelo
-- **feat(reconciler):** `reconcile_missed_results(since_ts)` — recupera resultados
-de trades expirados durante una desconexión (betinfo + position-history fallback)
-- **feat(portfolio):** `get_order_status(order_id, type)` — dispatcher genérico
-normalizado para binary/digital/CFD
-
-### ✅ Nuevas funcionalidades — Instrumentos de trading
-
-- **feat(trading):** `buy_blitz()` — soporte completo de Blitz options via
-`initialization-data` (nunca via `get_instruments("blitz")`)
-- **feat(digital):** `buy_digital_spot_v2()` certificado contra servidor real
-- **feat(candles):** `subscribe_candle_v2(active, size, buffer_max, on_candle)` —
-suscripción con buffer acotado y callback async-safe
-
-### ✅ Nuevas funcionalidades — Inteligencia de mercado
-
-- **feat(intelligence):** `MarketQualityMonitor` — spread/slippage monitor.
-`is_tradeable()` para filtrar activos antes de operar
-- **feat(intelligence):** `PatternEngine` — 6 patrones de velas: DOJI, HAMMER,
-SHOOTING_STAR, BULLISH_ENGULFING, BEARISH_ENGULFING, INSIDE_BAR
-- **feat(intelligence):** `MarketRegime` — ADX simplificado para detectar
-trending/ranging/transitioning. Incluye `get_trend_direction()`
-- **feat(intelligence):** `CorrelationEngine` — Pearson inter-activos sin numpy.
-`get_correlated_assets()` para gestión de riesgo de portafolio
-- **feat(scanner):** `AssetScanner.get_best_payout_assets()` — top activos por
-payout filtrados por calidad y régimen de mercado
-- **feat(performance):** `PerformanceTracker.get_asset_score()` — win rate, EV,
-profit factor por activo+timeframe
-
-### ✅ Infraestructura y calidad
-
-- **feat(wiring):** 13 módulos wired automáticamente en `IQ_Option.__init__`
-- **feat(validation):** Gate de `validator.validate_order()` en todos los `buy_*`
-- **feat(journal):** `trade_journal.record()` auto-llamado en todos los `check_win*`
-- **feat(ws):** Circuit completado — `result_event_store` y
-`position_changed_event_store` reciben `.set()` en handlers WS
-- **test:** Suite de 13 tests unitarios con mocks WS — sin credenciales reales
-- **ci:** GitHub Actions con lint (ruff) + test (pytest)
-- **chore:** Migrado `setup.py` → `pyproject.toml` (PEP 517/518)
-
-### Módulos nuevos en esta versión
-`security.py` · `reconnect.py` · `ratelimit.py` · `idempotency.py` · `logger.py`
-`config.py` · `expiration.py` · `constants.py` · `circuit_breaker.py`
-`martingale_guard.py` · `signal_consensus.py` · `candle_cache.py` · `asset_scanner.py`
-`trade_journal.py` · `validator.py` · `performance.py` · `session_scheduler.py`
-`reconciler.py` · `market_quality.py` · `pattern_engine.py` · `market_regime.py`
-`correlation_engine.py`
-`ws/objects/portfolio_positions.py` · `ws/received/portfolio_get_positions.py`
-
-***
-
-## [1.x.x] — Legacy
-
-Versión original del fork público. Sin módulos de inteligencia. Bugs de runtime
-activos en digital options y check_win. Ver historial de git para detalles.
+## v8.9.999-PS5 (2026-04-28)
+### Added
+- Advanced Position Management: `set_trailing_stop`, `set_breakeven`.
+- `sync_state_on_connect()` for robust recovery.
+- Marginal trading stability fixes (4101 "Position Not Found" errors resolved).
