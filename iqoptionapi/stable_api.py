@@ -23,11 +23,15 @@ from datetime import datetime, timedelta
 from iqoptionapi.time_sync import _clock
 from random import randint
 from concurrent.futures import ThreadPoolExecutor
+from iqoptionapi.mixins.orders_mixin import OrdersMixin
+from iqoptionapi.mixins.positions_mixin import PositionsMixin
+from iqoptionapi.mixins.streams_mixin import StreamsMixin
+from iqoptionapi.mixins.management_mixin import ManagementMixin
 
 
 
 
-class IQ_Option:
+class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
     __version__ = iqoptionapi.__version__
 
     def __init__(self, email, password, active_account_type="PRACTICE"):
@@ -922,27 +926,6 @@ class IQ_Option:
     # ______________________________________________________
     #######################################################
 
-    def start_candles_stream(self, ACTIVE, size, maxdict):
-        if size == "all":
-            for s in self.size:
-                self.full_realtime_get_candle(ACTIVE, s, maxdict)
-                self.api.real_time_candles_maxdict_table[ACTIVE][s] = maxdict
-            self.start_candles_all_size_stream(ACTIVE)
-        elif size in self.size:
-            self.api.real_time_candles_maxdict_table[ACTIVE][size] = maxdict
-            self.full_realtime_get_candle(ACTIVE, size, maxdict)
-            # Stealth Refactor: Delegation to SubscriptionManager
-            self.subscription_manager.subscribe_candle(ACTIVE, size)
-            
-            # Wait for first candle to arrive (data ready)
-            start_t = time.time()
-            while not self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) and (time.time() - start_t < 15.0):
-                self.api.candles_event.wait(timeout=1.0)
-                self.api.candles_event.clear()
-        else:
-            get_logger(__name__).error(
-                '**error** start_candles_stream please input right size')
-
     def stop_candles_stream(self, ACTIVE, size):
         if size == "all":
             self.stop_candles_all_size_stream(ACTIVE)
@@ -987,60 +970,11 @@ class IQ_Option:
                 ACTIVE)][int(size)][can["from"]] = can
 
     # ------------------------Subscribe ONE SIZE-----------------------
-    def start_candles_one_stream(self, ACTIVE, size):
-        if not (ACTIVE in self.api.real_time_candles and size in self.api.real_time_candles[ACTIVE]):
-            # Stealth Refactor: Delegation to SubscriptionManager
-            self.subscription_manager.subscribe_candle(ACTIVE, size)
-            
-        # Wait for data
-        start_t = time.time()
-        while not self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) and (time.time() - start_t < 20.0):
-            self.api.candles_event.wait(timeout=1.0)
-            self.api.candles_event.clear()
-            
-        return self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) == True
 
-    def stop_candles_one_stream(self, ACTIVE, size):
-        if ((ACTIVE + "," + str(size)) in self.subscribe_candle) == True:
-            self.subscribe_candle.remove(ACTIVE + "," + str(size))
-        
-        # BUG-SPINLOOP-02: Migrado a Event+timeout
-        self.api.candle_generated_check[str(ACTIVE)][int(size)] = {}
-        self.api.unsubscribe(OP_code.ACTIVES[ACTIVE], size)
-        
-        start_t = time.time()
-        while self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) != {} and (time.time() - start_t < 20.0):
-            time.sleep(0.1)
-        return True
 
     # ------------------------Subscribe ALL SIZE-----------------------
 
-    def start_candles_all_size_stream(self, ACTIVE):
-        self.api.candle_generated_all_size_check[str(ACTIVE)] = {}
-        if (str(ACTIVE) in self.subscribe_candle_all_size) == False:
-            self.subscribe_candle_all_size.append(str(ACTIVE))
-        
-        # BUG-SPINLOOP-03: Migrado a Event+timeout
-        self.api.subscribe_all_size(OP_code.ACTIVES[ACTIVE])
-        start_t = time.time()
-        while not self.api.candle_generated_all_size_check.get(str(ACTIVE)) and (time.time() - start_t < 20.0):
-            self.api.candles_event.wait(timeout=1.0)
-            self.api.candles_event.clear()
-            
-        return self.api.candle_generated_all_size_check.get(str(ACTIVE)) == True
 
-    def stop_candles_all_size_stream(self, ACTIVE):
-        if (str(ACTIVE) in self.subscribe_candle_all_size) == True:
-            self.subscribe_candle_all_size.remove(str(ACTIVE))
-        
-        # BUG-SPINLOOP-03: Refactorizado para evitar while True
-        self.api.candle_generated_all_size_check[str(ACTIVE)] = {}
-        self.api.unsubscribe_all_size(OP_code.ACTIVES[ACTIVE])
-        
-        start_t = time.time()
-        while self.api.candle_generated_all_size_check.get(str(ACTIVE)) != {} and (time.time() - start_t < 10.0):
-            time.sleep(0.1)
-        return True
 
     # ------------------------top_assets_updated---------------------------------------------
 
@@ -1085,16 +1019,6 @@ class IQ_Option:
 
     # -----------------traders_mood----------------------
 
-    def start_mood_stream(self, ACTIVES, instrument="turbo-option"):
-        self.api.subscribe_Traders_mood(ACTIVES, instrument)
-        
-        # BUG-SPINLOOP-06: Migrar a Event+timeout
-        start_t = time.time()
-        while not self.api.traders_mood and (time.time() - start_t < 20.0):
-            self.api.result_event.wait(timeout=1.0)
-            self.api.result_event.clear()
-        
-        return True
 
     def stop_mood_stream(self, ACTIVES, instrument="turbo-option"):
         if ACTIVES in self.subscribe_mood:
@@ -1409,65 +1333,6 @@ class IQ_Option:
         if id is None:
             get_logger(__name__).warning("buy_by_raw_expirations TIMEOUT or NO ID: req_id=%s", req_id)
         return self.api.result, id
-
-    @rate_limited("_order_bucket")
-    def buy(self, price, ACTIVES, ACTION, expirations):
-        # Gate de validación
-        if hasattr(self, 'validator') and self.validator is not None:
-            is_valid, reason = self.validator.validate_order(
-                active=ACTIVES,
-                amount=price,
-                action=ACTION,
-                duration=expirations,
-                instrument_type="binary"
-            )
-            if not is_valid:
-                get_logger(__name__).error("buy rejected by validator: %s", reason)
-                return False, None
-
-        request_id = self._idempotency.register()
-        get_logger(__name__).info(
-            "buy(): request_id=%s | asset=%s | action=%s | amount=%s",
-            request_id, ACTIVES, ACTION, price
-        )
-        self.api.buy_multi_option = {}
-        self.api.result_event.clear()
-        req_id = str(randint(0, 10000))
-        self.api.buy_multi_option[req_id] = {"id": None}
-        self.api.buyv3(
-            float(price), OP_code.ACTIVES[ACTIVES], str(ACTION), int(expirations), req_id)
-        
-        # Wait for either result (success=False) or correlated ID (Sprint 3)
-        start_t = time.time()
-        id = None
-        while time.time() - start_t < 15:
-            id = self.api.buy_multi_option.get(req_id, {}).get("id")
-            if id:
-                break
-            
-            # Si el result llegó y dice success=False, abortamos
-            if self.api.buy_multi_option.get(req_id, {}).get("success") == False:
-                break
-                
-            if self.api.result_event.wait(timeout=0.1):
-                self.api.result_event.clear()
-        
-        if id is None:
-            # S4-T3: Cleanup correlation queue on failure/timeout
-            self.api.remove_pending_buy_id(req_id)
-            
-            if self.api.buy_multi_option.get(req_id, {}).get("message"):
-                self._idempotency.fail(request_id)
-                return False, self.api.buy_multi_option[req_id]["message"]
-            
-            self._idempotency.fail(request_id)
-            get_logger(__name__).critical("buy() TIMEOUT or NO ID: request_id=%s req_id=%s", request_id, req_id)
-            return False, None
-        
-        self._idempotency.confirm(request_id, id)
-        return self.api.result, id
-
-    @rate_limited("_order_bucket")
     def sell_option(self, options_ids):
         self.api.sold_options_respond_event.clear()
         self.api.sell_option(options_ids)
@@ -1587,11 +1452,6 @@ class IQ_Option:
 
     
     @rate_limited("_order_bucket")
-    def buy_digital_spot(self, active, amount, action, duration):
-        """
-        Alias para buy_digital_spot_v2, garantizando el uso del Smart ID engine (S6).
-        """
-        return self.buy_digital_spot_v2(active, amount, action, duration)
 
     def get_digital_spot_profit_after_sale(self, position_id):
         def get_instrument_id_to_bid(data, instrument_id):
@@ -1688,13 +1548,6 @@ class IQ_Option:
         else:
             return None
 
-    def buy_digital(self, amount, instrument_id):
-        self.api.digital_option_placed_id_event.clear()
-        request_id = self.api.place_digital_option(instrument_id, amount)
-        is_ready = self.api.digital_option_placed_id_event.wait(timeout=30)
-        if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for buy_digital")
-        return self.api.digital_option_placed_id.get(request_id)
 
     @rate_limited("_order_bucket")
     def close_digital_option(self, position_id):
@@ -1792,74 +1645,7 @@ class IQ_Option:
     # -----------------BUY_for__Forex__&&__stock(cfd)__&&__ctrpto
 
     # ── Blitz / Pending Order Protocol (Sprint 3) ────────────────
-    def buy_blitz(self, active, amount, direction, current_price, expiration_size=180, profit_percent=83):
-        """
-        Realiza una operación Blitz (v2.0) y espera confirmación real.
-        """
-        active_id = OP_code.ACTIVES.get(active)
-        if not active_id:
-            get_logger(__name__).error("buy_blitz: unknown active %s", active)
-            return False, None
-            
-        request_id = str(randint(0, 1000000))
-        
-        # SPRINT 4: Usar event store para buyComplete
-        if not hasattr(self.api, "buy_complete_event"):
-            self.api.buy_complete_event = threading.Event()
-        self.api.buy_complete_event.clear()
-        
-        self.api.buy_blitz(active_id, direction, amount, current_price, expiration_size, profit_percent, request_id)
-        
-        # Esperar confirmación
-        is_ready = self.api.buy_complete_event.wait(timeout=10.0)
-        if is_ready and getattr(self.api, "buy_successful", False):
-            return True, getattr(self.api, "buy_id", None)
-        
-        return False, "Timeout or failure in buy_blitz confirmation"
 
-    def place_pending_order(self, active, instrument_type, side, amount, leverage, stop_price, take_profit=None, stop_loss=None):
-        """
-        Coloca una orden pendiente (Stop Order) usando el protocolo marginal-*.place-stop-order.
-        Espera confirmación real via stop-order-placed.
-        """
-        active_id = OP_code.ACTIVES.get(active)
-        if not active_id:
-            get_logger(__name__).error("place_pending_order: unknown active %s", active)
-            return False, None
-            
-        request_id = str(randint(0, 1000000))
-        
-        # SPRINT 4: Usar event store por order_id para stop-order-placed
-        if not hasattr(self.api, "stop_order_placed_event"):
-            self.api.stop_order_placed_event = defaultdict(threading.Event)
-        
-        self.api.place_stop_order(instrument_type, active_id, side, amount, leverage, stop_price, take_profit, stop_loss, True, request_id)
-        
-        # 1. Esperar ACK inmediato del request (market-order-placed)
-        if not hasattr(self.api, "margin_order_event"):
-            self.api.margin_order_event = defaultdict(threading.Event)
-            
-        ack_ev = self.api.margin_order_event[request_id]
-        is_ready = ack_ev.wait(timeout=10.0)
-        
-        if not is_ready:
-            return False, "Timeout waiting for ACK (market-order-placed)"
-            
-        result = self.api.margin_order_result.get(request_id)
-        if not result or result.get("status") != 2000:
-            return False, result.get("error") if result else "Unknown error in ACK"
-        
-        order_id = str(result.get("id"))
-        
-        # 2. Esperar confirmación de "placed" (asíncrona)
-        placed_ev = self.api.stop_order_placed_event[order_id]
-        is_placed = placed_ev.wait(timeout=10.0)
-        
-        if not is_placed:
-            get_logger(__name__).warning("Order %s ACKed but stop-order-placed timed out", order_id)
-            # Retornamos el order_id de todas formas porque ya fue aceptada por el socket
-            
-        return True, order_id
 
     def cancel_pending_order(self, order_id):
         """
@@ -2123,365 +1909,18 @@ class IQ_Option:
         # name': 'position-changed', 'microserviceName': "portfolio"/"digital-options"
         return self.api.order_async.get(buy_order_id, {})
 
-    def sync_state_on_connect(self):
-        """
-        Sprint 5: Synchronize all active positions and pending orders.
-        Blocks for up to 10 seconds to ensure state consistency.
-        """
-        get_logger(__name__).info("Syncing SDK state (positions/orders)...")
-        
-        # We request positions for common margin types
-        instrument_types = ["crypto", "forex", "cfd"]
-        
-        self.api.positions_event.clear()
-        
-        # Bulk request
-        for itype in instrument_types:
-            self.api.get_positions(itype)
-            
-        # Wait for at least one response
-        is_ready = self.api.positions_event.wait(timeout=10)
-        
-        if is_ready and self.api.positions:
-            # The 'positions' message is a list of open positions
-            positions_list = self.api.positions.get("msg", {}).get("positions", [])
-            for pos in positions_list:
-                pid = pos.get("id")
-                if pid:
-                    self.positions_state_data[pid] = pos
-            get_logger(__name__).info(f"Sync complete: {len(self.positions_state_data)} positions found.")
-        else:
-            get_logger(__name__).warning("Sync state TIMEOUT or no positions found.")
-            
-        return self.positions_state_data
-
-    def _start_token_refresh_worker(self, refresh_interval_hours=4):
-        """
-        SPRINT 6: Daemon thread que re-autentica antes de que el token expire.
-        """
-        def refresh_loop():
-            get_logger(__name__).info("Token refresh worker started (Interval: %sh)", refresh_interval_hours)
-            while not self._stop_event.wait(timeout=refresh_interval_hours * 3600):
-                try:
-                    if hasattr(self, '_credentials'):
-                        email, password = self._credentials
-                        get_logger(__name__).info("Executing background token refresh...")
-                        # reconnect() already handles the flow and updates api.SSID
-                        self.connect()
-                    else:
-                        get_logger(__name__).warning("Token refresh worker: No credentials stored.")
-                        break
-                except Exception as e:
-                    get_logger(__name__).error("Token refresh failed: %s", e)
-
-        t = threading.Thread(target=refresh_loop, name="TokenRefreshWorker", daemon=True)
-        t.start()
-
-    def get_open_positions(self, instrument_type=None, realtime_pnl=False):
-        """
-        SPRINT 7: Retorna posiciones abiertas.
-        realtime_pnl=True: Usa position_changed_data para PnL dinámico.
-        instrument_type: "forex" | "crypto" | "cfd" | "digital-option" | None
-        """
-        positions = []
-        for pid, pos in self.positions_state_data.items():
-            itype = pos.get("instrument_type")
-            if instrument_type and itype != instrument_type:
-                continue
-            
-            active_id = pos.get("active_id")
-            pnl_estimate = None
-            
-            if realtime_pnl and hasattr(self.api, "position_changed_data") and pid in self.api.position_changed_data:
-                pnl_estimate = self.api.position_changed_data[pid].get("pnl")
-            
-            # Fallback a estimación estática si no hay dato real-time
-            if pnl_estimate is None:
-                if hasattr(self.api, "current_prices") and active_id in self.api.current_prices:
-                    current_price = self.api.current_prices[active_id]
-                    open_price = pos.get("open_price")
-                    direction = pos.get("direction")
-                    if open_price and direction:
-                        multiplier = 1 if direction == "buy" else -1
-                        pnl_estimate = (current_price - open_price) / open_price * pos.get("margin", 0) * multiplier
-            
-            positions.append({
-                "id": pid,
-                "active_id": active_id,
-                "instrument_type": itype,
-                "direction": pos.get("direction"),
-                "open_price": pos.get("open_price"),
-                "margin": pos.get("margin"),
-                "pnl_estimate": pnl_estimate,
-                "raw": pos
-            })
-        return positions
-
-    def monitor_positions(self, callback, interval=1.0):
-        """
-        SPRINT 5: Inicia monitoreo de posiciones.
-        Llama callback(positions_list) cada N segundos.
-        """
-        if hasattr(self, "_monitor_stop"):
-            self._monitor_stop.set()
-        
-        self._monitor_stop = threading.Event()
-        
-        def monitor_loop():
-            get_logger(__name__).info("Position monitoring started.")
-            while not self._monitor_stop.wait(timeout=interval):
-                try:
-                    pos_list = self.get_open_positions()
-                    callback(pos_list)
-                except Exception as e:
-                    get_logger(__name__).error("Monitor positions error: %s", e)
-
-        t = threading.Thread(target=monitor_loop, name="PositionMonitor", daemon=True)
-        t.start()
-
-    def stop_monitor_positions(self):
-        """Detiene el hilo de monitoreo."""
-        if hasattr(self, "_monitor_stop"):
-            self._monitor_stop.set()
-            get_logger(__name__).info("Position monitoring stopped.")
-
-    def close_all_positions(self, instrument_type=None, direction=None):
-        """
-        SPRINT 5: Cierra todas las posiciones que coincidan con los filtros.
-        """
-        positions = self.get_open_positions(instrument_type=instrument_type)
-        if direction:
-            positions = [p for p in positions if p["direction"] == direction]
-        
-        if not positions:
-            return {"closed": [], "failed": []}
-        
-        get_logger(__name__).info(f"Closing {len(positions)} positions concurrently...")
-        
-        results = {"closed": [], "failed": []}
-        
-        def _close_one(pos):
-            pid = pos["id"]
-            # Detectar si es digital o margin
-            if pos["instrument_type"] == "digital-option":
-                # Asumiendo que existe close_digital_option
-                check = self.close_digital_option(pid)
-            else:
-                check = self.close_position(pid)
-            
-            if check:
-                return True, pid
-            return False, pid
-
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(_close_one, p) for p in positions]
-            for f in futures:
-                success, pid = f.result()
-                if success:
-                    results["closed"].append(pid)
-                else:
-                    results["failed"].append(pid)
-        
-        return results
-
-    def get_short_active_info(self, active_id, timeout=5.0):
-        """
-        SPRINT 6: Retorna precio actual, spread y disponibilidad de un activo.
-        """
-        if not hasattr(self.api, "short_active_info_event"):
-             self.api.short_active_info_event = threading.Event()
-        
-        self.api.short_active_info_event.clear()
-        self.api.subscribe_short_active_info(active_id)
-        
-        if self.api.short_active_info_event.wait(timeout=timeout):
-            return self.api.short_active_info_data.get(active_id)
-        
-        return None
-
-    def get_exchange_rate(self, from_currency, to_currency, timeout=5.0):
-        """
-        SPRINT 6: Retorna tasa de cambio en tiempo real.
-        """
-        pair = f"{from_currency}/{to_currency}"
-        
-        if not hasattr(self.api, "exchange_rate_event"):
-            self.api.exchange_rate_event = threading.Event()
-            
-        # IQ Option suele enviar rates periódicamente si estás suscrito a algo relacionado,
-        # o podemos esperar el siguiente 'exchange-rate-generated' global.
-        # Nota: No hay un 'subscribe_exchange_rate' explícito conocido, 
-        # se recibe por ser parte de la sesión.
-        
-        if self.api.exchange_rate_event.wait(timeout=timeout):
-            return self.api.exchange_rates.get(pair)
-        
-        return None
-
-    def create_price_alert(self, active, price, direction):
-        """
-        SPRINT 7: Crea una alerta de precio.
-        active: "EURUSD" etc.
-        price: float
-        direction: "above" | "below"
-        """
-        active_id = OP_code.ACTIVES.get(active)
-        if not active_id:
-            raise ValueError(f"Unknown active '{active}'")
-        
-        self.api.result = None
-        self.api.result_event.clear()
-        self.api.create_alert(active_id, price, direction)
-        
-        if self.api.result_event.wait(timeout=10):
-            # Asumiendo que el servidor retorna el ID de la alerta en result
-            if isinstance(self.api.result, dict) and "id" in self.api.result:
-                return True, self.api.result["id"]
-            return True, self.api.result
-        
-        return False, "Timeout"
-
-    def _reconnect_with_backoff(self, max_attempts=10):
-        """
-        SPRINT 7: Reconexión con Exponential Backoff y Jitter.
-        """
-        import random
-        delay = 1.0
-        for attempt in range(max_attempts):
-            jitter = random.uniform(0.8, 1.2)
-            get_logger(__name__).info(
-                "Reconnect attempt %d/%d — waiting %.2fs", 
-                attempt + 1, max_attempts, delay * jitter
-            )
-            time.sleep(delay * jitter)
-            
-            # Reset credential store for fresh attempt
-            if hasattr(self, "_credentials"):
-                email, password = self._credentials
-                from iqoptionapi.security import CredentialStore
-                self._credential_store = CredentialStore(email, password)
-            
-            status, reason = self.connect()
-            if status:
-                get_logger(__name__).info("Reconnected successfully.")
-                return True
-            
-            delay = min(delay * 2, 60.0)  # Cap at 60s
-            
-        return False
-
-    def get_position_history(self, instrument_type="binary-option", from_date=None, to_date=None, limit=50):
-        """
-        SPRINT 7: Retorna historial de posiciones cerradas.
-        instrument_type: "binary-option" | "digital-option" | "forex" | "crypto" | "cfd"
-        from_date/to_date: datetime objects o timestamps Unix
-        """
-        self.api.result = None
-        self.api.result_event.clear()
-        
-        msg_body = {
-            "instrument_type": instrument_type,
-            "user_balance_id": self.api.balance_id,
-            "limit": limit,
-            "offset": 0
-        }
-        
-        if from_date:
-            if isinstance(from_date, datetime):
-                from_date = int(from_date.timestamp())
-            msg_body["start_time"] = from_date
-            
-        if to_date:
-            if isinstance(to_date, datetime):
-                to_date = int(to_date.timestamp())
-            msg_body["end_time"] = to_date
-
-        msg = {
-            "name": "portfolio.get-history",
-            "version": "2.0",
-            "body": msg_body
-        }
-
-        self.api.send_websocket_request("sendMessage", msg)
-        
-        if self.api.result_event.wait(timeout=10):
-            return self.api.result
-        
-        return None
 
 
 
 
-    def set_trailing_stop(self, position_id, distance_pips=None):
-        """
-        Sprint 5: Set a trailing stop for a margin position.
-        Uses 'use_trail_stop=True' and browser-compatible change-tpsl payload.
-        """
-        get_logger(__name__).info(f"Setting trailing stop for position {position_id}")
-        
-        # 1. Resolve position data
-        check, pos_data = self.get_order(position_id)
-        if not check or not pos_data:
-             pos_data = self.positions_state_data.get(position_id)
-             
-        if not pos_data:
-            get_logger(__name__).error(f"set_trailing_stop: Position {position_id} not found.")
-            return False, "POSITION_NOT_FOUND"
 
-        # 2. Execute modification
-        # Note: 'distance_pips' logic can be expanded, but usually browser sets the flag
-        # and server manages the trailing logic based on the 'kind'.
-        return self.change_order(
-            ID_Name="position_id",
-            order_id=position_id,
-            stop_lose_kind=pos_data.get("stop_lose_kind", "percent"),
-            stop_lose_value=pos_data.get("stop_lose_value"),
-            take_profit_kind=pos_data.get("take_profit_kind", "percent"),
-            take_profit_value=pos_data.get("take_profit_value"),
-            use_trail_stop=True,
-            auto_margin_call=pos_data.get("auto_margin_call", False)
-        )
 
-    def set_breakeven(self, position_id, profit_offset=0):
-        """
-        Sprint 5: Move Stop Loss to Entry Price + offset.
-        """
-        get_logger(__name__).info(f"Setting breakeven for position {position_id}")
-        
-        # 1. Resolve position data
-        pos_data = self.positions_state_data.get(position_id)
-        if not pos_data:
-             check, pos_data = self.get_order(position_id)
-             
-        if not pos_data:
-            get_logger(__name__).error(f"set_breakeven: Position {position_id} not found.")
-            return False, "POSITION_NOT_FOUND"
-            
-        entry_price = pos_data.get("open_quote")
-        side = pos_data.get("side")
-        
-        if not entry_price or not side:
-            get_logger(__name__).error(f"set_breakeven: Missing price/side for {position_id}")
-            return False, "MISSING_DATA"
-            
-        # 2. Calculate BE price
-        be_price = entry_price
-        if side == "buy":
-            be_price += profit_offset
-        else:
-            be_price -= profit_offset
-            
-        # 3. Update SL to BE price
-        return self.change_order(
-            ID_Name="position_id",
-            order_id=position_id,
-            stop_lose_kind="price",
-            stop_lose_value=be_price,
-            take_profit_kind=pos_data.get("take_profit_kind"),
-            take_profit_value=pos_data.get("take_profit_value"),
-            use_trail_stop=pos_data.get("use_trail_stop", False),
-            auto_margin_call=pos_data.get("auto_margin_call", False)
-        )
+
+
+
+
+
+
 
 
     def get_order(self, buy_order_id):
@@ -2555,18 +1994,6 @@ class IQ_Option:
         position_id = self.get_async_order(order_id)["position-changed"]["msg"]["external_id"]
         return self.get_digital_position_by_position_id(position_id)
 
-    def get_position_history(self, instrument_type):
-        self.api.position_history_event.clear()
-        self.api.get_position_history(instrument_type)
-        is_ready = self.api.position_history_event.wait(timeout=config.TIMEOUT_WS_DATA)
-        if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for position_history")
-            return False, None
-
-        if self.api.position_history.get("status") == 2000:
-            return True, self.api.position_history["msg"]
-        else:
-            return False, None
 
     def get_position_history_v2(self, instrument_type, limit, offset, start, end):
         self.api.position_history_v2_event.clear()
@@ -3081,152 +2508,9 @@ class IQ_Option:
         self.api.logout()
 
     @rate_limited("_order_bucket")
-    def buy_digital_spot_v2(self, active, amount, action, duration):
-        # Gate de validación
-        if hasattr(self, 'validator') and self.validator is not None:
-            is_valid, reason = self.validator.validate_order(
-                active=active,
-                amount=amount,
-                action=action,
-                duration=duration,
-                instrument_type="digital"
-            )
-            if not is_valid:
-                get_logger(__name__).error("buy_digital_spot_v2 rejected by validator: %s", reason)
-                return False, None
-
-        action = action.lower()
-
-        if action == 'put':
-            action = 'P'
-        elif action == 'call':
-            action = 'C'
-        else:
-            get_logger(__name__).error('buy_digital_spot_v2 active error')
-            return -1, None
-
-        # SPRINT 7: Usar reloj sincronizado global
-        timestamp = int(_clock.now())
-
-        if duration == 1:
-            exp, _ = get_expiration_time(timestamp, duration)
-        else:
-            now_date = datetime.fromtimestamp(timestamp).replace(second=0, microsecond=0) + \
-                       timedelta(minutes=1, seconds=30)
-
-            # Refactored to avoid infinite loop and follow S2 stability rules
-            for _ in range(100):
-                if now_date.minute % duration == 0 and time.mktime(now_date.timetuple()) - timestamp > 30:
-                    break
-                now_date = now_date + timedelta(minutes=1)
-
-            exp = time.mktime(now_date.replace(second=0, microsecond=0).timetuple())
-
-        # S6: Smart ID Reconstruction (KYC/Modern Account Support)
-        # We now prioritize the numeric ID format: do{ID}A{YYYYMMDD}D{HHMMSS}T{min}M{dir}SPT
-        # USAMOS UTC SIEMPRE para coincidir con el servidor IQ
-        dt_exp = datetime.utcfromtimestamp(exp)
-        date_formated = dt_exp.strftime("%Y%m%d")
-        time_formated = dt_exp.strftime("%H%M%S")
-        
-        active_id = OP_code.ACTIVES.get(active)
-        if active_id:
-            instrument_id = f"do{active_id}A{date_formated}D{time_formated}PT{duration}M{action}SPT"
-        else:
-            # Fallback legacy format
-            clean_active = active.replace("-OTC", "")
-            legacy_date = dt_exp.strftime("%Y%m%d%H%M")
-            instrument_id = f"do{clean_active}{legacy_date}PT{duration}M{action}SPT"
-
-        get_logger(__name__).debug("Digital Instrument ID generated: %s", instrument_id)
-        
-        
-        get_logger(__name__).debug("DEBUG_INSTRUMENT_ID: %s", instrument_id)
-        
-        # S4-T4: Reintento si la conexión se cerró justo antes (e.g. por timeout de discovery)
-        for attempt in range(2):
-            try:
-                request_id = self.api.place_digital_option_v2(instrument_id, active_id, amount)
-                break
-            except Exception as e:
-                if attempt == 0:
-                    get_logger(__name__).warning("Connection lost before trade, waiting for recovery...")
-                    time.sleep(2)
-                    if not self.check_connect():
-                        ssid = getattr(self, 'ssid', None)
-                        self.connect(ssid=ssid)
-
-                else:
-                    raise e
-
-        is_ready = self.api.digital_option_placed_id_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).error('Timeout (15s) waiting for digital_option_placed_id')
-            return False, None
-        digital_order_id = self.api.digital_option_placed_id.get(request_id)
-        if isinstance(digital_order_id, int):
-            return True, digital_order_id
-        else:
-            return False, digital_order_id
-
     # ══════════════════════════════════════════════════════════════════
     #  SPRINT 1 — Portfolio Control
     # ══════════════════════════════════════════════════════════════════
-
-    def get_open_positions(
-        self,
-        instrument_type: str = "binary-option",
-        timeout: float = 10.0
-    ) -> list:
-        """
-        Retorna snapshot de posiciones abiertas para el instrument_type dado.
-        instrument_type: "binary-option" | "turbo-option" | "digital-option" | "blitz"
-        Retorna lista vacía si timeout o sin posiciones.
-        """
-        is_marginal = instrument_type.startswith("marginal")
-        version = "4.0" if is_marginal else "3.0"
-        
-        if is_marginal:
-            self.api.positions_event.clear()
-            self.api.positions = None
-        else:
-            self.api.open_positions_event.clear()
-            self.api.open_positions[instrument_type] = None
-
-        self.api.send_websocket_request(
-            name="sendMessage",
-            msg={
-                "name": "portfolio.get-positions",
-                "version": version,
-                "body": {
-                    "instrument_type": instrument_type,
-                    "user_balance_id": self.api.balance_id,
-                    "offset": 0,
-                    "limit": 100
-                }
-            }
-        )
-
-        if is_marginal:
-            is_ready = self.api.positions_event.wait(timeout=timeout)
-            if not is_ready:
-                get_logger(__name__).warning(
-                    "Timeout (%.1fs) waiting for positions(%s)", timeout, instrument_type
-                )
-                return []
-            
-            result = self.api.positions.get("msg", {}).get("positions", [])
-            return result if isinstance(result, list) else []
-        else:
-            is_ready = self.api.open_positions_event.wait(timeout=timeout)
-            if not is_ready:
-                get_logger(__name__).warning(
-                    "Timeout (%.1fs) waiting for get_open_positions(%s)", timeout, instrument_type
-                )
-                return []
-
-            result = self.api.open_positions.get(instrument_type, [])
-            return result if isinstance(result, list) else []
 
     def get_all_open_positions(self, timeout: float = 10.0) -> dict:
         """
@@ -3323,41 +2607,6 @@ class IQ_Option:
     # ── S2-T1: Blitz Trading ──────────────────────────────────────
 
     @rate_limited("_order_bucket")
-    def buy_blitz(self, active, amount, action, current_price, duration=5):
-        # Gate de validación
-        if hasattr(self, 'validator') and self.validator is not None:
-            is_valid, reason = self.validator.validate_order(
-                active=active,
-                amount=amount,
-                action=action,
-                duration=duration,
-                instrument_type="blitz"
-            )
-            if not is_valid:
-                get_logger(__name__).error("buy_blitz rejected by validator: %s", reason)
-                return False, None
-
-        # Resolve active_id
-        active_id = None
-        if hasattr(self.api, 'blitz_instruments') and active in self.api.blitz_instruments:
-            active_id = self.api.blitz_instruments[active]["id"]
-        else:
-            from iqoptionapi.constants import ACTIVES
-            if active in ACTIVES:
-                active_id = ACTIVES[active]
-        
-        if active_id is None:
-            get_logger(__name__).error(f"buy_blitz: asset '{active}' not found in blitz catalog or ACTIVES map")
-            return False, None
-
-        # Use new BuyBlitz channel
-        return self.api.buy_blitz(
-            active_id=active_id,
-            direction=action,
-            amount=amount,
-            current_price=current_price,
-            expiration_size=duration
-        )
 
     # ── S3: Memory & Stream Stabilization ─────────────────────────
 

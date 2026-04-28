@@ -9,11 +9,11 @@ import websocket
 from iqoptionapi.ws.received.technical_indicators import technical_indicators
 from iqoptionapi.ws.received.time_sync import time_sync
 from iqoptionapi.ws.received.heartbeat import heartbeat
-from iqoptionapi.ws.received.balances import balances
-from iqoptionapi.ws.received.profile import profile
+from iqoptionapi.ws.received.auth.balance import balances
+from iqoptionapi.ws.received.auth.profile import profile
 from iqoptionapi.ws.received.balance_changed import balance_changed
-from iqoptionapi.ws.received.candles import candles
-from iqoptionapi.ws.received.buy_complete import buy_complete
+from iqoptionapi.ws.received.market.candles import candles
+from iqoptionapi.ws.received.orders.buy_complete import buy_complete
 from iqoptionapi.ws.received.position_history import position_history
 from iqoptionapi.ws.received.list_info_data import list_info_data
 from iqoptionapi.ws.received.candle_generated import candle_generated_realtime
@@ -22,24 +22,24 @@ from iqoptionapi.ws.received.commission_changed import commission_changed
 from iqoptionapi.ws.received.socket_option_opened import socket_option_opened
 from iqoptionapi.ws.received.api_option_init_all_result import api_option_init_all_result
 from iqoptionapi.ws.received.initialization_data import initialization_data
-from iqoptionapi.ws.received.underlying_list import underlying_list
-from iqoptionapi.ws.received.instruments import instruments
+from iqoptionapi.ws.received.market.underlying_list import underlying_list
+from iqoptionapi.ws.received.market.instruments import instruments
 from iqoptionapi.ws.received.financial_information import financial_information
 from iqoptionapi.ws.received.option_opened import option_opened
 from iqoptionapi.ws.received.top_assets_updated import top_assets_updated
 from iqoptionapi.ws.received.strike_list import strike_list
 from iqoptionapi.ws.received.api_game_betinfo_result import api_game_betinfo_result
 from iqoptionapi.ws.received.traders_mood_changed import traders_mood_changed
-from iqoptionapi.ws.received.order import OrderState
+from iqoptionapi.ws.received.orders.order import OrderState
 from iqoptionapi.ws.received.position import position
-from iqoptionapi.ws.received.positions import positions
+from iqoptionapi.ws.received.positions.positions import positions
 from iqoptionapi.ws.received.order_placed_temp import order_placed_temp
 from iqoptionapi.ws.received.deferred_orders import deferred_orders
 from iqoptionapi.ws.received.history_positions import history_positions
 from iqoptionapi.ws.received.available_leverages import available_leverages
 from iqoptionapi.ws.received.order_canceled import order_canceled
-from iqoptionapi.ws.received.position_closed import PositionClosed
-from iqoptionapi.ws.received.overnight_fee import OvernightFee
+from iqoptionapi.ws.received.positions.position_closed import PositionClosed
+from iqoptionapi.ws.received.positions.overnight_fee import OvernightFee
 from iqoptionapi.ws.received.api_game_getoptions_result import api_game_getoptions_result
 from iqoptionapi.ws.received.sold_options import sold_options
 from iqoptionapi.ws.received.tpsl_changed import tpsl_changed
@@ -59,17 +59,17 @@ from iqoptionapi.ws.received.client_price_generated import client_price_generate
 from iqoptionapi.ws.received.users_availability import users_availability
 from iqoptionapi.ws.received.portfolio_get_positions import portfolio_get_positions
 from iqoptionapi.ws.received.margin_order_result import margin_order_result
-from iqoptionapi.ws.received.marginal_balance import MarginalBalance
-from iqoptionapi.ws.received.stop_order_placed import StopOrderPlaced
-from iqoptionapi.ws.received.order_changed import OrderChanged
-from iqoptionapi.ws.received.alerts import Alerts
-from iqoptionapi.ws.received.short_active_info import ShortActiveInfo
-from iqoptionapi.ws.received.exchange_rate import ExchangeRate
-from iqoptionapi.ws.received.trading_params import TradingParams
+from iqoptionapi.ws.received.positions.marginal_balance import MarginalBalance
+from iqoptionapi.ws.received.orders.stop_order_placed import StopOrderPlaced
+from iqoptionapi.ws.received.orders.order_changed import OrderChanged
+from iqoptionapi.ws.received.auth.alerts import Alerts
+from iqoptionapi.ws.received.market.short_active_info import ShortActiveInfo
+from iqoptionapi.ws.received.market.exchange_rate import ExchangeRate
+from iqoptionapi.ws.received.market.trading_params import TradingParams
 
 # SPRINT 7: Reactive Event Handlers (Classes)
 from iqoptionapi.ws.received.option_closed import OptionClosed
-from iqoptionapi.ws.received.position_changed import PositionChanged
+from iqoptionapi.ws.received.positions.position_changed import PositionChanged
 from iqoptionapi.ws.received.socket_option_closed import SocketOptionClosed
 
 # Instancias únicas para el router
@@ -97,7 +97,7 @@ _MESSAGE_ROUTER: dict = {
     'api_option_init_all_result': [api_option_init_all_result],
     'auto-margin-call-changed': [auto_margin_call_changed],
     'available-leverages': [available_leverages],
-    'authenticated': [__import__('iqoptionapi.ws.received.authenticated', fromlist=['authenticated']).authenticated],
+    'authenticated': [__import__('iqoptionapi.ws.received.auth.authenticated', fromlist=['authenticated']).authenticated],
     'balances': [balances],
     'balance-changed': [balance_changed],
     'buyComplete': [buy_complete],

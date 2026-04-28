@@ -11,7 +11,7 @@ class Login(Resource):
 
     def _post(self, data=None, headers=None):
         """Send post request for IQ Option API login http resource."""
-        return self.api.httpx_client.post(
+        return self.api.session.post(
             url="https://auth.iqoption.com/api/v2/login",
             json=data,
             headers=headers

@@ -26,18 +26,18 @@ from iqoptionapi.http.changebalance import Changebalance
 from iqoptionapi.http.events import Events
 from iqoptionapi.ws.client import WebsocketClient
 from iqoptionapi.ws.channels.get_balances import *
-from iqoptionapi.http.httpx_client import HTTPXClient
+from iqoptionapi.http.session import get_shared_session
 
 from iqoptionapi.ws.channels.ssid import Ssid
 from iqoptionapi.ws.channels.subscribe import *
 from iqoptionapi.ws.channels.unsubscribe import *
 from iqoptionapi.ws.channels.setactives import SetActives
-from iqoptionapi.ws.channels.candles import GetCandles
-from iqoptionapi.ws.channels.buyv2 import Buyv2
-from iqoptionapi.ws.channels.buyv3 import *
+from iqoptionapi.ws.channels.streams.candles import GetCandles
+from iqoptionapi.ws.channels.orders.buyv2 import Buyv2
+from iqoptionapi.ws.channels.orders.buy_binary import *
 from iqoptionapi.ws.channels.user import *
 from iqoptionapi.ws.channels.api_game_betinfo import Game_betinfo
-from iqoptionapi.ws.channels.instruments import Get_instruments
+from iqoptionapi.ws.channels.streams.instruments import Get_instruments
 from iqoptionapi.ws.channels.get_financial_information import GetFinancialInformation
 from iqoptionapi.ws.channels.strike_list import Strike_list
 from iqoptionapi.ws.channels.leaderboard import Leader_Board
@@ -48,27 +48,27 @@ from iqoptionapi.ws.channels.technical_indicators import Technical_indicators
 from iqoptionapi.ws.channels.buy_place_order_temp import Buy_place_order_temp
 from iqoptionapi.ws.channels.get_order import Get_order
 from iqoptionapi.ws.channels.get_deferred_orders import GetDeferredOrders
-from iqoptionapi.ws.channels.get_positions import *
+from iqoptionapi.ws.channels.positions.get_positions import *
 
 from iqoptionapi.ws.channels.get_available_leverages import Get_available_leverages
-from iqoptionapi.ws.channels.cancel_order import Cancel_order
-from iqoptionapi.ws.channels.close_position import Close_position
+from iqoptionapi.ws.channels.orders.cancel_stop_order import Cancel_order
+from iqoptionapi.ws.channels.positions.close_position import Close_position
 from iqoptionapi.ws.channels.get_overnight_fee import Get_overnight_fee
 from iqoptionapi.ws.channels.heartbeat import Heartbeat
 
 
-from iqoptionapi.ws.channels.digital_option import *
+from iqoptionapi.ws.channels.orders.buy_digital import *
 from iqoptionapi.ws.channels.api_game_getoptions import *
 from iqoptionapi.ws.channels.sell_option import Sell_Option
 from iqoptionapi.ws.channels.sell_digital_option import Sell_Digital_Option
-from iqoptionapi.ws.channels.change_tpsl import Change_Tpsl
+from iqoptionapi.ws.channels.positions.change_tpsl import Change_Tpsl
 from iqoptionapi.ws.channels.change_auto_margin_call import ChangeAutoMarginCall
-from iqoptionapi.ws.channels.place_margin_order import PlaceMarginOrder
-from iqoptionapi.ws.channels.buy_blitz import BuyBlitz
-from iqoptionapi.ws.channels.place_stop_order import PlaceStopOrder
-from iqoptionapi.ws.channels.subscribe_instruments_list import SubscribeInstrumentsList, UnsubscribeInstrumentsList
-from iqoptionapi.ws.channels.short_active_info import SubscribeShortActiveInfo
-from iqoptionapi.ws.channels.create_alert import CreateAlert
+from iqoptionapi.ws.channels.orders.buy_order import PlaceMarginOrder
+from iqoptionapi.ws.channels.orders.buy_blitz import BuyBlitz
+from iqoptionapi.ws.channels.orders.place_stop_order import PlaceStopOrder
+from iqoptionapi.ws.channels.streams.subscribe_instruments_list import SubscribeInstrumentsList, UnsubscribeInstrumentsList
+from iqoptionapi.ws.channels.streams.short_active_info import SubscribeShortActiveInfo
+from iqoptionapi.ws.channels.orders.create_alert import CreateAlert
 
 from iqoptionapi.ws.objects.timesync import TimeSync
 from iqoptionapi.ws.objects.profile import Profile
@@ -172,12 +172,10 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.wss_url = "wss://{host}/echo/websocket".format(host=host)
         self.websocket_client = None
         self.session = get_shared_session()
-        self.session.trust_env = False
         self.username = username
         self.token_login2fa = None
         self.token_sms = None
         self.proxies = proxies
-        self.httpx_client = HTTPXClient()
         # is used to determine if a buyOrder was set  or failed. If
         # it is None, there had been no buy order yet or just send.
         # If it is false, the last failed
@@ -336,12 +334,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                                         url=url,
                                         data=data,
                                         params=params,
-                                        headers=headers,
-                                        proxies=self.proxies)
+                                        headers=headers)
         logger.debug(response)
         logger.debug(response.text)
-        logger.debug(response.headers)
-        logger.debug(response.cookies)
 
         response.raise_for_status()
         return response
@@ -360,20 +355,16 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         """
         logger = get_logger(__name__)
 
-        logger.debug(method + ": " + url + " headers: " + str(self.session.headers) +
-                     " cookies:  " + str(self.session.cookies.get_dict()))
-
+        logger.debug(method + ": " + url + " headers: " + str(self.session.headers))
+        
         response = self.session.request(method=method,
                                         url=url,
                                         data=data,
                                         params=params,
                                         headers=headers,
-                                        proxies=self.proxies,
                                         timeout=30)
         logger.debug(response)
         logger.debug(response.text)
-        logger.debug(response.headers)
-        logger.debug(response.cookies)
 
         # response.raise_for_status()
         return response
@@ -960,11 +951,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
     def set_session(self, cookies, headers):
         """Method to set session cookies."""
-
         self.session.headers.update(headers)
-
-        self.session.cookies.clear_session_cookies()
-        requests.utils.add_dict_to_cookiejar(self.session.cookies, cookies)
+        self.session.cookies.clear()
+        self.session.cookies.update(cookies)
 
     def start_websocket(self):
         self._connect_time = time.time()  # Sprint 4: timestamp for debug logger
