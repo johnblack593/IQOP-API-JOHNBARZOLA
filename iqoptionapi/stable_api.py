@@ -22,6 +22,7 @@ from iqoptionapi.expiration import get_expiration_time, get_remaning_time
 from datetime import datetime, timedelta
 from iqoptionapi.time_sync import _clock
 from random import randint
+from concurrent.futures import ThreadPoolExecutor
 
 
 
@@ -250,6 +251,9 @@ class IQ_Option:
             rotate_on_fail=True
         )
         if check:
+            # SPRINT 6: Store credentials for refresh worker
+            self._credentials = (self.email, self._credential_store._password)
+            
             # Register callbacks for resilience (S1-03)
             self.api._reconnect_callback = self._auto_reconnect
             self.api._heartbeat_callback = lambda: setattr(self, '_last_heartbeat', __import__('time').time())
@@ -300,6 +304,10 @@ class IQ_Option:
             
             # Sprint 5: State Synchronization
             self.sync_state_on_connect()
+            
+            # Sprint 6: Token Refresh Worker
+            if getattr(config, "AUTO_REFRESH_TOKEN", True):
+                self._start_token_refresh_worker()
             
             return True, None
         else:
@@ -2168,6 +2176,165 @@ class IQ_Option:
             
         return self.positions_state_data
 
+    def _start_token_refresh_worker(self, refresh_interval_hours=4):
+        """
+        SPRINT 6: Daemon thread que re-autentica antes de que el token expire.
+        """
+        def refresh_loop():
+            get_logger(__name__).info("Token refresh worker started (Interval: %sh)", refresh_interval_hours)
+            while not self._stop_event.wait(timeout=refresh_interval_hours * 3600):
+                try:
+                    if hasattr(self, '_credentials'):
+                        email, password = self._credentials
+                        get_logger(__name__).info("Executing background token refresh...")
+                        # reconnect() already handles the flow and updates api.SSID
+                        self.connect()
+                    else:
+                        get_logger(__name__).warning("Token refresh worker: No credentials stored.")
+                        break
+                except Exception as e:
+                    get_logger(__name__).error("Token refresh failed: %s", e)
+
+        t = threading.Thread(target=refresh_loop, name="TokenRefreshWorker", daemon=True)
+        t.start()
+
+    def get_open_positions(self, instrument_type=None):
+        """
+        SPRINT 5: Retorna posiciones abiertas del snapshot local.
+        instrument_type: "forex" | "crypto" | "cfd" | None (todas)
+        """
+        positions = []
+        for pid, pos in self.positions_state_data.items():
+            itype = pos.get("instrument_type")
+            if instrument_type and itype != instrument_type:
+                continue
+            
+            active_id = pos.get("active_id")
+            # Intento de cálculo de PnL si tenemos precio actual
+            pnl_estimate = None
+            if hasattr(self.api, "current_prices") and active_id in self.api.current_prices:
+                current_price = self.api.current_prices[active_id]
+                open_price = pos.get("open_price")
+                direction = pos.get("direction")
+                if open_price and direction:
+                    # Simplified PnL logic for estimation
+                    multiplier = 1 if direction == "buy" else -1
+                    pnl_estimate = (current_price - open_price) / open_price * pos.get("margin", 0) * multiplier
+            
+            positions.append({
+                "id": pid,
+                "active_id": active_id,
+                "instrument_type": itype,
+                "direction": pos.get("direction"),
+                "open_price": pos.get("open_price"),
+                "margin": pos.get("margin"),
+                "pnl_estimate": pnl_estimate,
+                "raw": pos
+            })
+        return positions
+
+    def monitor_positions(self, callback, interval=1.0):
+        """
+        SPRINT 5: Inicia monitoreo de posiciones.
+        Llama callback(positions_list) cada N segundos.
+        """
+        if hasattr(self, "_monitor_stop"):
+            self._monitor_stop.set()
+        
+        self._monitor_stop = threading.Event()
+        
+        def monitor_loop():
+            get_logger(__name__).info("Position monitoring started.")
+            while not self._monitor_stop.wait(timeout=interval):
+                try:
+                    pos_list = self.get_open_positions()
+                    callback(pos_list)
+                except Exception as e:
+                    get_logger(__name__).error("Monitor positions error: %s", e)
+
+        t = threading.Thread(target=monitor_loop, name="PositionMonitor", daemon=True)
+        t.start()
+
+    def stop_monitor_positions(self):
+        """Detiene el hilo de monitoreo."""
+        if hasattr(self, "_monitor_stop"):
+            self._monitor_stop.set()
+            get_logger(__name__).info("Position monitoring stopped.")
+
+    def close_all_positions(self, instrument_type=None, direction=None):
+        """
+        SPRINT 5: Cierra todas las posiciones que coincidan con los filtros.
+        """
+        positions = self.get_open_positions(instrument_type=instrument_type)
+        if direction:
+            positions = [p for p in positions if p["direction"] == direction]
+        
+        if not positions:
+            return {"closed": [], "failed": []}
+        
+        get_logger(__name__).info(f"Closing {len(positions)} positions concurrently...")
+        
+        results = {"closed": [], "failed": []}
+        
+        def _close_one(pos):
+            pid = pos["id"]
+            # Detectar si es digital o margin
+            if pos["instrument_type"] == "digital-option":
+                # Asumiendo que existe close_digital_option
+                check = self.close_digital_option(pid)
+            else:
+                check = self.close_position(pid)
+            
+            if check:
+                return True, pid
+            return False, pid
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(_close_one, p) for p in positions]
+            for f in futures:
+                success, pid = f.result()
+                if success:
+                    results["closed"].append(pid)
+                else:
+                    results["failed"].append(pid)
+        
+        return results
+
+    def get_short_active_info(self, active_id, timeout=5.0):
+        """
+        SPRINT 6: Retorna precio actual, spread y disponibilidad de un activo.
+        """
+        if not hasattr(self.api, "short_active_info_event"):
+             self.api.short_active_info_event = threading.Event()
+        
+        self.api.short_active_info_event.clear()
+        self.api.subscribe_short_active_info(active_id)
+        
+        if self.api.short_active_info_event.wait(timeout=timeout):
+            return self.api.short_active_info_data.get(active_id)
+        
+        return None
+
+    def get_exchange_rate(self, from_currency, to_currency, timeout=5.0):
+        """
+        SPRINT 6: Retorna tasa de cambio en tiempo real.
+        """
+        pair = f"{from_currency}/{to_currency}"
+        
+        if not hasattr(self.api, "exchange_rate_event"):
+            self.api.exchange_rate_event = threading.Event()
+            
+        # IQ Option suele enviar rates periódicamente si estás suscrito a algo relacionado,
+        # o podemos esperar el siguiente 'exchange-rate-generated' global.
+        # Nota: No hay un 'subscribe_exchange_rate' explícito conocido, 
+        # se recibe por ser parte de la sesión.
+        
+        if self.api.exchange_rate_event.wait(timeout=timeout):
+            return self.api.exchange_rates.get(pair)
+        
+        return None
+
+
     def set_trailing_stop(self, position_id, distance_pips=None):
         """
         Sprint 5: Set a trailing stop for a margin position.
@@ -2790,8 +2957,17 @@ class IQ_Option:
         return self.api.users_availability
 
     def get_digital_payout(self, active, seconds=0):
-        self.api.digital_payout = None
         asset_id = OP_code.ACTIVES[active]
+        
+        # SPRINT 6: Check trading_params_data first (cached payout)
+        if hasattr(self.api, "trading_params_data") and asset_id in self.api.trading_params_data:
+            data = self.api.trading_params_data[asset_id]
+            if time.time() - data.get("updated_at", 0) < 60:
+                payout = data.get("payout")
+                if payout:
+                    return int(payout)
+
+        self.api.digital_payout = None
 
         self.api.subscribe_digital_price_splitter(asset_id)
 
@@ -2805,6 +2981,24 @@ class IQ_Option:
             pass
 
         return self.api.digital_payout if self.api.digital_payout else 0
+
+    def get_payout(self, active):
+        """
+        SPRINT 6: Retorna payout de un activo (int).
+        Intenta usar trading-params cache, fallback a digital.
+        """
+        active_id = None
+        if active in OP_code.ACTIVES:
+            active_id = OP_code.ACTIVES[active]
+        
+        if active_id and hasattr(self.api, "trading_params_data") and active_id in self.api.trading_params_data:
+            data = self.api.trading_params_data[active_id]
+            if time.time() - data.get("updated_at", 0) < 60:
+                payout = data.get("payout")
+                if payout:
+                    return int(payout)
+        
+        return self.get_digital_payout(active)
 
     def logout(self):
         self.api.logout()

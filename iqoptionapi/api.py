@@ -67,6 +67,7 @@ from iqoptionapi.ws.channels.place_margin_order import PlaceMarginOrder
 from iqoptionapi.ws.channels.buy_blitz import BuyBlitz
 from iqoptionapi.ws.channels.place_stop_order import PlaceStopOrder
 from iqoptionapi.ws.channels.subscribe_instruments_list import SubscribeInstrumentsList, UnsubscribeInstrumentsList
+from iqoptionapi.ws.channels.short_active_info import SubscribeShortActiveInfo
 
 from iqoptionapi.ws.objects.timesync import TimeSync
 from iqoptionapi.ws.objects.profile import Profile
@@ -153,6 +154,10 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     users_availability = None
     # ------------------
     digital_payout = None
+    
+    short_active_info_data = {}
+    exchange_rates = {}
+    trading_params_data = {}
 
     def __init__(self, host, username, proxies=None):
         """
@@ -256,6 +261,10 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.margin_order_event = threading.Event()
         self.margin_positions_event = threading.Event()
         self.trading_group_params_event = threading.Event()
+
+        self.trading_params_event = threading.Event()
+        self.short_active_info_event = threading.Event()
+        self.exchange_rate_event = threading.Event()
 
         # Portfolio storage
         self.open_positions = {}
@@ -587,6 +596,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     @property
     def unsubscribe_instruments_list(self):
         return UnsubscribeInstrumentsList(self)
+    @property
+    def subscribe_short_active_info(self):
+        return SubscribeShortActiveInfo(self)
 # ----------------------------------------------------------------------------
 
     @property

@@ -39,7 +39,7 @@ from iqoptionapi.ws.received.history_positions import history_positions
 from iqoptionapi.ws.received.available_leverages import available_leverages
 from iqoptionapi.ws.received.order_canceled import order_canceled
 from iqoptionapi.ws.received.position_closed import PositionClosed
-from iqoptionapi.ws.received.overnight_fee import overnight_fee
+from iqoptionapi.ws.received.overnight_fee import OvernightFee
 from iqoptionapi.ws.received.api_game_getoptions_result import api_game_getoptions_result
 from iqoptionapi.ws.received.sold_options import sold_options
 from iqoptionapi.ws.received.tpsl_changed import tpsl_changed
@@ -62,7 +62,10 @@ from iqoptionapi.ws.received.margin_order_result import margin_order_result
 from iqoptionapi.ws.received.marginal_balance import MarginalBalance
 from iqoptionapi.ws.received.stop_order_placed import StopOrderPlaced
 from iqoptionapi.ws.received.order_changed import OrderChanged
-from iqoptionapi.ws.received.alerts import alerts
+from iqoptionapi.ws.received.alerts import Alerts
+from iqoptionapi.ws.received.short_active_info import ShortActiveInfo
+from iqoptionapi.ws.received.exchange_rate import ExchangeRate
+from iqoptionapi.ws.received.trading_params import TradingParams
 
 # SPRINT 7: Reactive Event Handlers (Classes)
 from iqoptionapi.ws.received.option_closed import OptionClosed
@@ -78,12 +81,17 @@ _order_changed_handler = OrderChanged()
 _marginal_balance_handler = MarginalBalance()
 _order_state_handler = OrderState()
 _position_closed_handler = PositionClosed()
+_overnight_fee_handler = OvernightFee()
+_alerts_handler = Alerts()
+_short_active_info_handler = ShortActiveInfo()
+_exchange_rate_handler = ExchangeRate()
+_trading_params_handler = TradingParams()
 
 
 
 
 _MESSAGE_ROUTER: dict = {
-    'alerts': [alerts],
+    'alerts': [_alerts_handler],
     'api_game_betinfo_result': [api_game_betinfo_result],
     'api_game_getoptions_result': [api_game_getoptions_result],
     'api_option_init_all_result': [api_option_init_all_result],
@@ -101,6 +109,7 @@ _MESSAGE_ROUTER: dict = {
     'deferred-orders': [deferred_orders],
     'digital-option-placed': [lambda api, msg: digital_option_placed(api, msg, api.websocket_client.api_dict_clean)],
     'digital-payout': [digital_payout],
+    'exchange-rate-generated': [_exchange_rate_handler],
     'financial-information': [financial_information],
     'heartbeat': [heartbeat],
     'history-positions': [history_positions],
@@ -126,7 +135,7 @@ _MESSAGE_ROUTER: dict = {
     'order-placed-temp': [order_placed_temp],
     'stop-order-placed': [_stop_order_placed_handler],
     'marginal-balance': [_marginal_balance_handler],
-    'overnight-fee': [overnight_fee],
+    'overnight-fee': [_overnight_fee_handler],
     'portfolio.get-positions': [portfolio_get_positions],
     'position': [position],
     'positions': [positions],
@@ -135,6 +144,7 @@ _MESSAGE_ROUTER: dict = {
     'position-closed': [_position_closed_handler],
 
     'position-history': [position_history],
+    'short-active-info': [_short_active_info_handler],
     'profile': [profile],
     'result': [result],
     'socket-option-closed': [_socket_option_closed_handler],
@@ -148,6 +158,7 @@ _MESSAGE_ROUTER: dict = {
     'tpsl-changed': [tpsl_changed],
     'traders-mood-changed': [traders_mood_changed],
     'training-balance-reset': [training_balance_reset],
+    'trading-params': [_trading_params_handler],
     'underlying-list': [underlying_list],
     'users-availability': [users_availability],
     'user-profile-client': [user_profile_client]
