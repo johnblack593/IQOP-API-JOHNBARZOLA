@@ -2370,13 +2370,14 @@ class IQ_Option:
                 
             sl_data = {
                 "name": f"marginal-{m_type}.change-position-stop-loss-order",
-                "version": "1.0",
+                "version": "2.0",
                 "body": {
                     "position_id": int(position_id),
                     "level": {
                         "type": str(stop_loss.get("type", "pnl")),
                         "value": sl_value
-                    }
+                    },
+                    "trailing_stop": bool(stop_loss.get("trailing_stop", False))
                 }
             }
             self.api.result = None
@@ -2429,6 +2430,45 @@ class IQ_Option:
                 return [l.get("value", l.get("multiplier", l)) if isinstance(l, dict) else l for l in leverages]
             return leverages
         return []
+
+    def get_min_leverage(self, instrument_type, active_id):
+        """
+        Retrieves the minimum required leverage for a specific asset.
+        """
+        full_type = self._MARGIN_TYPE_MAP.get(instrument_type.lower(), instrument_type)
+        if not full_type.startswith("marginal-"):
+            full_type = f"marginal-{full_type}"
+
+        # 1. Get the instrument metadata
+        self.get_open_positions(instrument_type=full_type, timeout=5.0) # Ensure sync
+        
+        instrument_data = self._get_instrument_data(full_type, active_id)
+        if not instrument_data:
+            return 1 # Fallback
+
+        leverage_profile_id = instrument_data.get("leverage_profile_id")
+        if leverage_profile_id is None:
+            return 1
+
+        # 2. Lookup in dynamic leverage profiles
+        profile = getattr(self.api, "dynamic_leverage_profiles", {}).get(leverage_profile_id)
+        if profile:
+            return profile.get("min_leverage", 1)
+            
+        return 1
+
+    def _get_instrument_data(self, instrument_type, active_id):
+        """
+        Helper to find instrument details in the stored metadata.
+        """
+        if not hasattr(self.api, "instruments") or not self.api.instruments:
+            return None
+            
+        items = self.api.instruments.get("instruments", [])
+        for item in items:
+            if item.get("active_id") == active_id:
+                return item
+        return None
 
     # =================================================================
 

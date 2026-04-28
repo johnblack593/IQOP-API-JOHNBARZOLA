@@ -48,7 +48,8 @@ class PositionChanged:
                 if win_val is not None and status in ("closed", "expired", "canceled", "sold"):
                     api.listinfodata.set(win_val, status, order_id)
 
-            if status in ("closed", "expired", "canceled", "sold"):
+            change_reason = msg.get("change_reason")
+            if status in ("closed", "expired", "canceled", "sold") or change_reason == "TPSL_CHANGED":
                 ev_global = getattr(api, "position_changed_event", None)
                 if ev_global:
                     ev_global.set()
@@ -59,7 +60,7 @@ class PositionChanged:
                 if hasattr(api, "result_event_store"):
                     api.result_event_store[order_id].set()
                     
-                logger.debug("position_changed: order_id=%s status=%s signaled", order_id, status)
+                logger.debug("position_changed: order_id=%s status=%s reason=%s signaled", order_id, status, change_reason)
 
         except Exception as e:
             logger.warning("position_changed handler error: %s", e)

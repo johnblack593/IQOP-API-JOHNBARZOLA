@@ -96,6 +96,7 @@ _MESSAGE_ROUTER: dict = {
     'history-positions': [history_positions],
     'initialization-data': [initialization_data],
     'instruments': [instruments],
+    'instruments-list': [instruments],
     'instrument-quotes-generated': [instrument_quotes_generated],
     'leaderboard-deals-client': [leaderboard_deals_client],
     'leaderboard-userinfo-deals-client': [leaderboard_userinfo_deals_client],
