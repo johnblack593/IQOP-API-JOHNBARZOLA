@@ -2,13 +2,18 @@
 ip_rotation.py — WARP/Cloudflare IP Rotation Guard
 Detecta rate limits de IQ Option y rota la IP via WARP CLI.
 
-IMPORTANTE: IQ Option bloquea conexiones desde ciertos paises
-(USA, Japon, Israel, Canada, Australia, UE parcial).
-WARP asigna IPs de Cloudflare que frecuentemente caen en USA,
-lo que causa desconexiones inmediatas post-auth.
-
-Este modulo valida la geolocalizacion de la IP asignada
-y reintenta la rotacion si cae en un pais restringido.
+NOTA DE ARQUITECTURA (v8.9.993):
+  La plataforma web de IQ Option funciona desde cualquier IP
+  (incluyendo USA/Cloudflare), ya que la cuenta se vincula al pais
+  de registro (Ecuador). La restriccion NO es geografica.
+  
+  Las desconexiones del SDK se deben a rate-limiting del endpoint
+  auth.iqoption.com cuando se hacen demasiadas reconexiones rapidas.
+  WARP rota la IP para evadir ese rate limit temporal, no para
+  cambiar de pais.
+  
+  El geo-check se mantiene como DIAGNOSTICO (log informativo)
+  pero NO bloquea la conexion.
 """
 import subprocess, logging, time, json
 from typing import Optional, Dict
@@ -24,39 +29,6 @@ RATE_LIMIT_SIGNALS = [
     "too many requests", "max retries", "timed out",
     "temporary ban"
 ]
-
-# Paises donde IQ Option bloquea o restringe el acceso
-# Si la IP de WARP cae en alguno de estos, la rotacion se considera fallida
-BLOCKED_COUNTRIES = {
-    "US",  # USA — regulacion CFTC/SEC, bloqueo total
-    "JP",  # Japon — JFSA prohibe binary options
-    "IL",  # Israel — ISA prohibe binary options
-    "CA",  # Canada — provincial bans
-    "AU",  # Australia — ASIC restricciones
-    "BE",  # Belgica — ban total binary options
-    "FR",  # Francia — AMF restricciones
-}
-
-# Paises ideales para IQ Option (sin restricciones conocidas)
-PREFERRED_COUNTRIES = {
-    "EC",  # Ecuador — tu pais real
-    "BR",  # Brasil
-    "CO",  # Colombia
-    "PE",  # Peru
-    "MX",  # Mexico
-    "CL",  # Chile
-    "AR",  # Argentina
-    "PY",  # Paraguay
-    "UY",  # Uruguay
-    "PA",  # Panama
-    "GB",  # UK (permitido para opciones digitales)
-    "DE",  # Alemania
-    "IN",  # India
-    "TH",  # Tailandia
-    "PH",  # Filipinas
-    "NG",  # Nigeria
-    "ZA",  # Sudafrica
-}
 
 
 def is_rate_limit_error(error_msg: str) -> bool:
@@ -79,7 +51,7 @@ def get_current_ip() -> Optional[str]:
 
 def get_ip_geo() -> Optional[Dict]:
     """
-    Obtiene IP publica + geolocalizacion.
+    Obtiene IP publica + geolocalizacion (diagnostico).
     Retorna dict con keys: ip, country, city, org
     """
     try:
@@ -101,30 +73,23 @@ def get_ip_geo() -> Optional[Dict]:
     return None
 
 
-def is_ip_safe_for_iq(geo: Optional[Dict] = None) -> bool:
+def log_ip_diagnostic() -> Optional[Dict]:
     """
-    Verifica si la IP actual es segura para conectarse a IQ Option.
-    Una IP es insegura si su pais esta en BLOCKED_COUNTRIES.
+    Log de diagnostico de la IP actual.
+    Solo informativo — NO bloquea conexiones.
+    La cuenta IQ Option se vincula al pais de registro,
+    no a la IP de conexion.
     """
-    if geo is None:
-        geo = get_ip_geo()
-    if geo is None:
-        logger.warning("No se pudo verificar geolocalizacion de IP. Asumiendo segura.")
-        return True  # fail-open: si no podemos verificar, intentamos igual
-    
-    country = geo.get("country", "??")
-    if country in BLOCKED_COUNTRIES:
-        logger.warning(
-            "IP %s esta en pais BLOQUEADO: %s (%s). IQ Option rechazara la conexion.",
-            geo.get("ip"), country, geo.get("city")
+    geo = get_ip_geo()
+    if geo:
+        logger.info(
+            "IP diagnostico: %s (%s/%s) org=%s",
+            geo.get("ip"), geo.get("country"),
+            geo.get("city"), geo.get("org")
         )
-        return False
-    
-    if country in PREFERRED_COUNTRIES:
-        logger.info("IP %s en pais PREFERIDO: %s (%s)", geo.get("ip"), country, geo.get("city"))
     else:
-        logger.info("IP %s en pais %s (%s) — no bloqueado", geo.get("ip"), country, geo.get("city"))
-    return True
+        logger.debug("No se pudo obtener info de IP.")
+    return geo
 
 
 def is_warp_available() -> bool:
@@ -139,13 +104,16 @@ def is_warp_available() -> bool:
         return False
 
 
-def rotate_ip_warp(wait_seconds: int = 5, max_geo_retries: int = 3) -> bool:
+def rotate_ip_warp(wait_seconds: int = 5) -> bool:
     """
     Rota la IP desconectando y reconectando WARP.
-    Valida que la nueva IP NO caiga en un pais restringido.
-    Si cae en pais bloqueado, reintenta hasta max_geo_retries veces.
+    El objetivo es obtener una IP diferente para evadir
+    rate limits temporales de auth.iqoption.com.
     
-    Retorna True solo si la IP cambio Y es segura para IQ Option.
+    No valida geolocalizacion — IQ Option no bloquea por IP
+    en cuentas demo vinculadas a paises permitidos (ej. Ecuador).
+    
+    Retorna True si la IP cambio exitosamente.
     """
     global _last_rotation_time
 
@@ -160,93 +128,52 @@ def rotate_ip_warp(wait_seconds: int = 5, max_geo_retries: int = 3) -> bool:
         logger.warning("warp-cli no disponible en PATH. Rotacion no posible.")
         return False
 
-    geo_before = get_ip_geo()
-    ip_before = geo_before.get("ip") if geo_before else get_current_ip()
-    logger.info("IP antes de rotacion: %s (%s/%s)",
-                ip_before,
-                geo_before.get("country", "?") if geo_before else "?",
-                geo_before.get("city", "?") if geo_before else "?")
+    ip_before = get_current_ip()
+    logger.info("IP antes de rotacion: %s", ip_before)
 
-    for geo_attempt in range(1, max_geo_retries + 1):
-        try:
-            subprocess.run(["warp-cli", "disconnect"], capture_output=True, timeout=10)
-            time.sleep(2)
-            subprocess.run(["warp-cli", "connect"], capture_output=True, timeout=10)
-            time.sleep(wait_seconds)
+    try:
+        subprocess.run(["warp-cli", "disconnect"], capture_output=True, timeout=10)
+        time.sleep(2)
+        subprocess.run(["warp-cli", "connect"], capture_output=True, timeout=10)
+        time.sleep(wait_seconds)
 
-            geo_after = get_ip_geo()
-            ip_after = geo_after.get("ip") if geo_after else get_current_ip()
+        ip_after = get_current_ip()
+        logger.info("IP despues de rotacion: %s", ip_after)
 
-            if not ip_after:
-                logger.warning("No se pudo obtener IP post-rotacion (intento geo %d)", geo_attempt)
-                continue
+        _last_rotation_time = time.time()
 
-            country = geo_after.get("country", "??") if geo_after else "??"
-            city = geo_after.get("city", "?") if geo_after else "?"
-
-            logger.info("IP post-rotacion (intento %d): %s (%s/%s)",
-                        geo_attempt, ip_after, country, city)
-
-            # Validar que no caimos en pais bloqueado
-            if geo_after and not is_ip_safe_for_iq(geo_after):
-                logger.warning(
-                    "IP %s cayo en pais bloqueado %s. Reintentando rotacion (%d/%d)...",
-                    ip_after, country, geo_attempt, max_geo_retries
-                )
-                time.sleep(2)  # breve pausa antes de reintentar
-                continue
-
-            # IP cambio y es segura
-            if ip_after != ip_before:
-                logger.info("Rotacion EXITOSA: %s -> %s (%s/%s)",
-                            ip_before, ip_after, country, city)
-                _last_rotation_time = time.time()
-                return True
-            else:
-                logger.warning("IP no cambio tras rotacion WARP (sigue %s).", ip_after)
-                _last_rotation_time = time.time()
-                return False
-
-        except FileNotFoundError:
-            logger.error("warp-cli no encontrado.")
-            return False
-        except Exception as e:
-            logger.error("Error en rotate_ip_warp: %s", e)
+        if ip_after and ip_after != ip_before:
+            logger.info("Rotacion EXITOSA: %s -> %s", ip_before, ip_after)
+            return True
+        else:
+            logger.warning("IP no cambio tras rotacion WARP (sigue %s).", ip_after or "desconocida")
             return False
 
-    # Agotamos intentos sin conseguir IP segura
-    logger.error(
-        "Agotados %d intentos de rotacion geo. "
-        "Todas las IPs cayeron en paises bloqueados. "
-        "Considere usar VPN manual con servidor en Latinoamerica.",
-        max_geo_retries
-    )
-    _last_rotation_time = time.time()
-    return False
+    except FileNotFoundError:
+        logger.error("warp-cli no encontrado.")
+        return False
+    except Exception as e:
+        logger.error("Error en rotate_ip_warp: %s", e)
+        return False
 
 
 def connect_with_rotation(connect_fn, max_attempts: int = 3, rotate_on_fail: bool = True):
     """
     Wrapper para connect() que rota la IP ante rate limits.
-    Valida geolocalizacion ANTES de intentar conectar.
-
+    
+    Flujo:
+      1. Log diagnostico de IP (solo informativo)
+      2. Intentar conectar
+      3. Si falla por rate limit → rotar IP y reintentar
+      4. Si falla por otra razon → retornar error sin rotar
+    
     Uso:
       ok, msg = connect_with_rotation(api.connect)
     """
-    for attempt in range(1, max_attempts + 1):
-        # Verificar geo antes de conectar (solo en primer intento o post-rotacion)
-        if attempt == 1:
-            geo = get_ip_geo()
-            if geo and not is_ip_safe_for_iq(geo):
-                logger.warning(
-                    "IP actual (%s/%s) en pais bloqueado. Rotando antes de conectar...",
-                    geo.get("ip"), geo.get("country")
-                )
-                if rotate_on_fail:
-                    rotated = rotate_ip_warp(wait_seconds=8, max_geo_retries=3)
-                    if not rotated:
-                        logger.warning("No se pudo obtener IP segura. Intentando conectar de todas formas.")
+    # Diagnostico IP (solo log)
+    log_ip_diagnostic()
 
+    for attempt in range(1, max_attempts + 1):
         logger.info("Intento de conexion %d/%d", attempt, max_attempts)
         ok, msg = connect_fn()
         if ok:
@@ -257,12 +184,17 @@ def connect_with_rotation(connect_fn, max_attempts: int = 3, rotate_on_fail: boo
                 "Rate limit detectado: '%s'. Rotando IP WARP (intento %d)...",
                 msg, attempt
             )
-            rotated = rotate_ip_warp(wait_seconds=8, max_geo_retries=3)
+            rotated = rotate_ip_warp(wait_seconds=8)
             if not rotated:
-                logger.error("No se pudo rotar IP. Esperando 60s...")
-                time.sleep(60)
+                # Si no se pudo rotar, esperar para que el rate limit expire naturalmente
+                wait_time = 60
+                logger.warning(
+                    "No se pudo rotar IP. Esperando %ds para que expire rate limit...",
+                    wait_time
+                )
+                time.sleep(wait_time)
         else:
-            # Error no relacionado con rate limit
+            # Error no relacionado con rate limit — no tiene sentido rotar
             return ok, msg
 
     return False, "Fallidos %d intentos con rotacion de IP" % max_attempts
