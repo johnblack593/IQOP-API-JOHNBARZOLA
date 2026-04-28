@@ -15,7 +15,7 @@ class Get_instruments(Base):
             api_type = "marginal-crypto-instruments"
         elif types == "forex":
             api_type = "marginal-forex-instruments"
-        elif types == "cfd":
+        elif types in ["cfd", "stocks", "indices", "commodities", "etf"]:
             api_type = "marginal-cfd-instruments"
         elif types == "digital-option":
             api_type = "digital-option-instruments"

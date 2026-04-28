@@ -237,6 +237,11 @@ class IQ_Option:
             self._idempotency.purge_expired()
 
         if check == True:
+            # Clear instruments cache to prevent stale data from prior sessions
+            if hasattr(self.api, '_instruments_by_category'):
+                self.api._instruments_by_category.clear()
+            self.api.instruments = {"instruments": []}
+
             # -------------reconnect subscribe_candle
             self.re_subscribe_stream()
 
