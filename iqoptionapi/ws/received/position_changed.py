@@ -41,6 +41,13 @@ class PositionChanged:
             status = msg.get("status")
             logger.debug("position_changed raw status=%r source=%r order_id=%s", status, source, order_id)
             
+            if hasattr(api, "listinfodata"):
+                win_val = msg.get("pnl_realized", msg.get("profit_amount"))
+                if status == "expired":
+                    win_val = msg.get("pnl_realized", 0.0) - msg.get("buy_amount", 0.0)
+                if win_val is not None and status in ("closed", "expired", "canceled", "sold"):
+                    api.listinfodata.set(win_val, status, order_id)
+
             if status in ("closed", "expired", "canceled", "sold"):
                 ev_global = getattr(api, "position_changed_event", None)
                 if ev_global:

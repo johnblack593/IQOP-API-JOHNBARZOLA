@@ -1050,10 +1050,21 @@ class IQ_Option:
                 pass
 
             # S7: Manejar tanto dicts/defaultdicts de eventos como eventos únicos (legacy)
-            if isinstance(event_store, threading.Event):
+            if hasattr(event_store, "wait"):
                 event = event_store
+            elif hasattr(event_store, "get"):
+                event = event_store.get(order_id)
+                if not hasattr(event, "wait"):
+                    event = threading.Event()
+                    try:
+                        event_store[order_id] = event
+                    except (TypeError, AttributeError):
+                        pass
             else:
-                event = event_store[order_id]
+                try:
+                    event = event_store[order_id]
+                except (TypeError, KeyError):
+                    event = threading.Event()
 
             fired = event.wait(timeout=timeout)
             elapsed = time.time() - start_wait
@@ -1065,9 +1076,14 @@ class IQ_Option:
             # Si el result_store tiene un método get_id_data (como listinfodata)
             if hasattr(result_store, "get_id_data"):
                 res = result_store.get_id_data(order_id)
-            else:
+            elif hasattr(result_store, "get"):
                 # S7: Intentar obtener del store con el ID procesado
                 res = result_store.get(order_id) if result_store is not None else None
+            else:
+                try:
+                    res = result_store[order_id] if result_store is not None else None
+                except (TypeError, KeyError):
+                    res = None
             
             # Fallback para Digital/CFD: si res es None y es un check_win que usa order_async
             if res is None and hasattr(self, "get_async_order"):
@@ -1086,10 +1102,10 @@ class IQ_Option:
             return None
         finally:
             # S1-T6: Cleanup event store to prevent memory leaks (Garantizado via finally)
-            if not isinstance(event_store, threading.Event):
+            if not hasattr(event_store, "wait"):
                 try:
                     del event_store[order_id]
-                except (KeyError, UnboundLocalError):
+                except (KeyError, UnboundLocalError, TypeError):
                     pass
 
 

@@ -39,11 +39,18 @@ class OptionClosed:
                 api.order_binary[order_id] = msg
 
             # 2. Notificación reactiva (Sprint 7)
-            if hasattr(api, "result_event_store"):
-                api.result_event_store[order_id].set()
-            
-            if hasattr(api, "socket_option_closed_event"):
-                api.socket_option_closed_event[order_id].set()
+            if hasattr(api, "listinfodata"):
+                win_val = msg.get("win", msg.get("profit_amount"))
+                game_state = msg.get("status", msg.get("game_state"))
+                if win_val is not None:
+                    api.listinfodata.set(win_val, game_state, order_id)
+
+            if message.get("name") == "option-closed" or msg.get("win") is not None:
+                if hasattr(api, "result_event_store"):
+                    api.result_event_store[order_id].set()
+                
+                if hasattr(api, "socket_option_closed_event"):
+                    api.socket_option_closed_event[order_id].set()
 
             logger.debug("option_closed: order_id=%s result notified", order_id)
 
