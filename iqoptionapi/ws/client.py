@@ -110,12 +110,14 @@ _MESSAGE_ROUTER: dict = {
 
     'market-order-placed': [margin_order_result],
     'order': [order],
+    'orders-state': [order],
     'order-canceled': [order_canceled],
     'order-placed-temp': [order_placed_temp], # order_placed_temp: called once — duplicate removed (audit SPRINT-02)
     'overnight-fee': [overnight_fee],
     'portfolio.get-positions': [portfolio_get_positions],
     'position': [position],
     'positions': [positions],
+    'positions-state': [positions],
     'position-changed': [_position_changed_handler],
     'position-closed': [position_closed],
 
@@ -190,6 +192,9 @@ class WebsocketClient(object):
                 try:
                     parsed = json.loads(str(message))
                     msg_name = parsed.get("name")
+                    # S3-T2: Unwrap sendMessage envelope for modern protocol compatibility
+                    if msg_name == "sendMessage" and isinstance(parsed.get("msg"), dict):
+                        msg_name = parsed["msg"].get("name")
                 except (json.JSONDecodeError, AttributeError):
                     logger.warning("Unparseable WS message received, skipping router dispatch")
                     parsed = None

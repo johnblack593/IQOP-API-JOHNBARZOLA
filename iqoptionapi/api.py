@@ -63,6 +63,9 @@ from iqoptionapi.ws.channels.sell_digital_option import Sell_Digital_Option
 from iqoptionapi.ws.channels.change_tpsl import Change_Tpsl
 from iqoptionapi.ws.channels.change_auto_margin_call import ChangeAutoMarginCall
 from iqoptionapi.ws.channels.place_margin_order import PlaceMarginOrder
+from iqoptionapi.ws.channels.buy_blitz import BuyBlitz
+from iqoptionapi.ws.channels.place_stop_order import PlaceStopOrder
+from iqoptionapi.ws.channels.subscribe_instruments_list import SubscribeInstrumentsList, UnsubscribeInstrumentsList
 
 from iqoptionapi.ws.objects.timesync import TimeSync
 from iqoptionapi.ws.objects.profile import Profile
@@ -181,6 +184,10 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.websocket_error_reason = None
         self.balance_id = None
         self.blitz_instruments = {}
+        
+        # S3-T2: Incremental request_id for stealth
+        self._request_id_counter = 0
+        self._request_id_lock = threading.Lock()
         
         # S3-T2: Guard for session data initialization
         self._init_data_received = False
@@ -368,22 +375,35 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             return self.websocket_client.wss
         return None
 
-    def send_websocket_request(self, name, msg, request_id="", no_force_send=True):
+    def send_websocket_request(self, name, msg, request_id=None, no_force_send=True):
         """Send websocket request to IQ Option server.
 
         :param str name: The websocket request name.
         :param dict msg: The websocket request msg.
+        :param str request_id: (optional) The request ID. If None, an incremental one is used.
         """
 
         logger = get_logger(__name__)
+        
+        # Auto-generate request_id if not provided (Stealth Sprint 3)
+        if request_id is None:
+            with self._request_id_lock:
+                self._request_id_counter += 1
+                request_id = str(self._request_id_counter)
+        else:
+            request_id = str(request_id)
+
         if isinstance(msg, dict) and msg.get("name") == "binary-options.open-option":
-            self.pending_buy_ids.append(str(request_id))
+            self.pending_buy_ids.append(request_id)
 
         data = json.dumps(dict(name=name,
                                msg=msg, request_id=request_id))
         logger.debug("WS SEND: %s", data)
         with self._ws_lock:
-            self.websocket.send(data)
+            if self.websocket:
+                self.websocket.send(data)
+            else:
+                logger.error("Attempted to send WS request but websocket is None")
 
     def remove_pending_buy_id(self, request_id):
         """Remove a specific request_id from the pending queue if it exists."""
@@ -549,6 +569,22 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     @property
     def get_financial_information(self):
         return GetFinancialInformation(self)
+
+    @property
+    def buy_blitz(self):
+        return BuyBlitz(self)
+
+    @property
+    def place_stop_order(self):
+        return PlaceStopOrder(self)
+
+    @property
+    def subscribe_instruments_list(self):
+        return SubscribeInstrumentsList(self)
+
+    @property
+    def unsubscribe_instruments_list(self):
+        return UnsubscribeInstrumentsList(self)
 # ----------------------------------------------------------------------------
 
     @property

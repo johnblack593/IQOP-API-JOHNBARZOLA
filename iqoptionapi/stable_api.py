@@ -94,6 +94,10 @@ class IQ_Option:
         from iqoptionapi.asset_scanner import AssetScanner
         self.asset_scanner = AssetScanner(self)
 
+        # --- Subscription Manager (Sprint 3) ---
+        from iqoptionapi.subscription_manager import SubscriptionManager
+        self.subscription_manager = SubscriptionManager(self)
+
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
@@ -911,7 +915,6 @@ class IQ_Option:
     #######################################################
 
     def start_candles_stream(self, ACTIVE, size, maxdict):
-
         if size == "all":
             for s in self.size:
                 self.full_realtime_get_candle(ACTIVE, s, maxdict)
@@ -920,8 +923,14 @@ class IQ_Option:
         elif size in self.size:
             self.api.real_time_candles_maxdict_table[ACTIVE][size] = maxdict
             self.full_realtime_get_candle(ACTIVE, size, maxdict)
-            self.start_candles_one_stream(ACTIVE, size)
-
+            # Stealth Refactor: Delegation to SubscriptionManager
+            self.subscription_manager.subscribe_candle(ACTIVE, size)
+            
+            # Wait for first candle to arrive (data ready)
+            start_t = time.time()
+            while not self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) and (time.time() - start_t < 15.0):
+                self.api.candles_event.wait(timeout=1.0)
+                self.api.candles_event.clear()
         else:
             get_logger(__name__).error(
                 '**error** start_candles_stream please input right size')
@@ -972,9 +981,10 @@ class IQ_Option:
     # ------------------------Subscribe ONE SIZE-----------------------
     def start_candles_one_stream(self, ACTIVE, size):
         if not (ACTIVE in self.api.real_time_candles and size in self.api.real_time_candles[ACTIVE]):
-            self.api.subscribe(OP_code.ACTIVES[ACTIVE], size)
+            # Stealth Refactor: Delegation to SubscriptionManager
+            self.subscription_manager.subscribe_candle(ACTIVE, size)
             
-        # BUG-SPINLOOP-02: Migrado a Event+timeout
+        # Wait for data
         start_t = time.time()
         while not self.api.candle_generated_check.get(str(ACTIVE), {}).get(int(size)) and (time.time() - start_t < 20.0):
             self.api.candles_event.wait(timeout=1.0)
@@ -1037,6 +1047,19 @@ class IQ_Option:
             return self.api.top_assets_updated_data[instrument_type]
         else:
             return None
+
+    # ----------------- Real-time Instruments (Sprint 3) -----------------
+    def subscribe_instruments_realtime(self, instrument_type):
+        """
+        Suscribe a la lista de instrumentos en tiempo real para detectar aperturas/cierres.
+        """
+        self.subscription_manager.subscribe_instruments_realtime(instrument_type)
+
+    def unsubscribe_instruments_realtime(self, instrument_type):
+        """
+        Desuscribe de instrumentos en tiempo real.
+        """
+        self.api.unsubscribe_instruments_list(instrument_type)
 
     # ------------------------commission_________
     # instrument_type: "binary-option"/"turbo-option"/"digital-option"/"crypto"/"forex"/"cfd"
@@ -1760,10 +1783,56 @@ class IQ_Option:
     # ----------------------------------------------------------
     # -----------------BUY_for__Forex__&&__stock(cfd)__&&__ctrpto
 
-    # ── CFD/Forex/Crypto order capability detection ──
-    # Some user groups (e.g. user_group_id:191) have place-order-temp
-    # silently disabled server-side. This flag caches the probe result.
-    _cfd_order_capable = None  # None=untested, True/False=tested
+    # ── Blitz / Pending Order Protocol (Sprint 3) ────────────────
+    def buy_blitz(self, active, amount, direction, current_price, expiration_size=180, profit_percent=83):
+        """
+        Realiza una operación Blitz (v2.0) con los parámetros capturados del browser.
+        """
+        active_id = OP_code.ACTIVES.get(active)
+        if not active_id:
+            get_logger(__name__).error("buy_blitz: unknown active %s", active)
+            return False, None
+            
+        request_id = str(randint(0, 1000000))
+        self.api.buy_blitz(active_id, direction, amount, current_price, expiration_size, profit_percent, request_id)
+        
+        # Esperar resultado (reutilizando la lógica de buy_multi_option para correlación)
+        self.api.buy_multi_option[request_id] = {"id": None}
+        start_t = time.time()
+        order_id = None
+        while time.time() - start_t < 15:
+            order_id = self.api.buy_multi_option.get(request_id, {}).get("id")
+            if order_id:
+                break
+            if self.api.result_event.wait(timeout=0.1):
+                self.api.result_event.clear()
+        
+        return (True, order_id) if order_id else (False, None)
+
+    def place_pending_order(self, active, instrument_type, side, amount, leverage, stop_price, take_profit=None, stop_loss=None):
+        """
+        Coloca una orden pendiente (Stop Order) usando el protocolo marginal-*.place-stop-order.
+        """
+        active_id = OP_code.ACTIVES.get(active)
+        if not active_id:
+            get_logger(__name__).error("place_pending_order: unknown active %s", active)
+            return False, None
+            
+        request_id = str(randint(0, 1000000))
+        self.api.place_stop_order(instrument_type, active_id, side, amount, leverage, stop_price, take_profit, stop_loss, True, request_id)
+        
+        # Esperar resultado (vía margin_order_result)
+        # SPRINT 7: _wait_result helper
+        result = self._wait_result(
+            order_id=request_id,
+            result_store=self.api.margin_order_result,
+            event_store=self.api.margin_order_event,
+            timeout=15.0
+        )
+        
+        if result and result.get("status") == "success":
+            return True, result.get("order_id")
+        return False, result.get("message") if result else "Timeout"
 
     def check_cfd_order_capability(self, force=False):
         """
@@ -2794,7 +2863,7 @@ class IQ_Option:
     # ── S2-T1: Blitz Trading ──────────────────────────────────────
 
     @rate_limited("_order_bucket")
-    def buy_blitz(self, active, amount, action, duration):
+    def buy_blitz(self, active, amount, action, current_price, duration=5):
         # Gate de validación
         if hasattr(self, 'validator') and self.validator is not None:
             is_valid, reason = self.validator.validate_order(
@@ -2808,63 +2877,27 @@ class IQ_Option:
                 get_logger(__name__).error("buy_blitz rejected by validator: %s", reason)
                 return False, None
 
-        """
-        Abre una opción Blitz.
-        Los instrumentos Blitz SOLO se obtienen de initialization-data.
-        Retorna (True, order_id) en éxito, (False, None) en fallo.
-        """
-        if not self.api.blitz_instruments:
-            self.get_blitz_instruments()
-            
-        if active not in self.api.blitz_instruments:
-            get_logger(__name__).error(f"buy_blitz: asset '{active}' not found in blitz catalog. "
-                                       f"Available: {list(self.api.blitz_instruments.keys())[:5]}")
+        # Resolve active_id
+        active_id = None
+        if hasattr(self.api, 'blitz_instruments') and active in self.api.blitz_instruments:
+            active_id = self.api.blitz_instruments[active]["id"]
+        else:
+            from iqoptionapi.constants import ACTIVES
+            if active in ACTIVES:
+                active_id = ACTIVES[active]
+        
+        if active_id is None:
+            get_logger(__name__).error(f"buy_blitz: asset '{active}' not found in blitz catalog or ACTIVES map")
             return False, None
-            
-        active_data = self.api.blitz_instruments[active]
-        active_id = active_data["id"]
-        
-        # SPRINT 7: Usar ServerClockSync para precisión milimétrica (Línea de ref: S7-T0)
-        # Reemplaza la lógica manual de SPRINT 6
-        now = _clock.now()
-            
-        # Blitz duration is in seconds — align to next valid window
-        now_int = int(now)
-        expired = now_int - (now_int % duration) + duration
-        
-        # Ensure at least 2s buffer before the window closes (dead time prevention)
-        if expired - now < 2.0:
-            expired += duration
-        get_logger(__name__).info("buy_blitz: now=%d expired=%d delta=%ds duration=%ds",
-                                  now, expired, expired - now, duration)
-        
-        self.api.buy_multi_option = {}
-        self.api.result_event.clear()
-        req_id = str(randint(0, 10000))
-        self.api.buy_multi_option[req_id] = {"id": None}
-        
-        # S2-T1: Blitz uses option_type_id 3 (turbo) and binary-options.open-option
-        self.api.buyv3_by_raw_expired(
-            float(amount), active_id, str(action), "turbo", int(expired), req_id)
-        
-        # Wait for either result (success=False) or correlated ID
-        start_t = time.time()
-        id = None
-        while time.time() - start_t < 15:
-            id = self.api.buy_multi_option.get(req_id, {}).get("id")
-            if id:
-                break
-            
-            if self.api.buy_multi_option.get(req_id, {}).get("success") == False:
-                break
-                
-            if self.api.result_event.wait(timeout=0.1):
-                self.api.result_event.clear()
-        
-        if id is None:
-            get_logger(__name__).warning("buy_blitz: no order_id received for req_id=%s", req_id)
-            
-        return self.api.result, id
+
+        # Use new BuyBlitz channel
+        return self.api.buy_blitz(
+            active_id=active_id,
+            direction=action,
+            amount=amount,
+            current_price=current_price,
+            expiration_size=duration
+        )
 
     # ── S3: Memory & Stream Stabilization ─────────────────────────
 

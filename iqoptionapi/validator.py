@@ -91,7 +91,7 @@ def validate_duration(duration: int, option_type: str = "binary") -> None:
     """
     BINARY_DURATIONS  = {1, 2, 3, 4, 5}
     DIGITAL_DURATIONS = {1, 2, 3, 4, 5}
-    BLITZ_DURATIONS   = {5, 10, 15, 20, 30, 45}
+    BLITZ_DURATIONS   = {5, 10, 15, 20, 30, 45, 180}
 
     ot = option_type.lower()
     if ot in ("binary", "turbo"):
