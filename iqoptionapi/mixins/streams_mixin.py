@@ -80,3 +80,45 @@ class StreamsMixin:
     def unsubscribe_live_deal(self, name, active, _type):
         active_id = OP_code.ACTIVES[active]
         self.api.Unscribe_Live_Deal(name, active_id, _type)
+
+    def get_instrument_quotes_generated_data(self, ACTIVE, duration):
+        start_t = time.time()
+        while ((self.api.instrument_quotes_generated_raw_data[ACTIVE][(duration * 60)] == {}) and ((time.time() - start_t) < 15.0)):
+            self.api.instrument_quotes_generated_event.wait(timeout=1)
+            self.api.instrument_quotes_generated_event.clear()
+        return self.api.instrument_quotes_generated_raw_data[ACTIVE][(duration * 60)]
+
+    def get_realtime_strike_list(self, ACTIVE, duration):
+        start_t = time.time()
+        while ((not self.api.instrument_quotes_generated_data[ACTIVE][(duration * 60)]) and ((time.time() - start_t) < 15.0)):
+            self.api.instrument_quotes_generated_event.wait(timeout=1)
+            self.api.instrument_quotes_generated_event.clear()
+        ans = {}
+        now_timestamp = self.api.instrument_quotes_generated_timestamp[ACTIVE][(duration * 60)]
+        while (ans == {}):
+            if ((self.get_realtime_strike_list_temp_data == {}) or (now_timestamp != self.get_realtime_strike_list_temp_expiration)):
+                (raw_data, strike_list) = self.get_strike_list(ACTIVE, duration)
+                if raw_data:
+                    self.get_realtime_strike_list_temp_expiration = raw_data['msg']['expiration']
+                    self.get_realtime_strike_list_temp_data = strike_list
+                else:
+                    break
+            else:
+                strike_list = self.get_realtime_strike_list_temp_data
+            profit = self.api.instrument_quotes_generated_data[ACTIVE][(duration * 60)]
+            for price_key in strike_list:
+                try:
+                    side_data = {}
+                    for side_key in strike_list[price_key]:
+                        detail_data = {}
+                        profit_d = profit[strike_list[price_key][side_key]]
+                        detail_data['profit'] = profit_d
+                        detail_data['id'] = strike_list[price_key][side_key]
+                        side_data[side_key] = detail_data
+                    ans[price_key] = side_data
+                except (KeyError, TypeError) as e:
+                    get_logger(__name__).error('Data extraction error: %s', e)
+            if (ans == {}):
+                self.api.instrument_quotes_generated_event.wait(timeout=1)
+                self.api.instrument_quotes_generated_event.clear()
+        return ans

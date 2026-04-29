@@ -77,6 +77,11 @@ from iqoptionapi.ws.objects.listinfodata import ListInfoData
 from iqoptionapi.ws.objects.betinfo import Game_betinfo_data
 from collections import defaultdict
 from iqoptionapi.core.utils import nested_dict
+from iqoptionapi.http.session import CHROME_HEADERS
+
+# --- STEALTH CONSTANTS (v9.0.000) ---
+WS_USER_AGENT = CHROME_HEADERS["User-Agent"]
+WS_ORIGIN = "https://iqoption.com"
 
 
 
@@ -968,13 +973,15 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.websocket_error_reason = None
 
         self.websocket_client = WebsocketClient(self)
-        from iqoptionapi.http.session import CHROME_HEADERS
         
-        # SPRINT 11: Inyectar headers de browser en el handshake del WebSocket
-        ws_headers = [f"{k}: {v}" for k, v in CHROME_HEADERS.items() if k in ["User-Agent", "Origin"]]
+        # SPRINT 11/13: Inyectar headers de browser en el handshake del WebSocket
+        ws_headers = [
+            f"User-Agent: {WS_USER_AGENT}",
+            f"Origin: {WS_ORIGIN}"
+        ]
         
         self.websocket_thread = threading.Thread(
-            target=self.websocket.run_forever, 
+            target=self.websocket_client.wss.run_forever, 
             kwargs={
                 'sslopt': {
                     "check_hostname": True, 

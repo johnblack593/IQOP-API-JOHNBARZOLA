@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from iqoptionapi.core.time_sync import _clock
 from iqoptionapi.expiration import get_expiration_time
 from iqoptionapi.core.ratelimit import rate_limited
+import iqoptionapi.core.config as config
 
 class OrdersMixin:
     @rate_limited("_order_bucket", on_limit=(False, None))
@@ -260,8 +261,8 @@ class OrdersMixin:
 
     @rate_limited("_order_bucket", on_limit=None)
     def sell_option(self, options_ids):
-        self.api.sell_option(options_ids)
         self.api.result_event.clear()
+        self.api.sell_option(options_ids)
         if self.api.result_event.wait(timeout=10):
             return self.api.result
         return False
@@ -295,7 +296,7 @@ class OrdersMixin:
         )
         start_t = time.time()
         while self.api.buy_order_id is None and time.time() - start_t < 30:
-            pass
+            time.sleep(0.1)
         if self.api.buy_order_id is not None:
             return True, self.api.buy_order_id
         else:
@@ -334,18 +335,25 @@ class OrdersMixin:
             return self.api.order_binary_id
         return None
 
-    def check_win(self, id):
-        while True:
-            try:
-                return self.api.socket_option_closed[id]["msg"]["win"]
-            except Exception:
-                pass
+    def check_win(self, id, timeout=60):
+        """
+        Garantiza no bloqueo usando socket_option_closed_event (v9.0.000).
+        """
+        # Verificación inmediata
+        if id in self.api.socket_option_closed:
+            return self.api.socket_option_closed[id]["msg"]["win"]
+            
+        # Espera reactiva
+        start_t = time.time()
+        while time.time() - start_t < timeout:
+            if self.api.socket_option_closed_event[id].wait(timeout=1):
+                if id in self.api.socket_option_closed:
+                    return self.api.socket_option_closed[id]["msg"]["win"]
+                self.api.socket_option_closed_event[id].clear()
+        return None
 
-    def check_win_v2(self, id):
-        while True:
-            if id in self.api.socket_option_closed:
-                return self.api.socket_option_closed[id]["msg"]["win"]
-            time.sleep(0.1)
+    def check_win_v2(self, id, timeout=60):
+        return self.check_win(id, timeout=timeout)
 
     def check_win_v3(self, id):
         start_t = time.time()
@@ -366,11 +374,16 @@ class OrdersMixin:
                 return True, self.api.socket_option_closed[id]["msg"]["win"]
         return False, None
 
-    def check_win_digital(self, order_id):
-        while True:
+    def check_win_digital(self, order_id, timeout=60):
+        """
+        Versión no bloqueante para opciones digitales.
+        """
+        start_t = time.time()
+        while time.time() - start_t < timeout:
             if order_id in self.api.digital_option_closed:
                 return self.api.digital_option_closed[order_id]
-            time.sleep(0.1)
+            time.sleep(0.5)
+        return None
 
     def check_win_digital_v2(self, order_id):
         start_t = time.time()
@@ -513,3 +526,19 @@ class OrdersMixin:
             return (True, 'NO_CHANGES')
         final_success = all(results)
         return (final_success, {'results': results})
+
+    @rate_limited('_order_bucket')
+    def close_digital_option(self, position_id):
+        while (self.get_async_order(position_id).get('position-changed') == {}):
+            is_ready = self.api.position_changed_event.wait(timeout=config.TIMEOUT_WS_DATA)
+            if (not is_ready):
+                get_logger(__name__).warning('Timeout waiting for position_changed in close_digital_option')
+                break
+            self.api.position_changed_event.clear()
+        position_changed = self.get_async_order(position_id)['position-changed']['msg']
+        self.api.result_event.clear()
+        self.api.close_digital_option(position_changed['external_id'])
+        is_ready = self.api.result_event.wait(timeout=15)
+        if (not is_ready):
+            get_logger(__name__).warning('Timeout (15s) waiting for close_digital_option result')
+        return self.api.result

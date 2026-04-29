@@ -1,5 +1,28 @@
 # CHANGELOG — JCBV-NEXUS SDK
 
+## [9.0.000] — 2026-04-29 — RELEASE OFICIAL
+
+### Breaking Changes
+- Ninguno. API pública idéntica a v8.x.
+
+### Added
+- Suite de tests profesional reorganizada por capas (core/, stealth/, trading/, streams/, strategy/, infrastructure/, regression/).
+- `tests/unit/stealth/test_headers.py`: verificación de fingerprinting Chrome 124.
+- `docs/api-reference.md`: referencia completa de métodos públicos.
+- `docs/testing-guide.md`: guía detallada de ejecución de tests.
+
+### Changed
+- `tests/` reestructurado: eliminados nombres con referencia a sprints, subcarpetas por dominio.
+- `docs/` saneado: reportes históricos movidos a `docs/archive/`.
+- Versión incrementada a 9.0.000.
+
+### Fixed
+- `test_spinloop_migration.py` + `test_spinloop_remaining.py` fusionados en `tests/unit/regression/test_blocking_regression.py`.
+- `test_suite_integration.py` movido de `unit/` a `integration/`.
+
+### Security
+- `test_headers.py`: garantía automatizada de fingerprint Chrome 124 e identidad HTTP==WS User-Agent.
+
 ## [8.9.995] — Sprint 12 — 2026-04-29
 ### Added
 - Feature flag `ENABLE_IP_ROTATION` para activar/desactivar rotación IP (default: false).

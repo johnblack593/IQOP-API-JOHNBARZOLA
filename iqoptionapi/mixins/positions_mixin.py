@@ -286,7 +286,6 @@ class PositionsMixin:
                     result[itype] = []
         return result
 
-
     def close_margin_position(self, order_id, timeout=15.0):
         '\n        Closes a margin position by its order ID.\n\n        '
         (position_id, m_type) = self._resolve_margin_position_id(order_id)
@@ -311,12 +310,12 @@ class PositionsMixin:
     def get_margin_positions(self, instrument_type='forex'):
         '\n        Gets all open margin positions for a given instrument type.\n\n        Args:\n            instrument_type: "forex", "cfd", or "crypto"\n\n        Returns:\n            list of position dicts, or empty list on error\n        '
         full_type = self._MARGIN_TYPE_MAP.get(instrument_type.lower(), instrument_type)
-        return self.get_open_positions(instrument_type=full_type, timeout=10.0)
+        return self.get_open_positions(instrument_type=full_type)
 
     def _resolve_margin_position_id(self, order_id):
         try:
             for m_type in ['marginal-forex', 'marginal-cfd', 'marginal-crypto']:
-                positions = self.get_open_positions(instrument_type=m_type, timeout=5.0)
+                positions = self.get_open_positions(instrument_type=m_type)
                 for pos in positions:
                     pos_id = pos.get('id')
                     ext_id = pos.get('external_id')
@@ -332,3 +331,77 @@ class PositionsMixin:
         except Exception as e:
             get_logger(__name__).warning('Portfolio search failed: %s', e)
         return (order_id, 'forex')
+
+    def get_digital_current_profit(self, ACTIVE, duration):
+        profit = self.api.instrument_quotes_generated_data[ACTIVE][(duration * 60)]
+        for key in profit:
+            if (key.find('SPT') != (- 1)):
+                return profit[key]
+        return False
+
+    @rate_limited('_order_bucket')
+    def get_digital_spot_profit_after_sale(self, position_id):
+
+        def get_instrument_id_to_bid(data, instrument_id):
+            for row in data['msg']['quotes']:
+                if (row['symbols'][0] == instrument_id):
+                    return row['price']['bid']
+            return None
+        start_t = time.time()
+        while ((self.get_async_order(position_id).get('position-changed') == {}) and ((time.time() - start_t) < 15.0)):
+            self.api.position_changed_event.wait(timeout=1)
+            self.api.position_changed_event.clear()
+        position = self.get_async_order(position_id)['position-changed']['msg']
+        if ('MPSPT' in position['instrument_id']):
+            z = False
+        elif ('MCSPT' in position['instrument_id']):
+            z = True
+        else:
+            get_logger(__name__).error(('get_digital_spot_profit_after_sale position error' + str(position['instrument_id'])))
+        ACTIVES = position['raw_event']['instrument_underlying']
+        amount = max(position['raw_event']['buy_amount'], position['raw_event']['sell_amount'])
+        start_duration = (position['instrument_id'].find('PT') + 2)
+        end_duration = (start_duration + position['instrument_id'][start_duration:].find('M'))
+        duration = int(position['instrument_id'][start_duration:end_duration])
+        z2 = False
+        getAbsCount = position['raw_event']['count']
+        instrumentStrikeValue = (position['raw_event']['instrument_strike_value'] / 1000000.0)
+        spotLowerInstrumentStrike = (position['raw_event']['extra_data']['lower_instrument_strike'] / 1000000.0)
+        spotUpperInstrumentStrike = (position['raw_event']['extra_data']['upper_instrument_strike'] / 1000000.0)
+        aVar = position['raw_event']['extra_data']['lower_instrument_id']
+        aVar2 = position['raw_event']['extra_data']['upper_instrument_id']
+        getRate = position['raw_event']['currency_rate']
+        instrument_quotes_generated_data = self.get_instrument_quotes_generated_data(ACTIVES, duration)
+        f_tmp = get_instrument_id_to_bid(instrument_quotes_generated_data, aVar)
+        if (f_tmp != None):
+            self.get_digital_spot_profit_after_sale_data[position_id]['f'] = f_tmp
+            f = f_tmp
+        else:
+            f = self.get_digital_spot_profit_after_sale_data[position_id]['f']
+        f2_tmp = get_instrument_id_to_bid(instrument_quotes_generated_data, aVar2)
+        if (f2_tmp != None):
+            self.get_digital_spot_profit_after_sale_data[position_id]['f2'] = f2_tmp
+            f2 = f2_tmp
+        else:
+            f2 = self.get_digital_spot_profit_after_sale_data[position_id]['f2']
+        if ((spotLowerInstrumentStrike != instrumentStrikeValue) and (f != None) and (f2 != None)):
+            if ((spotLowerInstrumentStrike > instrumentStrikeValue) or (instrumentStrikeValue > spotUpperInstrumentStrike)):
+                if z:
+                    instrumentStrikeValue = ((spotUpperInstrumentStrike - instrumentStrikeValue) / abs((spotUpperInstrumentStrike - spotLowerInstrumentStrike)))
+                    f = abs((f2 - f))
+                else:
+                    instrumentStrikeValue = ((instrumentStrikeValue - spotUpperInstrumentStrike) / abs((spotUpperInstrumentStrike - spotLowerInstrumentStrike)))
+                    f = abs((f2 - f))
+            elif z:
+                f += (((instrumentStrikeValue - spotLowerInstrumentStrike) / (spotUpperInstrumentStrike - spotLowerInstrumentStrike)) * (f2 - f))
+            else:
+                instrumentStrikeValue = ((spotUpperInstrumentStrike - instrumentStrikeValue) / (spotUpperInstrumentStrike - spotLowerInstrumentStrike))
+                f -= f2
+            f = (f2 + (instrumentStrikeValue * f))
+        if z2:
+            pass
+        if (f != None):
+            price = (f / getRate)
+            return ((price * getAbsCount) - amount)
+        else:
+            return None

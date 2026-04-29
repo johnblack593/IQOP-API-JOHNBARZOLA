@@ -1,4 +1,4 @@
-# JCBV-NEXUS IQ Option API SDK (v8.9.995)
+# JCBV-NEXUS IQ Option API SDK (v9.0.000)
 
 **IQ Option API con esteroides para robots de trading.**
 
