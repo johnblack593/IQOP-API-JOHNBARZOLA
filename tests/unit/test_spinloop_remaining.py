@@ -13,17 +13,18 @@ class TestSpinloopElimination(unittest.TestCase):
     @patch('time.sleep')
     def test_get_all_init_v2_no_sleep(self, mock_sleep):
         """Verify get_all_init_v2 uses Event.wait and not time.sleep when data is ready."""
-        # Set data in api
-        self.api.api.api_option_init_all_result_v2 = {"status": "ok"}
-        # Signal event immediately
-        self.api.api.api_option_init_all_result_v2_event.set()
+        self.api.api.api_option_init_all_result_v2 = None
+        
+        def side_effect():
+            self.api.api.api_option_init_all_result_v2 = {"status": "ok"}
+            self.api.api.api_option_init_all_result_v2_event.set()
+            
+        self.api.api.get_api_option_init_all_v2.side_effect = side_effect
         
         res = self.api.get_all_init_v2()
         
         self.assertEqual(res, {"status": "ok"})
-        # Should NOT have called time.sleep
         mock_sleep.assert_not_called()
-        # Should have called get_api_option_init_all_v2
         self.api.api.get_api_option_init_all_v2.assert_called_once()
 
     @patch('time.sleep')
@@ -62,14 +63,14 @@ class TestSpinloopElimination(unittest.TestCase):
     def test_buy_digital_spot_no_sleep(self, mock_sleep):
         """Verify buy_digital_spot uses Event.wait."""
         # Mock get_expiration_time
-        with patch('iqoptionapi.stable_api.get_expiration_time', return_value=(1600000000, 1)):
-            def side_effect(instrument_id, amount):
+        with patch('iqoptionapi.expiration.get_expiration_time', return_value=(1600000000, 1)):
+            def side_effect(instrument_id, active_id, amount):
                 # Simulate WS response
                 # We need to know the request_id returned by place_digital_option
                 # But place_digital_option in stable_api is called and its return is used
                 return "req_123"
 
-            self.api.api.place_digital_option.side_effect = side_effect
+            self.api.api.place_digital_option_v2.side_effect = side_effect
             
             # Pre-set the result in the dict
             self.api.api.digital_option_placed_id = {"req_123": 999}

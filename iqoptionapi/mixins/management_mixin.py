@@ -3,6 +3,8 @@ import time
 import logging
 from iqoptionapi.core.logger import get_logger
 import iqoptionapi.core.config as config
+from iqoptionapi.core.ratelimit import TokenBucket
+from iqoptionapi.core.utils import nested_dict
 
 class ManagementMixin:
     def sync_state_on_connect(self):
@@ -218,3 +220,139 @@ class ManagementMixin:
         if not is_ready:
             get_logger(__name__).warning("Timeout waiting for training_balance_reset_request")
         return self.api.training_balance_reset_request
+
+    def __init_management__(self):
+        self._heartbeat_thread = None
+        self._watchdog_thread = None
+        self._reconnect_stop_event = threading.Event()
+        self._heartbeat_watchdog_active = False
+        self._last_heartbeat = time.time()
+
+
+    def get_all_init(self):
+        'Solicita initialization-data. Una sola llamada WS por sesión.'
+        if (self.api.api_option_init_all_result is not None):
+            return self.api.api_option_init_all_result
+        self.api.api_option_init_all_result_event.clear()
+        self.api.get_api_option_init_all()
+        is_ready = self.api.api_option_init_all_result_event.wait(timeout=config.TIMEOUT_ALL_INIT)
+        if (not is_ready):
+            get_logger(__name__).warning('Timeout waiting for get_all_init')
+        return self.api.api_option_init_all_result
+
+    def get_all_init_v2(self):
+        'Solicita initialization-data v2. Una sola llamada WS por sesión.'
+        if (self.api.api_option_init_all_result_v2 is not None):
+            return self.api.api_option_init_all_result_v2
+        if (self.check_connect() == False):
+            self.connect()
+        self.api.api_option_init_all_result_v2_event.clear()
+        self.api.get_api_option_init_all_v2()
+        is_ready = self.api.api_option_init_all_result_v2_event.wait(timeout=config.TIMEOUT_ALL_INIT)
+        if (not is_ready):
+            get_logger(__name__).warning('Timeout waiting for get_all_init_v2')
+        return self.api.api_option_init_all_result_v2
+
+    def __get_binary_open(self):
+        v2_data = self.get_all_init_v2()
+        v1_data = self.get_all_init()
+        binary_list = ['binary', 'turbo', 'blitz']
+        if v2_data:
+            for option in binary_list:
+                if (option in v2_data):
+                    for actives_id in v2_data[option]['actives']:
+                        active = v2_data[option]['actives'][actives_id]
+                        name = str(active['name']).split('.')[1]
+                        self.OPEN_TIME[option][name]['open'] = (active['enabled'] and (not active.get('is_suspended', False)))
+        if (v1_data and v1_data.get('result')):
+            res = v1_data['result']
+            for option in binary_list:
+                if (option in res):
+                    for actives_id in res[option]['actives']:
+                        active = res[option]['actives'][actives_id]
+                        name = str(active['name']).split('.')[1]
+                        self.OPEN_TIME[option][name]['open'] = (active['enabled'] and (not active.get('is_suspended', False)))
+
+    def __get_digital_open(self):
+        digital_data = []
+        for _ in range(3):
+            data = self.get_digital_underlying_list_data()
+            if (isinstance(data, dict) and ('underlying' in data)):
+                digital_data = data.get('underlying', [])
+            elif isinstance(data, list):
+                digital_data = data
+            get_logger(__name__).debug('__get_digital_open: data=%s', digital_data)
+            if digital_data:
+                break
+            time.sleep(2)
+        for digital in digital_data:
+            name = digital.get('underlying')
+            if (not name):
+                continue
+            schedule = digital.get('schedule', [])
+            self.OPEN_TIME['digital'][name]['open'] = False
+            for schedule_time in schedule:
+                start = schedule_time.get('open', 0)
+                end = schedule_time.get('close', 0)
+                if (start < time.time() < end):
+                    self.OPEN_TIME['digital'][name]['open'] = True
+        if (not digital_data):
+            try:
+                insts = self.get_instruments('digital-option')
+                if (insts and ('instruments' in insts)):
+                    for detail in insts['instruments']:
+                        n = detail.get('name')
+                        if (not n):
+                            continue
+                        if ('.' in n):
+                            n = n.split('.')[1]
+                        self.OPEN_TIME['digital'][n]['open'] = any(((s.get('open', 0) < time.time() < s.get('close', 0)) for s in detail.get('schedule', [])))
+            except Exception:
+                pass
+        if (not any((v.get('open') for v in self.OPEN_TIME['digital'].values()))):
+            get_logger(__name__).info('Digital discovery failed, mirroring binary/turbo asset availability')
+            for cat in ['binary', 'turbo']:
+                for (asset, info) in self.OPEN_TIME.get(cat, {}).items():
+                    if info.get('open'):
+                        self.OPEN_TIME['digital'][asset]['open'] = True
+
+    def __get_other_open(self):
+        instrument_list = ['cfd', 'forex', 'crypto', 'stocks', 'commodities', 'indices', 'etf']
+        for instruments_type in instrument_list:
+            if (instruments_type != instrument_list[0]):
+                import random
+                time.sleep(random.uniform((config.STEALTH_INSTRUMENT_REQUEST_DELAY * 0.8), (config.STEALTH_INSTRUMENT_REQUEST_DELAY * 1.2)))
+            ins_data = []
+            for _ in range(3):
+                result = self.get_instruments(instruments_type)
+                if (isinstance(result, dict) and ('instruments' in result)):
+                    ins_data = result.get('instruments', [])
+                elif isinstance(result, list):
+                    ins_data = result
+                elif hasattr(result, 'get'):
+                    ins_data = result.get('instruments', [])
+                if ins_data:
+                    break
+                time.sleep(2)
+            for detail in ins_data:
+                name = detail.get('name')
+                if (not name):
+                    continue
+                if ('.' in name):
+                    name = name.split('.')[1]
+                schedule = detail.get('schedule', [])
+                self.OPEN_TIME[instruments_type][name]['open'] = False
+                for schedule_time in schedule:
+                    start = schedule_time.get('open', 0)
+                    end = schedule_time.get('close', 0)
+                    if (start < time.time() < end):
+                        self.OPEN_TIME[instruments_type][name]['open'] = True
+
+    def get_all_open_time(self):
+        self.OPEN_TIME = nested_dict(3, dict)
+        binary = threading.Thread(target=self.__get_binary_open)
+        digital = threading.Thread(target=self.__get_digital_open)
+        other = threading.Thread(target=self.__get_other_open)
+        (binary.start(), digital.start(), other.start())
+        (binary.join(), digital.join(), other.join())
+        return self.OPEN_TIME

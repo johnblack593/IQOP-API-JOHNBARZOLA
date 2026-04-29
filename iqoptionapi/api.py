@@ -4,7 +4,6 @@ import json
 import time
 import os
 import threading
-import requests
 import certifi
 import ssl
 import atexit

@@ -6,8 +6,10 @@ from random import randint
 from datetime import datetime, timedelta
 from iqoptionapi.core.time_sync import _clock
 from iqoptionapi.expiration import get_expiration_time
+from iqoptionapi.core.ratelimit import rate_limited
 
 class OrdersMixin:
+    @rate_limited("_order_bucket", on_limit=(False, None))
     def buy(self, price, ACTIVES, ACTION, expirations):
         # Gate de validación
         if hasattr(self, 'validator') and self.validator is not None:
@@ -54,9 +56,11 @@ class OrdersMixin:
             return False, None
         return self.api.result, id
 
+    @rate_limited("_order_bucket", on_limit=(False, None))
     def buy_digital_spot(self, active, amount, action, duration):
         return self.buy_digital_spot_v2(active, amount, action, duration)
 
+    @rate_limited("_order_bucket", on_limit=(False, None))
     def buy_digital_spot_v2(self, active, amount, action, duration):
         # Gate de validación
         if hasattr(self, 'validator') and self.validator is not None:
@@ -106,7 +110,7 @@ class OrdersMixin:
             instrument_id = f"do{active_id}A{date_formated}D{time_formated}PT{duration}M{action}SPT"
         else:
             clean_active = active.replace("-OTC", "")
-            legacy_date = dt_exp.strftime("%Y%m%d%H%M")
+            legacy_date = dt_exp.strftime("%Y%m%dH%M")
             instrument_id = f"do{clean_active}{legacy_date}PT{duration}M{action}SPT"
 
         get_logger(__name__).debug("Digital Instrument ID generated: %s", instrument_id)
@@ -135,6 +139,7 @@ class OrdersMixin:
         else:
             return False, digital_order_id
 
+    @rate_limited("_order_bucket", on_limit=(False, None))
     def buy_digital(self, amount, instrument_id):
         self.api.result = None
         self.api.result_event.clear()
@@ -145,6 +150,7 @@ class OrdersMixin:
                 return True, self.api.result
         return False, None
 
+    @rate_limited("_order_bucket", on_limit=(False, None))
     def buy_blitz(self, active, amount, action, current_price, duration=5):
         active_id = OP_code.ACTIVES.get(active)
         if not active_id:
@@ -152,7 +158,7 @@ class OrdersMixin:
         
         self.api.result = None
         self.api.result_event.clear()
-        self.api.buy_blitz(active_id, amount, action, current_price, duration)
+        self.api.buy_blitz(active_id, action, amount, current_price, duration)
         
         if self.api.result_event.wait(timeout=10):
             if self.api.result:
@@ -169,7 +175,7 @@ class OrdersMixin:
             active_id=active_id,
             instrument_type=instrument_type,
             side=side,
-            amount=amount,
+            margin=amount,
             leverage=leverage,
             stop_price=stop_price,
             take_profit=take_profit,
@@ -212,6 +218,7 @@ class OrdersMixin:
 
     # --- Métodos migrados de stable_api.py ---
     
+    @rate_limited("_order_bucket", on_limit=None)
     def buy_multi(self, price, ACTIVES, ACTION, expirations):
         self.api.buy_multi_option = {}
         if len(price) == len(ACTIVES) == len(ACTION) == len(expirations):
@@ -235,6 +242,7 @@ class OrdersMixin:
         else:
             get_logger(__name__).error('buy_multi error please input all same len')
 
+    @rate_limited("_order_bucket", on_limit=(False, None))
     def buy_by_raw_expirations(self, price, active, direction, option, expired):
         self.api.buy_multi_option = {}
         self.api.result_event.clear()
@@ -250,6 +258,7 @@ class OrdersMixin:
                 self.api.result_event.clear()
         return False, None
 
+    @rate_limited("_order_bucket", on_limit=None)
     def sell_option(self, options_ids):
         self.api.sell_option(options_ids)
         self.api.result_event.clear()
@@ -257,6 +266,7 @@ class OrdersMixin:
             return self.api.result
         return False
 
+    @rate_limited("_order_bucket", on_limit=None)
     def sell_digital_option(self, order_id):
         self.api.result_event.clear()
         self.api.sell_digital_option(order_id)
@@ -264,6 +274,7 @@ class OrdersMixin:
             return self.api.result
         return False
 
+    @rate_limited("_order_bucket", on_limit=(False, None))
     def buy_order(self,
                   instrument_type, instrument_id,
                   side, amount, leverage,
@@ -396,3 +407,109 @@ class OrdersMixin:
         if not is_ready:
             get_logger(__name__).warning('Timeout (15s) waiting for get_options_v2_data')
         return self.api.get_options_v2_data
+
+
+    def check_cfd_order_capability(self, force=False):
+        '\n        Probes whether the server accepts place-order-temp messages.\n        Returns True if CFD/Forex orders are supported, False otherwise.\n        Result is cached after first call.\n        '
+        if ((self._cfd_order_capable is not None) and (not force)):
+            return self._cfd_order_capable
+        get_logger(__name__).info('Probing CFD order capability...')
+        _PROBE_CANDIDATES = [('forex', 'EURUSD-OTC'), ('forex', 'USDJPY-OTC'), ('forex', 'GBPUSD-OTC'), ('cfd', 'APPLE-OTC'), ('crypto', 'BTCUSD-OTC')]
+        test_asset = None
+        test_type = None
+        for (cat, name) in _PROBE_CANDIDATES:
+            if (name in OP_code.ACTIVES):
+                test_asset = name
+                test_type = cat
+                break
+        if (not test_asset):
+            for name in OP_code.ACTIVES:
+                if ('OTC' in name):
+                    test_asset = name
+                    test_type = 'forex'
+                    break
+        if (not test_asset):
+            get_logger(__name__).warning('No OTC assets in ACTIVES to probe CFD capability')
+            self._cfd_order_capable = False
+            return False
+        self.api.buy_order_id = None
+        try:
+            self.api.buy_order(instrument_type=test_type, instrument_id=test_asset, side='buy', amount=1, leverage=1, type='market', limit_price=None, stop_price=None, stop_lose_value=None, stop_lose_kind=None, take_profit_value=None, take_profit_kind=None, use_trail_stop=False, auto_margin_call=False, use_token_for_commission=False)
+        except Exception as e:
+            get_logger(__name__).warning('CFD probe send failed: %s', e)
+            self._cfd_order_capable = False
+            return False
+        self.api.order_data_event.clear()
+        is_ready = self.api.order_data_event.wait(timeout=3)
+        if (self.api.buy_order_id is not None):
+            get_logger(__name__).info('CFD orders SUPPORTED — probe order_id=%s', self.api.buy_order_id)
+            try:
+                self.close_position(self.api.buy_order_id)
+            except Exception:
+                pass
+            self._cfd_order_capable = True
+        else:
+            get_logger(__name__).warning('CFD orders NOT SUPPORTED for this account (server silently dropped place-order-temp)')
+            self._cfd_order_capable = False
+        return self._cfd_order_capable
+
+    def open_margin_position(self, instrument_type, active_id, direction, amount, leverage, take_profit=None, stop_loss=None, timeout=30.0):
+        '\n        Opens a margin position using the modern marginal-{type}.place-market-order protocol.\n\n        Args:\n            instrument_type: "forex", "cfd", or "crypto"\n            active_id: Numeric active ID (e.g., 1 for EURUSD)\n            direction: "buy" or "sell"\n            amount: Amount in USD (the margin)\n            leverage: Leverage multiplier (e.g., 50, 100, 1000)\n            take_profit: dict with "type" and "value", or None\n                         Example: {"type": "pnl", "value": 5}  -> +$5 profit\n                         Example: {"type": "price", "value": 1.17200}\n                         Example: {"type": "percent", "value": 50}\n            stop_loss: dict with "type" and "value", or None\n                       Example: {"type": "pnl", "value": 3}  -> -$3 loss (auto-negated)\n                       Example: {"type": "price", "value": 1.16800}\n            timeout: Max wait time in seconds\n\n        Returns:\n            (True, position_dict) on success\n            (False, error_string) on failure\n        '
+        if (amount <= 0):
+            return (False, 'INVALID_PARAMS: amount must be > 0')
+        if (direction not in ('buy', 'sell')):
+            return (False, f"INVALID_PARAMS: invalid direction '{direction}'")
+        if (instrument_type.lower() not in self._MARGIN_TYPE_MAP):
+            return (False, f"INVALID_PARAMS: unknown instrument_type '{instrument_type}'")
+        self.api.margin_order_result = None
+        self.api.margin_order_event.clear()
+        try:
+            self.api.place_margin_order(instrument_type=instrument_type, active_id=active_id, side=direction, margin=amount, leverage=leverage, take_profit=take_profit, stop_loss=stop_loss)
+        except Exception as e:
+            get_logger(__name__).error('open_margin_position send failed: %s', e)
+            return (False, f'SEND_ERROR: {e}')
+        is_ready = self.api.margin_order_event.wait(timeout=timeout)
+        if (is_ready and (self.api.margin_order_result is not None)):
+            order_result = self.api.margin_order_result
+            if (order_result.get('id') is not None):
+                get_logger(__name__).info('Margin position opened: id=%s type=%s side=%s amount=%s leverage=%s', order_result.get('id'), instrument_type, direction, amount, leverage)
+                return (True, order_result)
+            else:
+                return (False, f"REJECTED: {order_result.get('error', order_result)}")
+        else:
+            get_logger(__name__).error('open_margin_position TIMEOUT (%.0fs) for %s %s', timeout, instrument_type, direction)
+            return (False, f'TIMEOUT after {timeout}s')
+
+    def modify_margin_tp_sl(self, order_id, take_profit=None, stop_loss=None):
+        '\n        Modifies TP/SL of an open margin position using the modern protocol.\n        '
+        (position_id, m_type) = self._resolve_margin_position_id(order_id)
+        results = []
+        if (take_profit is not None):
+            get_logger(__name__).info('Updating margin TP: pos=%s, val=%s', position_id, take_profit)
+            tp_data = {'name': f'marginal-{m_type}.change-position-take-profit-order', 'version': '1.0', 'body': {'position_id': int(position_id), 'level': {'type': str(take_profit.get('type', 'pnl')), 'value': float(take_profit.get('value', 0))}}}
+            self.api.result = None
+            self.api.result_event.clear()
+            self.api.send_websocket_request('sendMessage', tp_data)
+            if (not self.api.result_event.wait(timeout=10)):
+                get_logger(__name__).warning('Timeout waiting for TP update result')
+                results.append(False)
+            else:
+                results.append(self.api.result)
+        if (stop_loss is not None):
+            get_logger(__name__).info('Updating margin SL: pos=%s, val=%s', position_id, stop_loss)
+            sl_value = float(stop_loss.get('value', 0))
+            if ((str(stop_loss.get('type', 'pnl')) == 'pnl') and (sl_value > 0)):
+                sl_value = (- abs(sl_value))
+            sl_data = {'name': f'marginal-{m_type}.change-position-stop-loss-order', 'version': '2.0', 'body': {'position_id': int(position_id), 'level': {'type': str(stop_loss.get('type', 'pnl')), 'value': sl_value}, 'trailing_stop': bool(stop_loss.get('trailing_stop', False))}}
+            self.api.result = None
+            self.api.result_event.clear()
+            self.api.send_websocket_request('sendMessage', sl_data)
+            if (not self.api.result_event.wait(timeout=10)):
+                get_logger(__name__).warning('Timeout waiting for SL update result')
+                results.append(False)
+            else:
+                results.append(self.api.result)
+        if (not results):
+            return (True, 'NO_CHANGES')
+        final_success = all(results)
+        return (final_success, {'results': results})

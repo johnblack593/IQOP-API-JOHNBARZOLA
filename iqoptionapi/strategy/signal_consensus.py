@@ -36,6 +36,8 @@ class SignalConsensus:
         min_score: float = 0.60,
     ) -> None:
         self.strategies = strategies or []
+        if strategies is not None and 0 < len(self.strategies) < 2:
+             raise ValueError("SignalConsensus requires at least 2 strategies")
         self.min_agreement = min_agreement
         self.min_score = min_score
         self._logger = logging.getLogger(__name__)

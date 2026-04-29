@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from iqoptionapi.core.logger import get_logger
 import iqoptionapi.core.config as config
 
+from iqoptionapi.core.ratelimit import rate_limited
+
 class PositionsMixin:
     def get_open_positions(self, instrument_type=None, realtime_pnl=False):
         """
@@ -240,8 +242,9 @@ class PositionsMixin:
         if self.api.overnight_fee.get("status") == 2000:
             return True, self.api.overnight_fee["msg"]
         else:
-            return False, None
+            return dict(self.api.overnight_fee.msg)
 
+    @rate_limited("_order_bucket", on_limit=False)
     def close_position(self, position_id):
         self.api.close_position_event.clear()
         self.api.close_position(position_id)
@@ -282,3 +285,50 @@ class PositionsMixin:
                     get_logger(__name__).error("get_all_open_positions error for %s: %s", itype, e)
                     result[itype] = []
         return result
+
+
+    def close_margin_position(self, order_id, timeout=15.0):
+        '\n        Closes a margin position by its order ID.\n\n        '
+        (position_id, m_type) = self._resolve_margin_position_id(order_id)
+        get_logger(__name__).info('Closing margin position: id=%s (type=%s)', position_id, m_type)
+        self.api.close_position_data = None
+        self.api.close_position_data_event.clear()
+        data = {'name': f'marginal-{m_type}.close-position', 'version': '1.0', 'body': {'position_id': int(position_id)}}
+        self.api.send_websocket_request('sendMessage', data)
+        start_t = time.time()
+        while ((self.api.close_position_data is None) and ((time.time() - start_t) < timeout)):
+            self.api.close_position_data_event.wait(timeout=1)
+            self.api.close_position_data_event.clear()
+        if (self.api.close_position_data is not None):
+            status = self.api.close_position_data.get('status')
+            if (status == 2000):
+                get_logger(__name__).info('Margin position closed: %s', position_id)
+                return (True, self.api.close_position_data)
+            else:
+                return (False, f'SERVER_ERROR: status={status}')
+        return (False, f'TIMEOUT after {timeout}s')
+
+    def get_margin_positions(self, instrument_type='forex'):
+        '\n        Gets all open margin positions for a given instrument type.\n\n        Args:\n            instrument_type: "forex", "cfd", or "crypto"\n\n        Returns:\n            list of position dicts, or empty list on error\n        '
+        full_type = self._MARGIN_TYPE_MAP.get(instrument_type.lower(), instrument_type)
+        return self.get_open_positions(instrument_type=full_type, timeout=10.0)
+
+    def _resolve_margin_position_id(self, order_id):
+        try:
+            for m_type in ['marginal-forex', 'marginal-cfd', 'marginal-crypto']:
+                positions = self.get_open_positions(instrument_type=m_type, timeout=5.0)
+                for pos in positions:
+                    pos_id = pos.get('id')
+                    ext_id = pos.get('external_id')
+                    order_ids = []
+                    raw_event = pos.get('raw_event', {})
+                    for (k, v) in raw_event.items():
+                        if (isinstance(v, dict) and ('order_ids' in v)):
+                            order_ids.extend(v['order_ids'])
+                    if ((str(order_id) == str(ext_id)) or (order_id in order_ids) or (str(order_id) in [str(o) for o in order_ids])):
+                        actual_id = (ext_id if (ext_id is not None) else pos_id)
+                        m_prefix = m_type.replace('marginal-', '')
+                        return (actual_id, m_prefix)
+        except Exception as e:
+            get_logger(__name__).warning('Portfolio search failed: %s', e)
+        return (order_id, 'forex')

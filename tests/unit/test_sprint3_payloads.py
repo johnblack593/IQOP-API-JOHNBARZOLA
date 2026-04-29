@@ -3,6 +3,7 @@ import logging
 from iqoptionapi.stable_api import IQ_Option
 import pytest
 import os
+from iqoptionapi.api import IQOptionAPI
 
 # Mock or Real credentials depending on environment
 # For this verification, we assume the user has a valid session or we use a dry-run style approach.
@@ -19,7 +20,10 @@ def api():
 
 def test_blitz_payload_generation(api, mocker):
     # Initialize the underlying API instance manually since we aren't calling connect()
-    from iqoptionapi.api import IQOptionAPI
+    # Mock OP_code.ACTIVES to avoid ValueError: Unknown active
+    import iqoptionapi.core.constants as OP_code
+    OP_code.ACTIVES["EURUSD"] = 1
+    
     api.api = IQOptionAPI("ws.iqoption.com", "test@test.com")
     api.api.result_event_store = {} # Needed for some result waits
     
@@ -45,7 +49,8 @@ def test_blitz_payload_generation(api, mocker):
     assert data["body"]["price"] == 1.0
 
 def test_pending_order_payload_generation(api, mocker):
-    from iqoptionapi.api import IQOptionAPI
+    import iqoptionapi.core.constants as OP_code
+    OP_code.ACTIVES["EURUSD"] = 1
     api.api = IQOptionAPI("ws.iqoption.com", "test@test.com")
     spy = mocker.spy(api.api, "send_websocket_request")
     api.api.balance_id = 987654321

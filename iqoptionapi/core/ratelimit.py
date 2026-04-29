@@ -86,17 +86,22 @@ class TokenBucket:
             return self._tokens
 
 
-def rate_limited(bucket_attr: str):
+def rate_limited(bucket_attr: str, on_limit=None):
     """
     Decorator to apply rate limiting using a bucket stored in an instance attribute.
+    If rate limit is exceeded, returns on_limit instead of raising.
     :param bucket_attr: Name of the attribute containing the TokenBucket instance.
+    :param on_limit: Value to return if rate limit is exceeded.
     """
     def decorator(func):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
             bucket = getattr(self, bucket_attr, None)
             if bucket and isinstance(bucket, TokenBucket):
-                bucket.consume()
+                try:
+                    bucket.consume()
+                except RateLimitExceededError:
+                    return on_limit
             return func(self, *args, **kwargs)
         return wrapper
     return decorator

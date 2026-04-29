@@ -25,8 +25,8 @@ class MockAPI:
         self.positions = None
         self.positions_event = threading.Event()
 
-    def getcandles(self, *args):
-        pass
+    def getcandles(self):
+        return MagicMock()
 
     def get_digital_underlying(self):
         pass
@@ -49,17 +49,17 @@ def test_get_candles_success(api_instance):
     def simulate_server_response():
         time.sleep(0.1)
         api_instance.api.candles.candles_data = [{"from": 123, "close": 1.1}]
-        api_instance.api.candles_event.set()
+        api_instance.api.candles_is_maxdict = True
 
     threading.Thread(target=simulate_server_response).start()
     
     result = api_instance.get_candles("EURUSD", 60, 10, time.time())
     assert result == [{"from": 123, "close": 1.1}]
-    assert api_instance.api.candles_event.is_set()
+    assert getattr(api_instance.api, "candles_is_maxdict", False) is True
 
 def test_get_candles_timeout(api_instance):
     # Shorten timeout for test
-    with patch("iqoptionapi.stable_api.TIMEOUT_WS_DATA", 0.1):
+    with patch("iqoptionapi.core.config.TIMEOUT_WS_DATA", 0.1):
         result = api_instance.get_candles("EURUSD", 60, 10, time.time())
         assert result is None
 

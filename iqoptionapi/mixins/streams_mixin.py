@@ -20,7 +20,7 @@ class StreamsMixin:
         self.api.candles_is_maxdict = False
         self.api.candles_wait_for_first_event = False
         self.api.candles_log_count = count
-        self.api.get_candles(OP_code.ACTIVES[active], size, count, datatime)
+        self.api.getcandles()(OP_code.ACTIVES[active], size, count, datatime)
         
         start_t = time.time()
         while self.api.candles_is_maxdict is False and time.time() - start_t < 20:
