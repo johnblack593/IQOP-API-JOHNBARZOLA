@@ -1,4 +1,4 @@
-# JCBV-NEXUS IQ Option API SDK (v9.0.000)
+# JCBV-NEXUS IQ Option API SDK (v9.1.000)
 
 **IQ Option API con esteroides para robots de trading.**
 
@@ -27,6 +27,13 @@ pip install -e .
 cp .env.example .env   # Completar con credenciales reales
 ```
 
+## Ejemplos de Uso
+La carpeta `examples/` contiene scripts listos para usar:
+- `01_basic_connection.py`: Conexión y balance.
+- `02_buy_binary.py`: Compra de opciones binarias.
+- `03_buy_digital.py`: Compra de opciones digitales.
+- `05_multiasset_robot.py`: Ejemplo de robot multi-activo.
+
 ## Inicio Rápido (Quick Start)
 ```python
 from iqoptionapi.stable_api import IQ_Option
@@ -37,33 +44,27 @@ check, reason = iq.connect()
 
 if check:
     print("Conexión exitosa")
-    # Suscribirse a EURUSD velas de 1 minuto
-    iq.subscribe_candles("EURUSD", 60)
+    iq.change_balance("PRACTICE")
+    # Comprar $1 en EURUSD a 1 minuto
+    iq.buy(1, "EURUSD", "call", 1)
 else:
     print(f"Error: {reason}")
 ```
 
 ## Configuración (.env)
-Ver [.env.example](.env.example) para todas las variables disponibles, incluyendo:
-- `IQ_ACCOUNT_TYPE`: PRACTICE o REAL.
-- `ENABLE_IP_ROTATION`: Solo para desarrollo en Windows con WARP.
+Ver [.env.example](.env.example) para todas las variables disponibles.
 
 ## Arquitectura del SDK
 El SDK utiliza un patrón de **Fachada** (`IQ_Option`) que hereda de múltiples **Mixins** especializados. 
 Para más detalles, ver [docs/architecture.md](docs/architecture.md).
 
 ## Notas de Seguridad (Stealth / Anti-ban)
-Este SDK incluye mecanismos avanzados para evitar bloqueos:
-- **SubscriptionManager**: Limita a 15 suscripciones simultáneas.
-- **CircuitBreaker**: Protege contra bucles de reconexión y errores 429/403.
-- **Fingerprint**: Headers idénticos entre HTTP y WebSocket (Chrome 124).
 Ver [docs/stealth-guide.md](docs/stealth-guide.md) para la guía completa.
 
 ## Guía de Desarrollo
-Para contribuir o extender el SDK:
 1. Las nuevas funcionalidades de trading deben ir en `iqoptionapi/mixins/`.
-2. La lógica de red base reside en `iqoptionapi/api.py`.
-3. Todo cambio debe ser validado con `pytest tests/unit/`.
+2. Todo cambio debe ser validado con `pytest tests/unit/`.
+3. Ver [docs/testing-guide.md](docs/testing-guide.md) para más info.
 
 ## Changelog
-Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo de versiones y sprints.
+Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo.

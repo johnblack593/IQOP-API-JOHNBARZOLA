@@ -30,7 +30,7 @@ def get_digital_init():
         print(f"Received segment keys: {list(data.keys())}")
         if "digital" in data:
             print(f"Digital assets found: {len(data['digital'].get('actives', {}))}")
-            with open('scratch/digital_segment.json', 'w') as f:
+            with open('tests/fixtures/digital_segment.json', 'w') as f:
                 json.dump(data, f, indent=2)
         else:
             print("Digital key NOT found in response.")

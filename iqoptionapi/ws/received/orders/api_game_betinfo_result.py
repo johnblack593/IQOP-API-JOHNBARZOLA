@@ -10,7 +10,7 @@ def api_game_betinfo_result(api, message):
             api.game_betinfo[order_id] = msg
         
         # SPRINT 14: WS Event Bridge — desbloquear _wait_result
-        ev_res = getattr(self, 'result_event_store', None) or getattr(api, 'result_event_store', None)
+        ev_res = getattr(api, 'result_event_store', None)
         if ev_res is not None and order_id:
             ev_res[order_id].set()
 

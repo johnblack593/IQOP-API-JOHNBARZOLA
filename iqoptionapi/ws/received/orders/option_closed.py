@@ -46,7 +46,15 @@ class OptionClosed:
                     api.listinfodata.set(win_val, game_state, order_id)
 
             # SPRINT 14: WS Event Bridge — desbloquear _wait_result
-            if msg.get("status") in ("win", "loose", "equal") or message.get("name") == "option-closed":
+            # Detectar si es un mensaje de finalización (win/loose/equal)
+            is_result = (
+                msg.get("status") in ("win", "loose", "equal") or 
+                message.get("name") == "option-closed" or
+                "win" in msg or 
+                "profit_amount" in msg
+            )
+
+            if is_result:
                 ev_store = getattr(self, 'result_event_store', None) or getattr(api, 'result_event_store', None)
                 if ev_store is not None and order_id:
                     ev_store[order_id].set()

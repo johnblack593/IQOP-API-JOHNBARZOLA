@@ -20,7 +20,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("scratch/margin_trading_test_log.txt", mode="w", encoding="utf-8"),
+        logging.FileHandler("tests/last_run.log", mode="a", encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("MARGIN_TEST")
@@ -192,7 +192,7 @@ def main():
     logger.info("=" * 60)
 
     # Write report
-    with open("tests/reports/margin_trading_test_20260428.md", "w", encoding="utf-8") as f:
+    with open("tests/margin_trading_test_report.md", "w", encoding="utf-8") as f:
         f.write("# Margin Trading Test Report - 2026-04-28\\n\\n")
         f.write(f"**Result**: {passed}/{total} tests passed\\n\\n")
         f.write("| Test | Status | Detail |\\n")

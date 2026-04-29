@@ -1,4 +1,4 @@
-# Guía de Testing — JCBV-NEXUS SDK v9.0.000
+# Guía de Testing — JCBV-NEXUS SDK v9.1.000
 
 Este SDK utiliza una suite de pruebas profesional basada en `pytest` para garantizar la estabilidad y el cumplimiento de las políticas de Stealth.
 
@@ -11,7 +11,8 @@ tests/
 │   ├── stealth/      # Mecanismos anti-ban (Headers, CircuitBreaker)
 │   ├── trading/      # Ejecución de órdenes y posiciones
 │   └── regression/   # Prevención de bugs históricos
-└── integration/      # Pruebas de flujo completo con red real
+├── integration/      # Pruebas de flujo completo con red real
+└── fixtures/         # Datos JSON y scripts de soporte (antes examples/)
 ```
 
 ## Ejecución de Tests

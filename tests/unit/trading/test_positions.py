@@ -16,10 +16,12 @@ class TestCheckWin:
         assert result is None
 
     def test_check_win_with_populated_event_returns_result(self, mock_iq):
-        order_id = "order_999"
-        # Simular que el evento ya llegó
-        mock_iq.api.socket_option_closed[order_id] = {"msg": {"win": "win"}}
-        mock_iq.api.socket_option_closed_event[order_id].set()
+        order_id = 999
+        # Simular que el evento ya llegó (Binary path)
+        # Asegurar que el store es un dict real y no un MagicMock
+        mock_iq.api.game_betinfo = {}
+        mock_iq.api.game_betinfo[order_id] = {"win": "win"}
+        mock_iq.api.result_event_store[order_id].set()
         
         result = mock_iq.check_win(order_id, timeout=1)
         assert result == "win"

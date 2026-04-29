@@ -23,7 +23,7 @@ def test_digital_underlying():
     while time.time() - start_t < 10:
         if api.api.underlying_list_data:
             print("Response received!")
-            with open('scratch/digital_underlying.json', 'w') as f:
+            with open('tests/fixtures/digital_underlying.json', 'w') as f:
                 json.dump(api.api.underlying_list_data, f, indent=2)
             print(f"Underlying assets count: {len(api.api.underlying_list_data.get('underlying', []))}")
             return

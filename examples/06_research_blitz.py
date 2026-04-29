@@ -1,4 +1,9 @@
-"""SPRINT-16 Research: Which Blitz assets are valid for Binary Buy?"""
+# ─────────────────────────────────────────────────────────────
+# JCBV-NEXUS SDK v9.1.000 — Example Script
+# Este archivo es un ejemplo funcional, NO un test de pytest.
+# Requiere: .env con IQ_EMAIL y IQ_PASSWORD
+# Uso: python examples/06_research_blitz.py
+# ─────────────────────────────────────────────────────────────
 import sys, os, time, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv

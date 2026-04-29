@@ -1,3 +1,9 @@
+# ─────────────────────────────────────────────────────────────
+# JCBV-NEXUS SDK v9.1.000 — Example Script
+# Este archivo es un ejemplo funcional, NO un test de pytest.
+# Requiere: .env con IQ_EMAIL y IQ_PASSWORD
+# Uso: python examples/05_multiasset_robot.py
+# ─────────────────────────────────────────────────────────────
 import sys
 import os
 import time

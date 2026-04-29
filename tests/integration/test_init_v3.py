@@ -66,9 +66,9 @@ if init_v2:
             print(f"  {aid}: {data.get('name')}, enabled={data.get('enabled')}")
             
     # Save
-    with open('scratch/init_v3_data.json', 'w') as f:
+    with open('tests/fixtures/init_v3_data.json', 'w') as f:
         json.dump(init_v2, f, indent=2)
-    print("\nSaved to scratch/init_v3_data.json")
+    print("\nSaved to tests/fixtures/init_v3_data.json")
 else:
     print("init_v2 is STILL None after v3 request!")
 

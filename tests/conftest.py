@@ -1,5 +1,5 @@
 """
-Configuración global de la suite de tests JCBV-NEXUS SDK v9.0.000
+Configuración global de la suite de tests JCBV-NEXUS SDK v9.1.000
 """
 import pytest
 import sys, pathlib
@@ -10,9 +10,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 # Excluir carpetas que no son tests del auto-discovery
 collect_ignore_glob = [
-    "scratch/**",
-    "reports/**",
-    "examples/**",
+    "scratch/**",      # ← ya eliminada, dejar por si regresa
+    "reports/**",      # ← ya eliminada, dejar por si regresa
+    "fixtures/**",     # fixtures JSON no son tests
 ]
 
 @pytest.fixture(scope="session")

@@ -37,7 +37,7 @@ def get_digital_instruments_v4():
             print(f"Received instruments! Keys: {list(api.api.instruments.keys())}")
             if "instruments" in api.api.instruments:
                 print(f"Count: {len(api.api.instruments['instruments'])}")
-                with open('scratch/digital_instruments_v4.json', 'w') as f:
+                with open('tests/fixtures/digital_instruments_v4.json', 'w') as f:
                     json.dump(api.api.instruments, f, indent=2)
             return
         time.sleep(0.5)

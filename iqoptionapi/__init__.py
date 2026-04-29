@@ -1,6 +1,6 @@
 """A python wrapper for IQ Option API."""
 
-__version__ = "9.0.000"
+__version__ = "9.1.000"
 
 import logging
 

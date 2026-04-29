@@ -339,7 +339,10 @@ class OrdersMixin:
         """
         SPRINT 14: Usa _wait_result con result_event_store.
         """
-        return self._wait_result(id, self.api.game_betinfo, self.api.result_event_store, timeout)
+        res = self._wait_result(id, self.api.game_betinfo, self.api.result_event_store, timeout)
+        if isinstance(res, dict):
+            return res.get("win", res.get("status"))
+        return res
 
     def check_win_v2(self, id, timeout=60):
         return self.check_win(id, timeout=timeout)
@@ -358,14 +361,19 @@ class OrdersMixin:
         """
         SPRINT 14: Usa _wait_result con socket_option_closed_event.
         """
-        # Intentar obtener de socket_option_closed primero (digital usa este store en S14)
-        return self._wait_result(order_id, self.api.socket_option_closed, self.api.socket_option_closed_event, timeout)
+        res = self._wait_result(order_id, self.api.socket_option_closed, self.api.socket_option_closed_event, timeout)
+        if isinstance(res, dict):
+            msg = res.get("msg", {})
+            return msg.get("win", msg.get("status"))
+        return res
 
     def check_win_digital_v2(self, order_id):
         """
         SPRINT 14: Usa _wait_result con position_changed_event_store y listinfodata.
         """
         res = self._wait_result(order_id, self.api.listinfodata, self.api.position_changed_event_store, timeout=60)
+        if isinstance(res, dict):
+            return res.get("win", res.get("status"))
         return (True, res) if res else (False, None)
 
     def get_betinfo(self, id):

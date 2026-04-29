@@ -1,0 +1,35 @@
+[
+  {
+    "request_id": "",
+    "name": "instruments",
+    "msg": {
+      "user_group_id": 191,
+      "is_regulated": false,
+      "type": "crypto",
+      "instruments": []
+    },
+    "status": 2000
+  },
+  {
+    "request_id": "",
+    "name": "instruments",
+    "msg": {
+      "user_group_id": 191,
+      "is_regulated": false,
+      "type": "forex",
+      "instruments": []
+    },
+    "status": 2000
+  },
+  {
+    "request_id": "",
+    "name": "instruments",
+    "msg": {
+      "user_group_id": 191,
+      "is_regulated": false,
+      "type": "cfd",
+      "instruments": []
+    },
+    "status": 2000
+  }
+]
