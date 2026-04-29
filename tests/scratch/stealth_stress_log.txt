@@ -1,6 +1,0 @@
-2026-04-28 00:14:44,168 - INFO - ═══════════════════════════════════════════════════
-2026-04-28 00:14:44,177 - INFO -   Sprint 6 — Stealth Stress Test (v9.0.0 Candidate)
-2026-04-28 00:14:44,177 - INFO - ═══════════════════════════════════════════════════
-2026-04-28 00:14:44,572 - INFO - Connecting WITHOUT WARP...
-2026-04-28 00:15:06,595 - INFO - Connected successfully. Starting Accelerated Stealth Test.
-2026-04-28 00:17:12,485 - WARNING - Disconnection detected at cycle 4! Reconnecting...
