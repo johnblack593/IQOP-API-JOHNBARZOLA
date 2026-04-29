@@ -6,6 +6,7 @@ Para el bot cuando las pérdidas superan umbrales definidos.
 Un bot sin circuit breaker puede perder toda la cuenta en minutos.
 """
 from enum import Enum
+from iqoptionapi.core.logger import get_logger
 import time
 from typing import Optional
 
@@ -46,6 +47,7 @@ class CircuitBreaker:
         self._trips_today = 0
         self._last_trip_time: float = 0.0
         self._half_open_test_done = False
+        self.logger = get_logger(__name__)
 
     @property
     def state(self) -> CircuitBreakerState:
@@ -139,6 +141,20 @@ class CircuitBreaker:
                 self._half_open_test_done = True
                 return True
         return False
+
+    def record_success(self) -> None:
+        """Registra un éxito (ej: reconexión) para cerrar el circuito."""
+        self._consecutive_losses = 0
+        if self._state != CircuitBreakerState.CLOSED:
+            self._state = CircuitBreakerState.CLOSED
+            self.logger.info("CircuitBreaker: Circuito CERRADO tras éxito.")
+
+    def record_failure(self, reason: str = "General failure") -> None:
+        """Registra un fallo no relacionado con trading (ej: error de red)."""
+        self._consecutive_losses += 1
+        self.logger.warning("CircuitBreaker: Fallo registrado: %s", reason)
+        if self._consecutive_losses >= self.max_consecutive_losses:
+            self._trip(reason)
 
     def reset_session(self, current_balance: float) -> None:
         """Resetea métricas de sesión."""

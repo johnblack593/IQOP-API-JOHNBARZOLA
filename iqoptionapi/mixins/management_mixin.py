@@ -1,9 +1,7 @@
 import threading
 import time
-import logging
 from iqoptionapi.core.logger import get_logger
 import iqoptionapi.core.config as config
-from iqoptionapi.core.ratelimit import TokenBucket
 from iqoptionapi.core.utils import nested_dict
 
 class ManagementMixin:
@@ -63,10 +61,17 @@ class ManagementMixin:
 
     def _reconnect_with_backoff(self):
         """
-        SPRINT 7/9: Reconexión delegada al ReconnectManager.
+        SPRINT 11: Reconexión protegida por CircuitBreaker.
         """
         logger = get_logger(__name__)
+        from iqoptionapi.circuit_breaker import CircuitBreakerState
+
         while True:
+            # SPRINT 11: Guard ante circuito abierto (ej: por baneo o fallos repetidos)
+            if hasattr(self, 'circuit_breaker') and self.circuit_breaker.state == CircuitBreakerState.OPEN:
+                logger.error("CircuitBreaker is OPEN. Reconnection aborted to prevent further damage.")
+                return False
+
             try:
                 # El manager maneja el delay y el límite de intentos (lanza MaxReconnectAttemptsError)
                 self._reconnect_manager.wait()
@@ -81,15 +86,26 @@ class ManagementMixin:
                 if status:
                     logger.info("Reconnected successfully.")
                     self._reconnect_manager.reset()
+                    if hasattr(self, 'circuit_breaker'):
+                        self.circuit_breaker.record_success()
                     return True
+                else:
+                    logger.warning("Connect failed during backoff: %s", reason)
+                    if hasattr(self, 'circuit_breaker'):
+                        self.circuit_breaker.record_failure(reason)
                 
             except Exception as e:
                 # Capturamos MaxReconnectAttemptsError aquí
                 from iqoptionapi.core.reconnect import MaxReconnectAttemptsError
                 if isinstance(e, MaxReconnectAttemptsError):
                     logger.error("Reconnection failed: Max attempts exhausted.")
+                    if hasattr(self, 'circuit_breaker'):
+                        self.circuit_breaker.record_failure("Max reconnect attempts reached")
                     raise e
+                
                 logger.error("Reconnect attempt failed: %s", e)
+                if hasattr(self, 'circuit_breaker'):
+                    self.circuit_breaker.record_failure(str(e))
 
     # --- Métodos migrados de stable_api.py ---
 

@@ -1,16 +1,21 @@
-from iqoptionapi.core.logger import get_logger
 import iqoptionapi.core.constants as OP_code
 import time
 
 class StreamsMixin:
     def subscribe_candles(self, active, size):
         """
-        SPRINT 7: Suscribe a velas con cache local.
+        SPRINT 11: Delegar al subscription_manager para emulación de browser.
         """
+        if hasattr(self, 'subscription_manager'):
+            self.subscription_manager.subscribe_candle(active, size)
+            return True
         self.api.subscribe_candles(active, size)
         return True
 
     def unsubscribe_candles(self, active, size):
+        if hasattr(self, 'subscription_manager'):
+            self.subscription_manager.unsubscribe_candle(active, size)
+            return True
         self.api.unsubscribe_candles(active, size)
         return True
 
@@ -31,7 +36,8 @@ class StreamsMixin:
             return None
 
     def get_realtime_candles(self, active, size):
-        self.api.subscribe_candles(OP_code.ACTIVES[active], size)
+        # Delegar a subscribe_candles que ya usa el manager
+        self.subscribe_candles(OP_code.ACTIVES[active], size)
         start_t = time.time()
         while self.api.candles.get_candle(OP_code.ACTIVES[active], size) is None and time.time() - start_t < 20:
             pass
@@ -43,15 +49,20 @@ class StreamsMixin:
                 self.api._candle_callbacks = {}
             key = f"{active}_{size}"
             self.api._candle_callbacks[key] = callback
-        self.api.subscribe_candles(active, size)
+        self.subscribe_candles(active, size)
 
     def unsubscribe_candle_v2(self, active, size):
         key = f"{active}_{size}"
         if hasattr(self.api, '_candle_callbacks'):
             self.api._candle_callbacks.pop(key, None)
-        self.api.unsubscribe_candles(active, size)
+        self.unsubscribe_candles(active, size)
 
     def subscribe_strike_list(self, ACTIVE, expiration_period):
+        if hasattr(self, 'subscription_manager'):
+            # El manager aún no tiene método específico para strike list, 
+            # pero podemos usar el genérico o llamarlo directamente si es de baja frecuencia.
+            # Por ahora lo dejamos directo pero monitoreado.
+            pass
         self.api.subscribe_instrument_quotes_generated(ACTIVE, expiration_period)
 
     def unsubscribe_strike_list(self, ACTIVE, expiration_period):
@@ -61,6 +72,9 @@ class StreamsMixin:
 
     def subscribe_live_deal(self, name, active, _type, buffersize):
         active_id = OP_code.ACTIVES[active]
+        if hasattr(self, 'subscription_manager'):
+             # Encolar si es posible (pendiente implementar en manager para live_deal)
+             pass
         self.api.Subscribe_Live_Deal(name, active_id, _type)
 
     def unsubscribe_live_deal(self, name, active, _type):

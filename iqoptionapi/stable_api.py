@@ -9,8 +9,8 @@ from iqoptionapi.core.logger import get_logger
 from iqoptionapi.core.reconnect import ReconnectManager
 from iqoptionapi.core.idempotency import IdempotencyRegistry
 from iqoptionapi.core.security import CredentialStore
-from iqoptionapi.core.ratelimit import TokenBucket, RateLimitExceededError, rate_limited
-from iqoptionapi.http.session import close_shared_session
+from iqoptionapi.core.ratelimit import TokenBucket, rate_limited
+from iqoptionapi.http.session import close_shared_session, CHROME_HEADERS
 import iqoptionapi.core.config as config
 import iqoptionapi
 import logging
@@ -78,7 +78,7 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         self.get_digital_spot_profit_after_sale_data = nested_dict(2, int)
         self.get_realtime_strike_list_temp_data = {}
         self.get_realtime_strike_list_temp_expiration = 0
-        self.SESSION_HEADER = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36', 'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8', 'Referer': 'https://iqoption.com/'}
+        self.SESSION_HEADER = CHROME_HEADERS
         self.SESSION_COOKIE = {}
         self.positions_state_data = {}
         self.pending_orders_data = {}

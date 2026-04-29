@@ -968,9 +968,22 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.websocket_error_reason = None
 
         self.websocket_client = WebsocketClient(self)
-
-        self.websocket_thread = threading.Thread(target=self.websocket.run_forever, kwargs={'sslopt': {
-                                                 "check_hostname": True, "cert_reqs": ssl.CERT_REQUIRED, "ca_certs": certifi.where()}})  # for fix pyinstall error: cafile, capath and cadata cannot be all omitted
+        from iqoptionapi.http.session import CHROME_HEADERS
+        
+        # SPRINT 11: Inyectar headers de browser en el handshake del WebSocket
+        ws_headers = [f"{k}: {v}" for k, v in CHROME_HEADERS.items() if k in ["User-Agent", "Origin"]]
+        
+        self.websocket_thread = threading.Thread(
+            target=self.websocket.run_forever, 
+            kwargs={
+                'sslopt': {
+                    "check_hostname": True, 
+                    "cert_reqs": ssl.CERT_REQUIRED, 
+                    "ca_certs": certifi.where()
+                },
+                'header': ws_headers
+            }
+        )
         self.websocket_thread.daemon = True
         self.websocket_thread.start()
         

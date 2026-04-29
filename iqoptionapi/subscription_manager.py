@@ -17,7 +17,7 @@ class SubscriptionManager:
     
     MAX_SUBSCRIPTIONS_PER_SECOND = 3  # Valor inicial seguro
     MIN_DELAY_BETWEEN_SUBS = 0.4      # segundos
-    MAX_CONCURRENT_SUBSCRIPTIONS = 50 # límite seguro
+    MAX_CONCURRENT_SUBSCRIPTIONS = 15 # imita el límite del navegador real
     
     def __init__(self, api_instance):
         self._api = api_instance
