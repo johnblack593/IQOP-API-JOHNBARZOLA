@@ -2,7 +2,7 @@
 Handler para mensajes position-changed.
 Maneja cierre de posiciones Digital/CFD/Forex.
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -83,3 +83,4 @@ class PositionChanged:
 
         except Exception as e:
             logger.warning("position_changed handler error: %s", e)
+

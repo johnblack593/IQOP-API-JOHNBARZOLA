@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
+from iqoptionapi.core.ratelimit import TokenBucket, RateLimitExceededError
 
 
 class TestTokenBucket(unittest.TestCase):
@@ -59,3 +59,4 @@ class TestTokenBucket(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

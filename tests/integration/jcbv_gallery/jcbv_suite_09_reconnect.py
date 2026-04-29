@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 import time
 
-from iqoptionapi.reconnect import ReconnectManager, MaxReconnectAttemptsError
+from iqoptionapi.core.reconnect import ReconnectManager, MaxReconnectAttemptsError
 
 class TestReconnectManager(unittest.TestCase):
 
@@ -74,3 +74,4 @@ class TestReconnectManager(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

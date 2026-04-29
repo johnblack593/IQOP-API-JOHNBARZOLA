@@ -1,5 +1,5 @@
 """Module for IQ option websocket."""
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 
 def commission_changed(api, message):
     if message["name"] == "commission-changed":
@@ -10,3 +10,4 @@ def commission_changed(api, message):
         commission = message["msg"]["commission"]["value"]
         api.subscribe_commission_changed_data[instrument_type][Active_name][api.timesync.server_timestamp] = int(
             commission)
+

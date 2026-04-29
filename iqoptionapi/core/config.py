@@ -87,7 +87,7 @@ CB_MAX_DRAWDOWN_PCT:       float = 0.10
 CB_RECOVERY_WAIT_SECS:     float = 300.0
 
 # --- Trade Journal ---
-JOURNAL_DIR: str = "data/journal"
+JOURNAL_DIR: str = "docs/data/journal"
 
 # --- Asset Scanner ---
 SCANNER_MIN_PAYOUT:       float = 0.80   # 80% mínimo
@@ -106,7 +106,7 @@ CONSENSUS_MIN_AGREEMENT: float = 0.66
 CONSENSUS_MIN_SCORE:     float = 0.60
 
 # --- Candle Cache ---
-CACHE_DIR:           str = "data/candles"
+CACHE_DIR:           str = "docs/data/candles"
 CANDLE_BUFFER_MAX:   int = int(os.getenv("CANDLE_BUFFER_MAX", "500"))
 CANDLE_TTL_SECONDS:  int = int(os.getenv("CANDLE_TTL_SECONDS", "86400"))  # 24h
 CACHE_MAX_DISK_DAYS: int = 30

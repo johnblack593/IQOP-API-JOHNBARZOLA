@@ -8,7 +8,7 @@ The server responds to marginal-{type}.place-market-order with:
 
 This handler captures the order ID and signals the margin_order_event.
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -54,3 +54,4 @@ def margin_order_result(api, message):
 
         if hasattr(api, "margin_order_event"):
             api.margin_order_event.set()
+

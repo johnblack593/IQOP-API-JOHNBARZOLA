@@ -7,7 +7,7 @@ import threading
 import time
 import logging
 from collections import deque
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 class SubscriptionManager:
     """
@@ -135,3 +135,4 @@ class SubscriptionManager:
         self._stop_event.set()
         if self._dispatcher_thread.is_alive():
             self._dispatcher_thread.join(timeout=1.0)
+

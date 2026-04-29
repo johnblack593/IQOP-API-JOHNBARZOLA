@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from iqoptionapi.stable_api import IQ_Option
-from iqoptionapi.ratelimit import TokenBucket
+from iqoptionapi.core.ratelimit import TokenBucket
 
 
 class TestBuyGuardRateLimit:
@@ -13,7 +13,7 @@ class TestBuyGuardRateLimit:
         iq.api = MagicMock()
         # Forzar agotamiento inmediato del rate limiter
         # capacity=0.0 hará que cualquier consume() falle si refill es lento
-        iq._rate_limiter = TokenBucket(capacity=0.0, refill_rate=0.001, block=False)
+        iq._order_bucket = TokenBucket(capacity=0.0, refill_rate=0.001, block=False)
         return iq
 
     def test_buy_blocked_returns_false_none(self, iq):
@@ -70,7 +70,7 @@ class TestBuyGuardRateLimit:
         iq = IQ_Option("test@example.com", "password")
         iq.api = MagicMock()
         # 1 token disponible, refill muy lento
-        iq._rate_limiter = TokenBucket(capacity=1.0, refill_rate=0.0001, block=False)
+        iq._order_bucket = TokenBucket(capacity=1.0, refill_rate=0.0001, block=False)
         
         # Primera llamada - OK
         # Simular que buyv3 retorna algo para que no falle el resto del método buy()
@@ -83,3 +83,4 @@ class TestBuyGuardRateLimit:
         result = iq.buy(10.0, "EURUSD", "call", 1)
         assert result == (False, None)
         assert iq.api.buyv3.call_count == 1
+

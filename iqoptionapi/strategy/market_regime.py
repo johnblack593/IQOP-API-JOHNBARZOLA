@@ -8,7 +8,7 @@ Reglas de interpretación ADX:
   20-25     → TRANSITIONING
 """
 from typing import Literal
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 RegimeType = Literal["trending", "ranging", "transitioning"]
 
@@ -141,3 +141,4 @@ class MarketRegime:
             "n_candles_used": n,
             "is_reliable": n >= period * 2,
         }
+

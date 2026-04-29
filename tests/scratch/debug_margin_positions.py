@@ -9,7 +9,7 @@ PASSWORD = os.getenv("IQ_PASSWORD", "")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from iqoptionapi.stable_api import IQ_Option
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 def main():
     iq = IQ_Option(EMAIL, PASSWORD)
@@ -52,3 +52,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

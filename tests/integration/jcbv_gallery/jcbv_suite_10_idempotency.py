@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 import time
 
-from iqoptionapi.idempotency import IdempotencyRegistry
+from iqoptionapi.core.idempotency import IdempotencyRegistry
 
 class TestIdempotencyRegistry(unittest.TestCase):
 
@@ -63,3 +63,4 @@ class TestIdempotencyRegistry(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

@@ -51,7 +51,7 @@ class TestSuite_08_AssetResolution(unittest.TestCase):
 
     def test_03_dynamic_actives_catalog(self):
         """Verify the live asset catalog was loaded during connect()"""
-        from iqoptionapi.constants import ACTIVES
+        from iqoptionapi.core.constants import ACTIVES
         self.assertGreater(len(ACTIVES), 50, 
                           f"ACTIVES catalog too small: {len(ACTIVES)}")
         log.info(f"✅ 8.3 Dynamic ACTIVES catalog: {len(ACTIVES)} assets loaded")
@@ -63,5 +63,6 @@ class TestSuite_08_AssetResolution(unittest.TestCase):
         self.assertIsNotNone(actives)
         self.assertGreater(len(actives), 0)
         log.info(f"✅ 8.4 ACTIVES OPCODE updated: {len(actives)} instruments")
+
 
 

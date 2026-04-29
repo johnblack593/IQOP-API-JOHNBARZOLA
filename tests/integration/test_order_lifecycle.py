@@ -7,7 +7,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from iqoptionapi.stable_api import IQ_Option
-import iqoptionapi.config as config
+import iqoptionapi.core.config as config
 
 # Configuración de logging para ver los handlers en acción
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -78,3 +78,4 @@ def test_lifecycle():
 
 if __name__ == "__main__":
     test_lifecycle()
+

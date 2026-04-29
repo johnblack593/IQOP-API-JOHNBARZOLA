@@ -3,7 +3,7 @@ MarketQualityMonitor — detecta activos con spread anormal.
 Los robots deben consultar is_tradeable() antes de abrir cualquier posición.
 READ-ONLY: nunca modifica estado de la API.
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 
 class MarketQualityMonitor:
@@ -129,3 +129,4 @@ class MarketQualityMonitor:
             "is_tradeable": self.is_tradeable(active_id, size),
             "n_candles_analyzed": n_candles,
         }
+

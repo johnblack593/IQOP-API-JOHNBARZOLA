@@ -6,7 +6,7 @@ on timeout/retry scenarios.
 import uuid
 import threading
 import time
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -98,3 +98,4 @@ class IdempotencyRegistry:
         if purged:
             logger.debug("Idempotency: purged %d expired entries.", purged)
         return purged
+

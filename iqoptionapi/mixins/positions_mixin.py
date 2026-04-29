@@ -1,11 +1,13 @@
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
+import iqoptionapi.core.config as config
 
 class PositionsMixin:
     def get_open_positions(self, instrument_type=None, realtime_pnl=False):
         """
-        SPRINT 7: Retorna posiciones abiertas.
+        SPRINT 7: Retorna posiciones abiertas locales.
         realtime_pnl=True: Usa position_changed_data para PnL dinámico.
         instrument_type: "forex" | "crypto" | "cfd" | "digital-option" | None
         """
@@ -154,3 +156,129 @@ class PositionsMixin:
             return self.api.result
         
         return None
+
+    # --- Métodos migrados de stable_api.py ---
+
+    def get_positions(self, instrument_type):
+        self.api.positions_event.clear()
+        self.api.get_positions(instrument_type)
+        is_ready = self.api.positions_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for positions")
+            return False, None
+        
+        if self.api.positions.get("status") == 2000:
+            return True, self.api.positions["msg"]
+        else:
+            return False, None
+
+    def get_position(self, position_id):
+        self.api.position_event.clear()
+        self.api.get_position(position_id)
+        is_ready = self.api.position_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for position")
+            return False, None
+        
+        if self.api.position.get("status") == 2000:
+            return True, self.api.position["msg"]
+        else:
+            return False, None
+
+    def get_digital_position_by_position_id(self, position_id):
+        self.api.position_event.clear()
+        self.api.get_digital_position(position_id)
+        is_ready = self.api.position_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for digital position")
+            return False, None
+        return True, self.api.position
+
+    def get_digital_position(self, order_id):
+        self.api.digital_position_event.clear()
+        self.api.get_digital_position(order_id)
+        is_ready = self.api.digital_position_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for digital position")
+            return False, None
+        return True, self.api.digital_position
+
+    def get_position_history_v2(self, instrument_type, limit, offset, start, end):
+        self.api.position_history_v2_event.clear()
+        self.api.get_position_history_v2(instrument_type, limit, offset, start, end)
+        is_ready = self.api.position_history_v2_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for position history v2")
+            return False, None
+        
+        if self.api.position_history_v2.get("status") == 2000:
+            return True, self.api.position_history_v2["msg"]
+        else:
+            return False, None
+
+    def get_available_leverages(self, instrument_type, actives_id):
+        self.api.available_leverages_event.clear()
+        self.api.get_available_leverages(instrument_type, actives_id)
+        is_ready = self.api.available_leverages_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for available leverages")
+            return False, None
+        
+        if self.api.available_leverages.get("status") == 2000:
+            return True, self.api.available_leverages["msg"]
+        else:
+            return False, None
+
+    def get_overnight_fee(self, instrument_type, actives_id):
+        self.api.overnight_fee_event.clear()
+        self.api.get_overnight_fee(instrument_type, actives_id)
+        is_ready = self.api.overnight_fee_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for overnight fee")
+            return False, None
+        
+        if self.api.overnight_fee.get("status") == 2000:
+            return True, self.api.overnight_fee["msg"]
+        else:
+            return False, None
+
+    def close_position(self, position_id):
+        self.api.close_position_event.clear()
+        self.api.close_position(position_id)
+        is_ready = self.api.close_position_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for close position")
+            return False
+        return self.api.close_position_data.get("status") == 2000
+
+    def close_position_v2(self, position_id):
+        self.api.close_position_event.clear()
+        self.api.close_position(position_id)
+        is_ready = self.api.close_position_event.wait(timeout=config.TIMEOUT_WS_DATA)
+        if not is_ready:
+            get_logger(__name__).warning("Timeout waiting for close position v2")
+            return False
+        return True
+
+    def get_all_open_positions(self, timeout: float = 10.0) -> dict:
+        """
+        Retorna dict con posiciones abiertas por tipo de instrumento.
+        Llama en paralelo los 4 tipos para minimizar latencia.
+        """
+        import concurrent.futures
+        instrument_types = ["binary-option", "turbo-option", "digital-option", "blitz"]
+        result = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(self.get_positions, itype): itype
+                for itype in instrument_types
+            }
+            for future in concurrent.futures.as_completed(futures):
+                itype = futures[future]
+                try:
+                    success, data = future.result()
+                    result[itype] = data if success else []
+                except Exception as e:
+                    get_logger(__name__).error("get_all_open_positions error for %s: %s", itype, e)
+                    result[itype] = []
+        return result

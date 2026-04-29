@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from iqoptionapi.stable_api import IQ_Option
-from iqoptionapi.logger import configure_root_logger
+from iqoptionapi.core.logger import configure_root_logger
 
 configure_root_logger(logging.INFO)
 logger = logging.getLogger("verify_assets_full")
@@ -138,3 +138,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

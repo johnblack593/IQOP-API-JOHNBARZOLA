@@ -1,7 +1,7 @@
 import time
 from tests.practice_suite.config import PRACTICE_AMOUNT, PRACTICE_TIMEOUT, get_available_binary_asset
 from iqoptionapi.stable_api import IQ_Option
-from iqoptionapi.ratelimit import RateLimitExceededError
+from iqoptionapi.core.ratelimit import RateLimitExceededError
 from tests.practice_suite.report import TestResult, ReportCollector
 
 SUITE_NAME = "E_Binary"
@@ -98,3 +98,4 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         collector.record(TestResult(SUITE_NAME, "E-06: Rate limiter under rapid fire", "PASSED", detail=f"Rejected {rejected}/10", duration=time.time() - start))
     except Exception as e:
         collector.record(TestResult(SUITE_NAME, "E-06: Rate limiter under rapid fire", "FAILED", detail=str(e), duration=time.time() - start))
+

@@ -1,9 +1,9 @@
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 
 def initialization_data(api, message):
     if message["name"] == "initialization-data":
         msg = message["msg"]
-        from iqoptionapi.logger import get_logger
+        from iqoptionapi.core.logger import get_logger
         get_logger(__name__).info("Received initialization-data keys: %s", list(msg.keys()))
         api.api_option_init_all_result_v2 = msg
         api._init_data_received = True
@@ -49,3 +49,4 @@ def initialization_data(api, message):
                 "expirations": expirations,
             }
         api.blitz_instruments = parsed
+

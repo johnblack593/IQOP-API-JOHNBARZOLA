@@ -1,60 +1,40 @@
-import unittest
-import os
-import shutil
-import numpy as np
+"""
+Tests para CandleCache (versión simple con deque y TTL).
+"""
+import pytest
+import time
 from iqoptionapi.candle_cache import CandleCache
 
-class TestCandleCache(unittest.TestCase):
-    def setUp(self):
-        self.test_dir = "tests/data/candles"
-        if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
-        self.cache = CandleCache(cache_dir=self.test_dir, max_ram_candles=10)
+class TestCandleCache:
+    @pytest.fixture
+    def cache(self):
+        return CandleCache()
+
+    def test_add_and_get_candles(self, cache):
+        candle = {"at": 100, "open": 1.1, "close": 1.2}
+        cache.add_candle(1, 60, candle)
         
-        # Mock candles: [timestamp, open, high, low, close]
-        self.mock_candles = np.array([
-            [100, 1.1, 1.2, 1.0, 1.1],
-            [160, 1.1, 1.3, 1.1, 1.2],
-            [220, 1.2, 1.4, 1.2, 1.3],
-        ])
+        candles = cache.get_candles(1, 60)
+        assert len(candles) == 1
+        assert candles[0]["at"] == 100
 
-    def tearDown(self):
-        if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
+    def test_maxlen_enforced(self, cache):
+        # El maxlen por defecto viene de config.CANDLE_BUFFER_MAX
+        # Pero podemos ajustarlo con set_maxlen
+        cache.set_maxlen(1, 60, 2)
+        
+        cache.add_candle(1, 60, {"at": 100})
+        cache.add_candle(1, 60, {"at": 110})
+        cache.add_candle(1, 60, {"at": 120})
+        
+        candles = cache.get_candles(1, 60)
+        assert len(candles) == 2
+        # deque(appendleft) -> [120, 110]
+        assert candles[0]["at"] == 120
+        assert candles[1]["at"] == 110
 
-    def test_put_and_get_roundtrip(self):
-        self.cache.put("EURUSD", 60, self.mock_candles)
-        res = self.cache.get("EURUSD", 60, 2)
-        self.assertEqual(len(res), 2)
-        self.assertEqual(res[-1][0], 220)
-
-    def test_miss_returns_none(self):
-        res = self.cache.get("GBPUSD", 60, 1)
-        self.assertIsNone(res)
-
-    def test_invalidate_clears_l1(self):
-        self.cache.put("EURUSD", 60, self.mock_candles)
-        self.cache.invalidate("EURUSD", 60)
-        res = self.cache.get("EURUSD", 60, 1)
-        self.assertIsNone(res) # Miss because L1 is empty
-
-    def test_l2_persistence_roundtrip(self):
-        self.cache.put("EURUSD", 60, self.mock_candles)
-        # Create new cache instance pointing to same dir
-        new_cache = CandleCache(cache_dir=self.test_dir)
-        # L2 logic in my implementation requires a missing L1 to trigger (which it is for new instance)
-        # Actually my get() only checks L1 for now as per simplified implementation.
-        # But I verified L2 file exists.
-        path = os.path.join(self.test_dir, "EURUSD_60.npy")
-        self.assertTrue(os.path.exists(path))
-        data = np.load(path)
-        self.assertEqual(len(data), 3)
-
-    def test_max_ram_evicts_oldest(self):
-        small_cache = CandleCache(cache_dir=self.test_dir, max_ram_candles=2)
-        small_cache.put("EURUSD", 60, self.mock_candles) # 3 candles
-        res = small_cache.get("EURUSD", 60, 2)
-        self.assertEqual(len(res), 2) # Only last 2 kept
-
-if __name__ == '__main__':
-    unittest.main()
+    def test_stats(self, cache):
+        cache.add_candle(1, 60, {"at": 100})
+        stats = cache.stats()
+        assert stats["buffers"] == 1
+        assert stats["total_candles"] == 1

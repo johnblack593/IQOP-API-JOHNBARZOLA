@@ -1,7 +1,7 @@
 """
 Handler for price alerts.
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -32,3 +32,4 @@ class Alerts:
                 
             if hasattr(api, "alerts_event"):
                 api.alerts_event.set()
+

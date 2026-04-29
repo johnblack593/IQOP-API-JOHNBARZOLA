@@ -1,5 +1,5 @@
 import time
-from iqoptionapi.time_sync import _clock
+from iqoptionapi.core.time_sync import _clock
 
 def time_sync(api, message):
     if message["name"] == "timeSync":
@@ -11,3 +11,4 @@ def time_sync(api, message):
         # Backward compatibility para Sprint 6
         api._local_time_at_sync = time.time()
         api.server_timestamp = message["msg"] / 1000
+

@@ -7,7 +7,7 @@ Todas las funciones lanzan ValueError con mensajes descriptivos.
 Nunca retornan None silenciosamente. Usar antes de enviar órdenes
 para proteger contra pérdidas por parámetros inválidos.
 """
-from iqoptionapi.config import VALID_CANDLE_SIZES
+from iqoptionapi.core.config import VALID_CANDLE_SIZES
 
 
 class TradingValidationError(ValueError):
@@ -206,4 +206,5 @@ class Validator:
             return False, str(e)
         except Exception as e:
             return False, f"Unexpected validation error: {e}"
+
 

@@ -3,10 +3,10 @@ import time
 import certifi
 import iqoptionapi
 from iqoptionapi.stable_api import IQ_Option
-from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
+from iqoptionapi.core.ratelimit import TokenBucket, RateLimitExceededError
 from iqoptionapi.http.session import get_shared_session
-from iqoptionapi.reconnect import ReconnectManager
-from iqoptionapi.idempotency import IdempotencyRegistry
+from iqoptionapi.core.reconnect import ReconnectManager
+from iqoptionapi.core.idempotency import IdempotencyRegistry
 
 from tests.practice_suite.report import TestResult, ReportCollector
 
@@ -90,3 +90,4 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
         collector.record(TestResult(SUITE_NAME, "A-05: Idempotency lifecycle", "PASSED", duration=time.time() - start))
     except Exception as e:
         collector.record(TestResult(SUITE_NAME, "A-05: Idempotency lifecycle", "FAILED", detail=str(e), duration=time.time() - start))
+

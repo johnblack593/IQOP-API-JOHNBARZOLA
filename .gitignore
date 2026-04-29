@@ -37,14 +37,14 @@ venv/
 **/digital_certification*.json
 
 # Volcados crudos de WebSocket (pueden contener tokens de sesión)
-examples/debug_msg_*.json
-examples/debug_sprint*.json   # ← scripts de sprint también, son temporales
+tests/examples/debug_msg_*.json
+tests/examples/debug_sprint*.json   # ← scripts de sprint también, son temporales
 
 # ============================================================
 # PERMITIDOS — datos del sistema sin PII (subir con git add -f)
 # ============================================================
 # open_time.json                → NO ignorar, es catálogo del sistema
-# examples/debug_actives_kyc_map.json → NO ignorar, es mapa de IDs
+# tests/examples/debug_actives_kyc_map.json → NO ignorar, es mapa de IDs
 # iqoptionapi/constants.py      → NO ignorar, es crítico
 
 # Custom test scripts temporales
@@ -53,12 +53,12 @@ scripts/
 
 # Otros
 .ruff_cache
-examples/debug_output.txt
+tests/examples/debug_output.txt
 
 # JCBV-NEXUS Integration Reports
 tests/reports/*.json
 !tests/reports/*.md
 
 # Scratch — capturas grandes de sesión (no versionar)
-scratch/*.json
-scratch/logs/
+tests/scratch/*.json
+tests/scratch/logs/

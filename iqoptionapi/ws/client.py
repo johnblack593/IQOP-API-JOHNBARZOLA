@@ -4,7 +4,7 @@ import json
 import threading
 import logging
 from collections import defaultdict
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 import websocket
 from iqoptionapi.ws.received.market.technical_indicators import technical_indicators
 from iqoptionapi.ws.received.auth.time_sync import time_sync
@@ -32,7 +32,7 @@ from iqoptionapi.ws.received.orders.api_game_betinfo_result import api_game_beti
 from iqoptionapi.ws.received.market.traders_mood_changed import traders_mood_changed
 from iqoptionapi.ws.received.orders.order import OrderState
 from iqoptionapi.ws.received.positions.position import position
-from iqoptionapi.ws.received.positions import positions
+from iqoptionapi.ws.received.positions.positions import positions
 from iqoptionapi.ws.received.orders.order_placed_temp import order_placed_temp
 from iqoptionapi.ws.received.orders.deferred_orders import deferred_orders
 from iqoptionapi.ws.received.positions.history_positions import history_positions
@@ -284,3 +284,4 @@ class WebsocketClient(object):
             t.start()
         else:
             logger.info("No reconnect callback registered — manual reconnect required.")
+

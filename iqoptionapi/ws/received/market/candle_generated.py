@@ -1,5 +1,5 @@
 """Module for IQ option websocket."""
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 
 def candle_generated_realtime(api, message, dict_queue_add):
     if message["name"] == "candle-generated":
@@ -30,3 +30,4 @@ def candle_generated_realtime(api, message, dict_queue_add):
                 logging.getLogger(__name__).warning("on_candle callback error: %s", e)
 
         api.candle_generated_check[active][size] = True
+

@@ -3,7 +3,7 @@ import time
 import json
 import logging
 from iqoptionapi.stable_api import IQ_Option
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -69,3 +69,4 @@ def certify_digital():
 
 if __name__ == "__main__":
     certify_digital()
+

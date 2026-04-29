@@ -13,7 +13,7 @@ SPRINT-14 CONTEXT:
     a transparent fallback for get_instruments()
 """
 
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -196,3 +196,4 @@ def get_instruments_from_init(api_instance, instrument_type: str) -> dict:
             "Init-data fallback failed for %s: %s", instrument_type, e
         )
         return {"instruments": []}
+

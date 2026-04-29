@@ -1,4 +1,4 @@
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 from iqoptionapi.http.session import get_shared_session
 import json
 import time
@@ -77,7 +77,7 @@ from iqoptionapi.ws.objects.candles import Candles
 from iqoptionapi.ws.objects.listinfodata import ListInfoData
 from iqoptionapi.ws.objects.betinfo import Game_betinfo_data
 from collections import defaultdict
-from iqoptionapi.utils import nested_dict
+from iqoptionapi.core.utils import nested_dict
 
 
 
@@ -241,6 +241,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.api_option_init_all_result_event = threading.Event()
         self.candles_event = threading.Event()
         self.ws_connected_event = threading.Event()
+        self.balance_changed_event = threading.Event()
         
         # Additional events for S1-03b
         self.position_history_event = threading.Event()
@@ -977,7 +978,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         # Sprint 6: STEALTH MODE Heartbeat Ping Loop
         self._start_heartbeat_loop()
 
-        from iqoptionapi.config import TIMEOUT_WS_CONNECT
+        from iqoptionapi.core.config import TIMEOUT_WS_CONNECT
         connected = self.ws_connected_event.wait(timeout=TIMEOUT_WS_CONNECT)
         if not connected:
             if self.check_websocket_if_error:
@@ -996,7 +997,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         Se detiene automáticamente cuando la conexión se cierra.
         """
         import random
-        from iqoptionapi.config import STEALTH_HEARTBEAT_INTERVAL, STEALTH_HEARTBEAT_JITTER
+        from iqoptionapi.core.config import STEALTH_HEARTBEAT_INTERVAL, STEALTH_HEARTBEAT_JITTER
         
         def _loop():
             # Wait for connection to open
@@ -1044,7 +1045,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         return response
 
     def send_ssid(self) -> bool:
-        from iqoptionapi.config import TIMEOUT_SSID_AUTH, POLLING_INTERVAL_FAST
+        from iqoptionapi.core.config import TIMEOUT_SSID_AUTH, POLLING_INTERVAL_FAST
         logger = get_logger(__name__)
         logger.info("Sending SSID for authentication: %s", self.SSID[:10] + "..." if self.SSID else "None")
         
@@ -1147,8 +1148,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             atexit.register(self.logout)
             self.send_ssid()
 
-        requests.utils.add_dict_to_cookiejar(
-            self.session.cookies, {"ssid": self.SSID})
+        self.session.cookies.set("ssid", self.SSID, domain="iqoption.com")
 
         self._init_data_received = False
         self.timesync.server_timestamp = None
@@ -1172,7 +1172,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         return True, None
 
     def close(self) -> None:
-        from iqoptionapi.config import TIMEOUT_THREAD_JOIN
+        from iqoptionapi.core.config import TIMEOUT_THREAD_JOIN
         if self.websocket:
             try:
                 self.websocket.close()
@@ -1212,3 +1212,4 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     @property
     def place_digital_option_v2(self):
         return DigitalOptionsPlaceDigitalOptionV2(self)
+

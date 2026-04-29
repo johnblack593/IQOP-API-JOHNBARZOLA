@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 from iqoptionapi.stable_api import IQ_Option
 from iqoptionapi.api import IQOptionAPI
 from iqoptionapi.ws.client import WebsocketClient
-from iqoptionapi.reconnect import MaxReconnectAttemptsError
+from iqoptionapi.core.reconnect import MaxReconnectAttemptsError
 
 class TestSendSsidMigration:
     @patch("iqoptionapi.api.threading.Event")
@@ -61,7 +61,7 @@ class TestCloseWithTimeout:
             mock_ws_prop.return_value = mock_ws
             api.websocket_thread = MagicMock()
             
-            from iqoptionapi.config import TIMEOUT_THREAD_JOIN
+            from iqoptionapi.core.config import TIMEOUT_THREAD_JOIN
             api.close()
             api.websocket_thread.join.assert_called_with(timeout=TIMEOUT_THREAD_JOIN)
 
@@ -119,10 +119,9 @@ class TestAutoReconnectCallback:
         sdk = IQ_Option("email", "pass")
         sdk._reconnect_manager = MagicMock()
         
-        # When connect is called, the 2nd time (success) it should trigger reset()
+        # When connect is called, the 2nd time (success) it should return success
         def mock_connect():
             if sdk.connect.call_count == 2:
-                sdk._reconnect_manager.reset()
                 return (True, None)
             return (False, "err")
 
@@ -188,3 +187,4 @@ class TestHeartbeatWatchdog:
         
         sdk.api._heartbeat_callback()
         assert sdk._last_heartbeat > 0
+

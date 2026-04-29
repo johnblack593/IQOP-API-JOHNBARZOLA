@@ -1,7 +1,7 @@
 """
 Handler para mensajes socket-option-closed.
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,3 +35,4 @@ class SocketOptionClosed:
 
         except Exception as e:
             logger.warning("socket_option_closed handler error: %s", e)
+

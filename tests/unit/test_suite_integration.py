@@ -188,7 +188,7 @@ class IntegrationTestRunner:
             return f"Tipos: {types} | Abiertos: {total}"
 
         def test_actives_kyc():
-            from iqoptionapi.constants import ACTIVES
+            from iqoptionapi.core.constants import ACTIVES
             assert len(ACTIVES) >= 100, \
                 f"ACTIVES tiene solo {len(ACTIVES)} entradas (esperado ≥100)"
             # Verificar IDs KYC de alta prioridad
@@ -248,12 +248,12 @@ class IntegrationTestRunner:
         print("\n=== CAPA 3 - Sincronizacion de reloj (time_sync) ===")
 
         def test_module_exists():
-            from iqoptionapi.time_sync import ServerClockSync, _clock
+            from iqoptionapi.core.time_sync import ServerClockSync, _clock
             assert _clock is not None
             return "Singleton _clock accesible"
 
         def test_offset_reasonable():
-            from iqoptionapi.time_sync import _clock
+            from iqoptionapi.core.time_sync import _clock
             # Dar tiempo al servidor para enviar timeSync
             time.sleep(3)
             offset = _clock.offset_seconds()
@@ -262,7 +262,7 @@ class IntegrationTestRunner:
             return f"Offset: {offset:.4f}s"
 
         def test_server_now():
-            from iqoptionapi.time_sync import _clock
+            from iqoptionapi.core.time_sync import _clock
             t_local  = time.time()
             t_server = _clock.now()
             diff = abs(t_server - t_local)
@@ -280,7 +280,7 @@ class IntegrationTestRunner:
         print("\n=== CAPA 4 - Rate Limiter e Idempotency ===")
 
         def test_token_bucket():
-            from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
+            from iqoptionapi.core.ratelimit import TokenBucket, RateLimitExceededError
             bucket = TokenBucket(refill_rate=10, capacity=10, block=False)
             # Debe permitir 10 consumos
             for _ in range(10):
@@ -294,7 +294,7 @@ class IntegrationTestRunner:
             return "TokenBucket: overflow detectado OK ✓"
 
         def test_idempotency():
-            from iqoptionapi.idempotency import IdempotencyRegistry
+            from iqoptionapi.core.idempotency import IdempotencyRegistry
             engine = IdempotencyRegistry()
             req_id = engine.register()
             assert req_id is not None
@@ -302,7 +302,7 @@ class IntegrationTestRunner:
             return "IdempotencyRegistry: request registration functional ✓"
 
         def test_correlation():
-            from iqoptionapi.correlation_engine import CorrelationEngine
+            from iqoptionapi.strategy.correlation_engine import CorrelationEngine
             from iqoptionapi.candle_cache import CandleCache
             engine = CorrelationEngine(CandleCache())
             # Solo verificar métodos existentes
@@ -382,7 +382,7 @@ class IntegrationTestRunner:
             return f"Blitz buy OK: asset={asset} duration=30s order={order_id}"
 
         def test_clock_offset_after_blitz():
-            from iqoptionapi.time_sync import _clock
+            from iqoptionapi.core.time_sync import _clock
             offset = _clock.offset_seconds()
             assert abs(offset) < 10.0, \
                 f"Offset post-Blitz fuera de límite: {offset:.3f}s"
@@ -399,11 +399,11 @@ class IntegrationTestRunner:
         def test_smart_id_generation():
             # Verificar que el motor Smart ID puede generar un instrument_id
             # sin necesitar conexión real — solo lógica de construcción
-            from iqoptionapi.constants import ACTIVES
+            from iqoptionapi.core.constants import ACTIVES
             asset = "XRPUSD-OTC"
             asset_id = ACTIVES.get(asset)
             assert asset_id, f"ACTIVES no tiene {asset}"
-            from iqoptionapi.time_sync import _clock
+            from iqoptionapi.core.time_sync import _clock
             now = _clock.now()
             dt = datetime.utcfromtimestamp(now)
             # Formato: do{ID}A{YYYYMMDD}D{HHMMSS}T{DURATION}MCSPT
@@ -522,14 +522,14 @@ class IntegrationTestRunner:
         print("\n=== CAPA 10 - Analisis (pattern, regime, signal) ===")
 
         def test_pattern_engine():
-            from iqoptionapi.pattern_engine import PatternEngine
+            from iqoptionapi.strategy.pattern_engine import PatternEngine
             from iqoptionapi.candle_cache import CandleCache
             pe = PatternEngine(CandleCache())
             sigs = pe.detect(1, 60)
             return f"PatternEngine: {len(sigs)} señales encontradas"
 
         def test_market_regime():
-            from iqoptionapi.market_regime import MarketRegime
+            from iqoptionapi.strategy.market_regime import MarketRegime
             from iqoptionapi.candle_cache import CandleCache
             mr = MarketRegime(CandleCache())
             regime = mr.get_regime(1, 60)
@@ -538,7 +538,7 @@ class IntegrationTestRunner:
             return f"MarketRegime detectado: {regime}"
 
         def test_signal_consensus():
-            from iqoptionapi.signal_consensus import SignalConsensus
+            from iqoptionapi.strategy.signal_consensus import SignalConsensus
             sc = SignalConsensus(min_agreement=0.6, min_score=0.5)
             # Solo verificar instanciación
             assert sc is not None
@@ -562,7 +562,7 @@ class IntegrationTestRunner:
             return f"MartingaleGuard: amounts={amounts} ✓"
 
         def test_market_quality():
-            from iqoptionapi.market_quality import MarketQualityMonitor
+            from iqoptionapi.strategy.market_quality import MarketQualityMonitor
             from iqoptionapi.candle_cache import CandleCache
             mq = MarketQualityMonitor(CandleCache())
             tradeable = mq.is_tradeable(1, 60)
@@ -599,7 +599,7 @@ class IntegrationTestRunner:
             return "AssetScanner module active"
 
         def test_reconnect_module():
-            from iqoptionapi.reconnect import ReconnectManager
+            from iqoptionapi.core.reconnect import ReconnectManager
             rm = ReconnectManager(max_attempts=3, base=1.0)
             assert rm.attempts == 0
             return "ReconnectManager module active ✓"
@@ -784,3 +784,4 @@ if __name__ == "__main__":
     failures = [r for r in runner.results
                 if r["status"] in ("FAIL", "ERROR")]
     sys.exit(1 if failures else 0)
+

@@ -6,7 +6,7 @@ Created after SPRINT-16 identified rate-limiter interference and asset compatibi
 """
 
 import time
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 from iqoptionapi.stable_api import IQ_Option
 from tests.practice_suite.report import TestResult, ReportCollector
 
@@ -103,3 +103,4 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             SUITE_NAME, "M-03: buy() blitz PUT executes", "FAILED",
             detail=str(e), duration=time.time() - start
         ))
+

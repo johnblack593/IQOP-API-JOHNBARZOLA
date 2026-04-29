@@ -27,7 +27,7 @@ class TestAssetDiscoveryRegression(unittest.TestCase):
 
     def test_instruments_population(self):
         """Verify that instruments are correctly added to constants.ACTIVES"""
-        import iqoptionapi.constants as OP_code
+        import iqoptionapi.core.constants as OP_code
         OP_code.ACTIVES = {}
         
         mock_instruments = {
@@ -45,3 +45,4 @@ class TestAssetDiscoveryRegression(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -5,8 +5,8 @@ Exponential backoff reconnection manager with jitter and attempt ceiling.
 import time
 import random
 import threading
-from iqoptionapi.logger import get_logger
-from iqoptionapi.config import (
+from iqoptionapi.core.logger import get_logger
+from iqoptionapi.core.config import (
     RECONNECT_BASE_DELAY,
     RECONNECT_MAX_DELAY,
     MAX_RECONNECT_ATTEMPTS,
@@ -74,3 +74,4 @@ class ReconnectManager:
     def attempts(self) -> int:
         with self._lock:
             return self._attempt
+

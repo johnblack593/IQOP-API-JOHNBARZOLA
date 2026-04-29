@@ -41,7 +41,7 @@ class TradeJournal:
 
     def __init__(
         self,
-        journal_dir: str = "data/journal",
+        journal_dir: str = "docs/data/journal",
         session_id: Optional[str] = None,
     ) -> None:
         self.journal_dir = journal_dir

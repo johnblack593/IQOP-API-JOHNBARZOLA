@@ -2,7 +2,7 @@
 import os, time
 from dotenv import load_dotenv
 from iqoptionapi.stable_api import IQ_Option
-from iqoptionapi.time_sync import _clock
+from iqoptionapi.core.time_sync import _clock
 
 load_dotenv()
 api = IQ_Option(os.getenv("IQ_EMAIL"), os.getenv("IQ_PASSWORD"))
@@ -56,3 +56,4 @@ except Exception as e:
 
 api.close()
 print("Test finished.")
+

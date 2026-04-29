@@ -3,7 +3,7 @@ Reconciler: recupera resultados de trades que expiraron durante una desconexión
 Fuente primaria: HTTP betinfo (solo binary/turbo)
 Fuente secundaria: WS position-history (todos los tipos)
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 import time
 
 
@@ -78,3 +78,4 @@ class Reconciler:
         except Exception as e:
             self._logger.debug("position_history failed for %s: %s", order_id, e)
         return None
+

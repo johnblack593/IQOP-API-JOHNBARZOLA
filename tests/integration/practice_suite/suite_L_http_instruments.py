@@ -5,7 +5,7 @@ works correctly when WS returns empty instrument lists.
 """
 import time
 
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 from iqoptionapi.stable_api import IQ_Option
 from tests.practice_suite.report import TestResult, ReportCollector
 
@@ -126,3 +126,4 @@ def run(api: IQ_Option, collector: ReportCollector) -> None:
             SUITE_NAME, "L-05: forex in open_times",
             "FAILED", detail=str(e), duration=time.time() - start
         ))
+

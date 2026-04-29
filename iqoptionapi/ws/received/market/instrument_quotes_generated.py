@@ -1,6 +1,6 @@
 """Module for IQ option websocket."""
 import logging
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 
 logger = logging.getLogger(__name__)
 
@@ -39,3 +39,4 @@ def instrument_quotes_generated(api, message):
         
         ev = getattr(api, "instrument_quotes_generated_event", None)
         if ev: ev.set()
+

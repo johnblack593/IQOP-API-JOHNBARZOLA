@@ -1,28 +1,23 @@
 # python
 from iqoptionapi.api import IQOptionAPI
-from typing import Callable
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 import iqoptionapi.country_id as Country
 import threading
 import time
 import json
-from iqoptionapi.logger import get_logger
-from iqoptionapi.reconnect import ReconnectManager, MaxReconnectAttemptsError
-from iqoptionapi.idempotency import IdempotencyRegistry
-from iqoptionapi.security import CredentialStore, generate_user_agent
-from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError, rate_limited
+from iqoptionapi.core.logger import get_logger
+from iqoptionapi.core.reconnect import ReconnectManager
+from iqoptionapi.core.idempotency import IdempotencyRegistry
+from iqoptionapi.core.security import CredentialStore
+from iqoptionapi.core.ratelimit import TokenBucket, RateLimitExceededError, rate_limited
 from iqoptionapi.http.session import close_shared_session
-import iqoptionapi.config as config
+import iqoptionapi.core.config as config
 import iqoptionapi
 import logging
 import operator
 from collections import deque, defaultdict
-from iqoptionapi.utils import nested_dict
-from iqoptionapi.expiration import get_expiration_time, get_remaning_time
-from datetime import datetime, timedelta
-from iqoptionapi.time_sync import _clock
-from random import randint
-from concurrent.futures import ThreadPoolExecutor
+from iqoptionapi.core.utils import nested_dict
+from iqoptionapi.expiration import get_remaning_time
 from iqoptionapi.mixins import OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin
 
 
@@ -73,7 +68,7 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             max_balance_pct=getattr(config, "MM_MAX_BALANCE_PCT", 0.05)
         )
 
-        from iqoptionapi.signal_consensus import SignalConsensus
+        from iqoptionapi.strategy.signal_consensus import SignalConsensus
         self.signal_consensus = SignalConsensus(strategies=[])
 
         from iqoptionapi.validator import Validator
@@ -90,13 +85,13 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         self._reconciler = Reconciler(self)
 
         # --- Intelligence Modules (depend on candle_cache) ---
-        from iqoptionapi.market_quality import MarketQualityMonitor
+        from iqoptionapi.strategy.market_quality import MarketQualityMonitor
         self.market_quality = MarketQualityMonitor(self.candle_cache)
-        from iqoptionapi.pattern_engine import PatternEngine
+        from iqoptionapi.strategy.pattern_engine import PatternEngine
         self.pattern_engine = PatternEngine(self.candle_cache)
-        from iqoptionapi.market_regime import MarketRegime
+        from iqoptionapi.strategy.market_regime import MarketRegime
         self.market_regime = MarketRegime(self.candle_cache)
-        from iqoptionapi.correlation_engine import CorrelationEngine
+        from iqoptionapi.strategy.correlation_engine import CorrelationEngine
         self.correlation_engine = CorrelationEngine(self.candle_cache)
 
         # --- Scanner (depends on modules above) ---
@@ -188,33 +183,8 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         get_logger(__name__).info("IQ_Option instance closed cleanly.")
 
     # ── Sprint 4 TAREA 2: Wait for initialization-data before returning True ──
-    def _wait_for_init_data(self, timeout: float = 25.0) -> bool:
-        """
-        Espera hasta que el servidor haya enviado initialization-data
-        y el SDK tenga activos cargados en memoria.
-        Retorna True si los datos llegaron, False si timeout.
-        """
-        logger = get_logger(__name__)
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            # Verificar que init_data tenga contenido real
-            init = getattr(self.api, 'api_option_init_all_result_v2', None)
-            if init and isinstance(init, dict):
-                # Comprobar que tiene activos de binary o turbo (señal de init completo)
-                binary_actives = init.get("binary", {}).get("actives", {})
-                turbo_actives  = init.get("turbo",  {}).get("actives", {})
-                if len(binary_actives) > 10 or len(turbo_actives) > 10:
-                    logger.info(
-                        "_wait_for_init_data: OK — binary=%d turbo=%d actives loaded",
-                        len(binary_actives), len(turbo_actives)
-                    )
-                    return True
-            time.sleep(0.5)
-        logger.warning(
-            "_wait_for_init_data: timeout after %.0fs — init data may be incomplete",
-            timeout
-        )
-        return False
+    def _wait_for_init_data(self, *args, **kwargs):
+        return super()._wait_for_init_data(*args, **kwargs)
 
     def connect(self, sms_code=None, ssid=None):
         if ssid:
@@ -339,67 +309,17 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
     def connect_2fa(self, sms_code):
         return self.connect(sms_code=sms_code)
 
-    def _auto_reconnect(self) -> None:
-        """
-        Auto-reconexión delegada a _reconnect_with_backoff.
-        Llamado por WebsocketClient.on_close().
-        """
-        logger = get_logger(__name__)
-        logger.info("Auto-reconnect triggered.")
-        try:
-            self._reconnect_with_backoff()
-        except Exception as e:
-            logger.error("Auto-reconnect: exception during connect(): %s", e)
+    def _auto_reconnect(self, *args, **kwargs):
+        return super()._auto_reconnect(*args, **kwargs)
 
-    def _start_heartbeat_watchdog(self) -> None:
-        """
-        Inicia un thread daemon que monitorea el heartbeat del servidor.
-        Si no llega un heartbeat en HEARTBEAT_TIMEOUT_SECS segundos,
-        fuerza reconexión llamando a _auto_reconnect().
-        """
-        import threading, time
-        from iqoptionapi.config import HEARTBEAT_TIMEOUT_SECS, HEARTBEAT_CHECK_INTERVAL
+    def _start_heartbeat_watchdog(self, *args, **kwargs):
+        return super()._start_heartbeat_watchdog(*args, **kwargs)
 
-        self._last_heartbeat = time.time()
-        self._watchdog_stop = threading.Event()
+    def _stop_heartbeat_watchdog(self, *args, **kwargs):
+        return super()._stop_heartbeat_watchdog(*args, **kwargs)
 
-        def watchdog_loop():
-            while not self._watchdog_stop.is_set():
-                time.sleep(HEARTBEAT_CHECK_INTERVAL)
-                elapsed = time.time() - self._last_heartbeat
-                if elapsed > HEARTBEAT_TIMEOUT_SECS:
-                    get_logger(__name__).warning(
-                        "Heartbeat watchdog: %.0fs sin heartbeat — forzando reconexión",
-                        elapsed
-                    )
-                    self._last_heartbeat = time.time()  # reset para evitar bucle
-                    t = threading.Thread(
-                        target=self._auto_reconnect, daemon=True,
-                        name="WatchdogReconnect"
-                    )
-                    t.start()
-
-        self._watchdog_thread = threading.Thread(
-            target=watchdog_loop, daemon=True, name="HeartbeatWatchdog"
-        )
-        self._watchdog_thread.start()
-        get_logger(__name__).info("Heartbeat watchdog started.")
-
-    def _stop_heartbeat_watchdog(self) -> None:
-        """Detiene el watchdog. Llamar en IQ_Option.close()."""
-        if hasattr(self, '_watchdog_stop'):
-            self._watchdog_stop.set()
-        if hasattr(self, '_watchdog_thread'):
-            self._watchdog_thread.join(timeout=2.0)
-
-    def check_connect(self):
-        # True/False
-        # if not connected, sometimes it's None, sometimes its '0', so
-        # both will fall on this first case
-        if not self.api.check_websocket_if_connect:
-            return False
-        else:
-            return True
+    def check_connect(self, *args, **kwargs):
+        return super().check_connect(*args, **kwargs)
         # wait for timestamp getting
 
     # _________________________UPDATE ACTIVES OPCODE_____________________
@@ -822,7 +742,7 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             if not is_ready:
                 get_logger(__name__).error("Timeout waiting for balances_raw.")
                 return None
-        return self.api.balances_raw
+        return self.api.balances_raw.get("msg", []) if self.api.balances_raw else []
 
     def get_balance_mode(self):
         # self.api.profile.balance_type=None
@@ -837,13 +757,8 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
                 elif balance["type"] == 2:
                     return "TOURNAMENT"
 
-    def reset_practice_balance(self):
-        self.api.training_balance_reset_request_event.clear()
-        self.api.reset_training_balance()
-        is_ready = self.api.training_balance_reset_request_event.wait(timeout=config.TIMEOUT_BALANCE_RESET)
-        if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for training_balance_reset_request")
-        return self.api.training_balance_reset_request
+    def reset_practice_balance(self, *args, **kwargs):
+        return super().reset_practice_balance(*args, **kwargs)
 
     def position_change_all(self, Main_Name, user_balance_id):
         instrument_type = ["cfd", "forex", "crypto",
@@ -859,63 +774,15 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             self.api.portfolio(
                 Main_Name=Main_Name, name="portfolio.order-changed", instrument_type=ins)
 
-    def change_balance(self, Balance_MODE):
-        def set_id(b_id):
-            if hasattr(self.api, 'balance_id') and self.api.balance_id != None:
-                self.position_change_all(
-                    "unsubscribeMessage", self.api.balance_id)
-
-            self.api.balance_id = b_id
-
-            self.position_change_all("subscribeMessage", b_id)
-
-        real_id = None
-        practice_id = None
-        tournament_id = None
-
-        for balance in self.get_profile_ansyc()["balances"]:
-            if balance["type"] == 1:
-                real_id = balance["id"]
-            if balance["type"] == 4:
-                practice_id = balance["id"]
-
-            if balance["type"] == 2:
-                tournament_id = balance["id"]
-
-        if Balance_MODE == "REAL":
-            set_id(real_id)
-
-        elif Balance_MODE == "PRACTICE":
-            set_id(practice_id)
-
-        elif Balance_MODE == "TOURNAMENT":
-            set_id(tournament_id)
-
-        else:
-            get_logger(__name__).error("ERROR doesn't have this mode")
-            exit(1)
+    def change_balance(self, *args, **kwargs):
+        return super().change_balance(*args, **kwargs)
 
     # ________________________________________________________________________
     # _______________________        CANDLE      _____________________________
     # ________________________self.api.getcandles() wss________________________
 
-    def get_candles(self, ACTIVES, interval, count, endtime):
-        if ACTIVES not in OP_code.ACTIVES:
-            get_logger(__name__).error("Asset %s not found in ACTIVES", ACTIVES)
-            return None
-
-        self.api.candles_event.clear()
-        try:
-            self.api.getcandles(OP_code.ACTIVES[ACTIVES], interval, count, endtime)
-        except Exception as e:
-            get_logger(__name__).error("get_candles request error: %s", e)
-            return None
-
-        is_ready = self.api.candles_event.wait(timeout=config.TIMEOUT_WS_DATA)
-        if not is_ready or self.api.candles.candles_data is None:
-            get_logger(__name__).warning("Timeout or disconnect: candles data unavailable")
-            return None
-        return self.api.candles.candles_data
+    def get_candles(self, *args, **kwargs):
+        return super().get_candles(*args, **kwargs)
 
     #######################################################
     # ______________________________________________________
@@ -932,24 +799,8 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             get_logger(__name__).error(
                 '**error** start_candles_stream please input right size')
 
-    def get_realtime_candles(self, ACTIVE, size):
-        if size == "all":
-            try:
-                return self.api.real_time_candles[ACTIVE]
-            except Exception as e:
-                get_logger(__name__).error(
-                    '**error** get_realtime_candles() size="all" can not get candle')
-                return False
-        elif size in self.size:
-            try:
-                return self.api.real_time_candles[ACTIVE][size]
-            except Exception as e:
-                get_logger(__name__).error(
-                    '**error** get_realtime_candles() size=' + str(size) + ' can not get candle')
-                return False
-        else:
-            get_logger(__name__).error(
-                '**error** get_realtime_candles() please input right "size"')
+    def get_realtime_candles(self, *args, **kwargs):
+        return super().get_realtime_candles(*args, **kwargs)
 
     def get_all_realtime_candles(self):
         return self.api.real_time_candles
@@ -1129,174 +980,51 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
 
 ##############################################################################################
 
-    def check_binary_order(self, order_id, timeout=30.0):
-        # Sprint 1 refactor: use reactive _wait_result helper
-        result = self._wait_result(
-            order_id=order_id,
-            result_store=self.api.order_binary,
-            event_store=self.api.socket_option_closed_event,
-            timeout=timeout
-        )
-        return result
+    def check_binary_order(self, *args, **kwargs):
+        return super().check_binary_order(*args, **kwargs)
 
-    def check_win(self, id_number, timeout=90.0):
-        # BUG-SPINLOOP-01: Refactorizado a _wait_result para evitar while True
-        result = self._wait_result(
-            order_id=id_number,
-            result_store=self.api.listinfodata,
-            event_store=self.api.result_event_store,
-            timeout=timeout
-        )
-        if result:
-            self.api.listinfodata.delete(id_number)
-            win_val = result.get("win", None)
-            if win_val is not None and hasattr(self, 'trade_journal') and self.trade_journal is not None:
-                res_str = "win" if win_val > 0 else ("loose" if win_val < 0 else "equal")
-                try:
-                    self.trade_journal.record(
-                        order_id=id_number,
-                        result=res_str,
-                        active_id=result.get("active_id"),
-                        amount=result.get("amount"),
-                        profit=win_val
-                    )
-                except Exception as e:
-                    get_logger(__name__).warning("trade_journal.record failed: %s", e)
-            return win_val
-        return None
+    def check_win(self, *args, **kwargs):
+        return super().check_win(*args, **kwargs)
 
-    def check_win_v2(self, id_number, timeout=90.0):
-        # BUG-SPINLOOP-01: Refactorizado
-        result = self._wait_result(
-            order_id=id_number,
-            result_store=self.api.game_betinfo,
-            event_store=self.api.game_betinfo_event,
-            timeout=timeout
-        )
-        if result:
-            return result.get("game_state")
-        return None
+    def check_win_v2(self, *args, **kwargs):
+        return super().check_win_v2(*args, **kwargs)
 
-    def check_win_v4(self, id_number, timeout=90.0):
-        # BUG-SPINLOOP-01: Refactorizado a _wait_result
-        result = self._wait_result(
-            order_id=id_number,
-            result_store=self.api.socket_option_closed,
-            event_store=self.api.socket_option_closed_event,
-            timeout=timeout
-        )
-        if result is not None and hasattr(self, 'trade_journal') and self.trade_journal is not None:
-            try:
-                res_str = result if isinstance(result, str) else result.get("result", "unknown")
-                self.trade_journal.record(
-                    order_id=id_number,
-                    result=res_str,
-                    active_id=result.get("active_id") if isinstance(result, dict) else None,
-                    amount=result.get("amount") if isinstance(result, dict) else None,
-                    profit=result.get("win") if isinstance(result, dict) else None,
-                )
-            except Exception as e:
-                get_logger(__name__).warning("trade_journal.record failed: %s", e)
-        return result
+    def check_win_v4(self, *args, **kwargs):
+        return super().check_win_v4(*args, **kwargs)
 
-    def check_win_v3(self, id_number, timeout=90.0):
-        # BUG-SPINLOOP-01: Refactorizado a _wait_result
-        result = self._wait_result(
-            order_id=id_number,
-            result_store=self.api.socket_option_closed,
-            event_store=self.api.socket_option_closed_event,
-            timeout=timeout
-        )
-        if result:
-            win_val = result.get("msg", {}).get("win")
-            if win_val is not None:
-                try:
-                    win_val = float(win_val)
-                except (ValueError, TypeError):
-                    win_val = 0.0
-                
-                if hasattr(self, 'trade_journal') and self.trade_journal is not None:
-                    res_str = "win" if win_val > 0 else ("loose" if win_val < 0 else "equal")
-                    try:
-                        self.trade_journal.record(
-                            order_id=id_number,
-                            result=res_str,
-                            profit=win_val
-                        )
-                    except Exception as e:
-                        get_logger(__name__).warning("trade_journal.record failed: %s", e)
-                return win_val
-        return None
+    def check_win_v3(self, *args, **kwargs):
+        return super().check_win_v3(*args, **kwargs)
 
     # -------------------get infomation only for binary option------------------------
 
-    def get_betinfo(self, id_number):
-        # INPUT:int
-        if not hasattr(self.api, "game_betinfo_event"):
-            self.api.game_betinfo_event = defaultdict(threading.Event)
-            
-        if isinstance(self.api.game_betinfo_event, dict):
-            self.api.game_betinfo_event[id_number].clear()
-        else:
-            self.api.game_betinfo_event.clear()
-        
-        try:
-            self.api.get_betinfo(id_number)
-        except Exception as e:
-            get_logger(__name__).error('**error** def get_betinfo  self.api.get_betinfo reconnect')
-            return False, None
-            
-        is_ready = self.api.game_betinfo_event[id_number].wait(timeout=10)
-        
-        if not is_ready:
-            get_logger(__name__).warning('**error** get_betinfo time out')
-            return False, None
-            
-        return self.api.game_betinfo.isSuccessful, self.api.game_betinfo.dict
+    def get_betinfo(self, *args, **kwargs):
+        return super().get_betinfo(*args, **kwargs)
 
-    def get_optioninfo(self, limit):
-        self.api.api_game_getoptions_result_event.clear()
-        self.api.get_options(limit)
-        is_ready = self.api.api_game_getoptions_result_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for api_game_getoptions_result')
-        return self.api.api_game_getoptions_result
+    def get_optioninfo(self, *args, **kwargs):
+        return super().get_optioninfo(*args, **kwargs)
 
-    def get_optioninfo_v2(self, limit):
-        self.api.get_options_v2_data_event.clear()
-        self.api.get_options_v2(limit, "binary,turbo")
-        is_ready = self.api.get_options_v2_data_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for get_options_v2_data')
-        return self.api.get_options_v2_data
+    def get_optioninfo_v2(self, *args, **kwargs):
+        return super().get_optioninfo_v2(*args, **kwargs)
 
     # __________________________BUY__________________________
 
     # __________________FOR OPTION____________________________
 
-    @rate_limited("_order_bucket")
-    def buy_multi(self, price, ACTIVES, ACTION, expirations):
-        self.api.buy_multi_option = {}
-        if len(price) == len(ACTIVES) == len(ACTION) == len(expirations):
-            buy_len = len(price)
-            for idx in range(buy_len):
-                self.api.buyv3(
-                    price[idx], OP_code.ACTIVES[ACTIVES[idx]], ACTION[idx], expirations[idx], idx)
-            start_multi_t = time.time()
-            while len(self.api.buy_multi_option) < buy_len and time.time() - start_multi_t < 30:
-                self.api.result_event.wait(timeout=0.1)
-                self.api.result_event.clear()
-            buy_id = []
-            for key in sorted(self.api.buy_multi_option.keys()):
-                try:
-                    value = self.api.buy_multi_option[str(key)]
-                    buy_id.append(value["id"])
-                except Exception:
-                    buy_id.append(None)
+    def buy(self, *args, **kwargs):
+        try:
+            if hasattr(self, "_order_bucket"):
+                self._order_bucket.consume()
+            return super().buy(*args, **kwargs)
+        except RateLimitExceededError:
+            return False, None
 
-            return buy_id
-        else:
-            get_logger(__name__).error('buy_multi error please input all same len')
+    def buy_multi(self, *args, **kwargs):
+        try:
+            if hasattr(self, "_order_bucket"):
+                self._order_bucket.consume()
+            return super().buy_multi(*args, **kwargs)
+        except RateLimitExceededError:
+            return False, None
 
     def get_remaning(self, duration):
         for remaning in get_remaning_time(self.api.timesync.server_timestamp):
@@ -1305,56 +1033,38 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         get_logger(__name__).error('get_remaning(self,duration) ERROR duration')
         return "ERROR duration"
 
-    def buy_by_raw_expirations(self, price, active, direction, option, expired):
-        self.api.buy_multi_option = {}
-        self.api.result_event.clear()
-        req_id = str(randint(0, 10000))
-        self.api.buy_multi_option[req_id] = {"id": None}
-        self.api.buyv3_by_raw_expired(
-            float(price), OP_code.ACTIVES[active], str(direction), str(option), int(expired), req_id)
-        
-        # Wait for either result (success=False) or correlated ID (Sprint 3)
-        start_t = time.time()
-        id = None
-        while time.time() - start_t < 15:
-            id = self.api.buy_multi_option.get(req_id, {}).get("id")
-            if id:
-                break
-            
-            if self.api.buy_multi_option.get(req_id, {}).get("success") == False:
-                break
-                
-            if self.api.result_event.wait(timeout=0.1):
-                self.api.result_event.clear()
-        
-        if id is None:
-            get_logger(__name__).warning("buy_by_raw_expirations TIMEOUT or NO ID: req_id=%s", req_id)
-        return self.api.result, id
-    def sell_option(self, options_ids):
-        self.api.sold_options_respond_event.clear()
-        self.api.sell_option(options_ids)
-        is_ready = self.api.sold_options_respond_event.wait(timeout=30)
-        if not is_ready:
-            get_logger(__name__).error("Timeout waiting for sell_option response.")
+    def buy_by_raw_expirations(self, *args, **kwargs):
+        return super().buy_by_raw_expirations(*args, **kwargs)
+    def sell_option(self, *args, **kwargs):
+        try:
+            if hasattr(self, "_order_bucket"):
+                self._order_bucket.consume()
+            return super().sell_option(*args, **kwargs)
+        except RateLimitExceededError:
             return None
-        return self.api.sold_options_respond
 
-    @rate_limited("_order_bucket")
-    def sell_digital_option(self, options_ids):
-        # Gate de validación
-        if hasattr(self, 'validator') and self.validator is not None:
-            # Nota: para sell no validamos todos los params de buy, 
-            # pero el gate existe si se requiere lógica especial.
-            pass
+    def sell_digital_option(self, *args, **kwargs):
+        try:
+            if hasattr(self, "_order_bucket"):
+                self._order_bucket.consume()
+            return super().sell_digital_option(*args, **kwargs)
+        except RateLimitExceededError:
+            return None
+    def buy_digital_spot(self, *args, **kwargs):
+        try:
+            if hasattr(self, "_order_bucket"):
+                self._order_bucket.consume()
+            return super().buy_digital_spot(*args, **kwargs)
+        except RateLimitExceededError:
+            return False, None
 
-        # BUG-DIGITAL-01: Migrado de _rate_limiter a _order_bucket via decorador
-        self.api.result_event.clear()
-        self.api.sell_digital_option(options_ids)
-        is_ready = self.api.result_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for sell_digital_option_respond')
-        return self.api.sold_digital_options_respond
-# __________________for Digital___________________
+    def buy_digital_spot_v2(self, *args, **kwargs):
+        try:
+            if hasattr(self, "_order_bucket"):
+                self._order_bucket.consume()
+            return super().buy_digital_spot_v2(*args, **kwargs)
+        except RateLimitExceededError:
+            return False, None
 
     def get_digital_underlying_list_data(self):
         self.api.underlying_list_data = None
@@ -1384,14 +1094,11 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             return self.api.strike_list, None
         return self.api.strike_list, ans
 
-    def subscribe_strike_list(self, ACTIVE, expiration_period):
-        self.api.subscribe_instrument_quotes_generated(
-            ACTIVE, expiration_period)
+    def subscribe_strike_list(self, *args, **kwargs):
+        return super().subscribe_strike_list(*args, **kwargs)
 
-    def unsubscribe_strike_list(self, ACTIVE, expiration_period):
-        del self.api.instrument_quotes_generated_data[ACTIVE]
-        self.api.unsubscribe_instrument_quotes_generated(
-            ACTIVE, expiration_period)
+    def unsubscribe_strike_list(self, *args, **kwargs):
+        return super().unsubscribe_strike_list(*args, **kwargs)
 
     def get_instrument_quotes_generated_data(self, ACTIVE, duration):
         start_t = time.time()
@@ -1564,79 +1271,12 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             get_logger(__name__).warning('Timeout (15s) waiting for close_digital_option result')
         return self.api.result
 
-    def check_win_digital(self, buy_order_id, timeout=90.0):
-        # BUG-SPINLOOP-01: Refactorizado para usar _wait_result con timeout
-        # S7: Ahora usa el store reactivo position_changed_event_store
-        result = self._wait_result(
-            order_id=buy_order_id,
-            result_store=None, # _wait_result usará get_async_order internamente
-            event_store=self.api.position_changed_event_store,
-            timeout=timeout
-        )
-        
-        if not result:
-            return None
-
-        # El resultado puede venir directo del message['msg'] si _wait_result hizo fallback a get_async_order
-        msg = result.get("msg") if "msg" in result else result
-        pos = msg.get("position") if isinstance(msg, dict) else None
-        
-        if pos and pos.get("status") == "closed":
-            profit = 0.0
-            if pos.get("close_reason") == "default":
-                profit = pos.get("pnl_realized", 0.0)
-            elif pos.get("close_reason") == "expired":
-                profit = pos.get("pnl_realized", 0.0) - pos.get("buy_amount", 0.0)
-            
-            if hasattr(self, 'trade_journal') and self.trade_journal is not None:
-                res_str = "win" if profit > 0 else ("loose" if profit < 0 else "equal")
-                try:
-                    self.trade_journal.record(
-                        order_id=buy_order_id,
-                        result=res_str,
-                        active_id=pos.get("active_id"),
-                        amount=pos.get("buy_amount"),
-                        profit=profit
-                    )
-                except Exception as e:
-                    get_logger(__name__).warning("trade_journal.record failed: %s", e)
-            return profit
-        return None
+    def check_win_digital(self, *args, **kwargs):
+        return super().check_win_digital(*args, **kwargs)
 
 
-    def check_win_digital_v2(self, buy_order_id, timeout=90.0):
-        # BUG-SPINLOOP-01: Refactorizado
-        result = self._wait_result(
-            order_id=buy_order_id,
-            result_store=None, # Usamos get_async_order que ya consulta el store correcto
-            event_store=self.api.result_event_store,
-            timeout=timeout
-        )
-        
-        order_data = self.get_async_order(buy_order_id).get("position-changed", {}).get("msg")
-        if order_data:
-            if order_data["status"] == "closed":
-                profit = 0.0
-                if order_data["close_reason"] == "expired":
-                    profit = order_data["close_profit"] - order_data["invest"]
-                elif order_data["close_reason"] == "default":
-                    profit = order_data["pnl_realized"]
-                
-                if hasattr(self, 'trade_journal') and self.trade_journal is not None:
-                    res_str = "win" if profit > 0 else ("loose" if profit < 0 else "equal")
-                    try:
-                        self.trade_journal.record(
-                            order_id=buy_order_id,
-                            result=res_str,
-                            active_id=order_data.get("active_id"),
-                            amount=order_data.get("invest"),
-                            profit=profit
-                        )
-                    except Exception as e:
-                        get_logger(__name__).warning("trade_journal.record failed: %s", e)
-                return True, profit
-            return False, None
-        return False, None
+    def check_win_digital_v2(self, *args, **kwargs):
+        return super().check_win_digital_v2(*args, **kwargs)
 
     # ----------------------------------------------------------
     # -----------------BUY_for__Forex__&&__stock(cfd)__&&__ctrpto
@@ -1644,34 +1284,11 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
     # ── Blitz / Pending Order Protocol (Sprint 3) ────────────────
 
 
-    def cancel_pending_order(self, order_id):
-        """
-        Cancela una orden pendiente usando marginal-*.cancel-pending-order.
-        """
-        request_id = str(randint(0, 1000000))
-        
-        if not hasattr(self.api, "order_canceled_event"):
-            self.api.order_canceled_event = defaultdict(threading.Event)
-        
-        self.api.cancel_pending_order(order_id, request_id)
-        
-        # Esperar confirmación via pending-order-canceled o order-changed
-        cancel_ev = self.api.order_canceled_event[str(order_id)]
-        is_ready = cancel_ev.wait(timeout=10.0)
-        
-        return is_ready
+    def cancel_pending_order(self, *args, **kwargs):
+        return super().cancel_pending_order(*args, **kwargs)
 
-    def get_pending_orders(self, instrument_type):
-        """
-        Obtiene la lista actual de órdenes pendientes (bulk sync).
-        """
-        self.api.orders_state_event = threading.Event()
-        self.api.get_orders_state(instrument_type)
-        
-        is_ready = self.api.orders_state_event.wait(timeout=10.0)
-        if is_ready:
-            return getattr(self.api, "orders_state_data", {})
-        return {}
+    def get_pending_orders(self, *args, **kwargs):
+        return super().get_pending_orders(*args, **kwargs)
 
     def get_marginal_balance(self, instrument_type):
         """
@@ -1767,68 +1384,13 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
 
         return self._cfd_order_capable
 
-    @rate_limited("_order_bucket")
-    def buy_order(self,
-                  instrument_type,
-                  instrument_id,
-                  side,
-                  amount,
-                  leverage,
-                  type,
-                  limit_price=None,
-                  stop_price=None,
-                  take_profit_kind=None,
-                  take_profit_value=None,
-                  stop_lose_kind=None,
-                  stop_lose_value=None,
-                  use_trail_stop=False,
-                  auto_margin_call=False,
-                  use_token_for_commission=False):
-        # BUG-STABILITY: Migrado de _rate_limiter manual a decorador
-        if amount <= 0:
-            return False, "INVALID_PARAMS: amount must be > 0"
-        if side not in ("buy", "sell"):
-            return False, f"INVALID_PARAMS: invalid side '{side}'"
-        if type not in ("market", "limit", "stop"):
-            return False, f"INVALID_PARAMS: invalid type '{type}'"
-        if stop_lose_kind is not None and (stop_lose_value is None or stop_lose_value <= 0):
-            return False, "INVALID_PARAMS: stop_lose_value must be > 0 when stop_lose_kind is set"
-        if take_profit_kind is not None and (take_profit_value is None or take_profit_value <= 0):
-            return False, "INVALID_PARAMS: take_profit_value must be > 0 when take_profit_kind is set"
-        if type == "limit" and limit_price is None:
-            return False, "INVALID_PARAMS: limit_price cannot be None for limit orders"
-        if type == "stop" and stop_price is None:
-            return False, "INVALID_PARAMS: stop_price cannot be None for stop orders"
-
-        if self._cfd_order_capable is False:
-            return False, "CFD_NOT_SUPPORTED: place-order-temp disabled for this account"
-
-        request_id = self._idempotency.register()
-        self.api.buy_order_id = None
-        self.api.order_data_event.clear()
-        
-        self.api.buy_order(
-            instrument_type=instrument_type, instrument_id=instrument_id,
-            side=side, amount=amount, leverage=leverage,
-            type=type, limit_price=limit_price, stop_price=stop_price,
-            stop_lose_value=stop_lose_value, stop_lose_kind=stop_lose_kind,
-            take_profit_value=take_profit_value, take_profit_kind=take_profit_kind,
-            use_trail_stop=use_trail_stop, auto_margin_call=auto_margin_call,
-            use_token_for_commission=use_token_for_commission
-        )
-
-        is_ready = self.api.order_data_event.wait(timeout=15)
-        if not is_ready or self.api.buy_order_id is None:
-            self._idempotency.fail(request_id)
-            if self._cfd_order_capable is None:
-                self._cfd_order_capable = False
-            get_logger(__name__).critical("buy_order() TIMEOUT: request_id=%s", request_id)
-            return False, "TIMEOUT"
-
-        self._idempotency.confirm(request_id, self.api.buy_order_id)
-        if self._cfd_order_capable is None:
-            self._cfd_order_capable = True
-        return True, self.api.buy_order_id
+    def buy_order(self, *args, **kwargs):
+        try:
+            if hasattr(self, "_order_bucket"):
+                self._order_bucket.consume()
+            return super().buy_order(*args, **kwargs)
+        except RateLimitExceededError:
+            return False, None
 
     def change_auto_margin_call(self, ID_Name, ID, auto_margin_call):
         self.api.auto_margin_call_changed_respond_event.clear()
@@ -1945,136 +1507,41 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             return False, None
 
     # this function is heavy
-    def get_positions(self, instrument_type):
-        self.api.positions_event.clear()
-        self.api.get_positions(instrument_type)
-        is_ready = self.api.positions_event.wait(timeout=config.TIMEOUT_WS_DATA)
-        if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for positions")
-            return False, None
-        
-        if self.api.positions.get("status") == 2000:
-            return True, self.api.positions["msg"]
-        else:
-            return False, None
+    def get_positions(self, *args, **kwargs):
+        return super().get_positions(*args, **kwargs)
 
-    def get_position(self, buy_order_id):
-        check, order_data = self.get_order(buy_order_id)
-        if not check: return False, None
-        position_id = order_data["position_id"]
-        self.api.position_event.clear()
-        self.api.get_position(position_id)
-        is_ready = self.api.position_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for position')
-            return False, None
-        if self.api.position.get("status") == 2000:
-            return True, self.api.position["msg"]
-        else:
-            return False, None
+    def get_position(self, *args, **kwargs):
+        return super().get_position(*args, **kwargs)
 
-    def get_digital_position_by_position_id(self, position_id):
-        self.api.position_event.clear()
-        self.api.get_digital_position(position_id)
-        is_ready = self.api.position_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for digital position')
-        return self.api.position
+    def get_digital_position_by_position_id(self, *args, **kwargs):
+        return super().get_digital_position_by_position_id(*args, **kwargs)
 
-    def get_digital_position(self, order_id):
-        # Note: digital-position often requires waiting for position-changed or similar
-        # For simplicity, we keep the sync part but use events for the final fetch
-        start_t = time.time()
-        while self.get_async_order(order_id).get("position-changed") == {} and (time.time() - start_t < 15.0):
-            time.sleep(0.05)
-            pass
-        position_id = self.get_async_order(order_id)["position-changed"]["msg"]["external_id"]
-        return self.get_digital_position_by_position_id(position_id)
+    def get_digital_position(self, *args, **kwargs):
+        return super().get_digital_position(*args, **kwargs)
 
 
-    def get_position_history_v2(self, instrument_type, limit, offset, start, end):
-        self.api.position_history_v2_event.clear()
-        self.api.get_position_history_v2(instrument_type, limit, offset, start, end)
-        is_ready = self.api.position_history_v2_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for position_history_v2')
-            return False, None
-        if self.api.position_history_v2.get("status") == 2000:
-            return True, self.api.position_history_v2["msg"]
-        else:
-            return False, None
+    def get_position_history_v2(self, *args, **kwargs):
+        return super().get_position_history_v2(*args, **kwargs)
 
-    def get_available_leverages(self, instrument_type, actives=""):
-        self.api.available_leverages_event.clear()
-        if actives == "":
-            self.api.get_available_leverages(instrument_type, "")
-        else:
-            self.api.get_available_leverages(instrument_type, OP_code.ACTIVES[actives])
-        is_ready = self.api.available_leverages_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for available_leverages')
-            return False, None
-        if self.api.available_leverages.get("status") == 2000:
-            return True, self.api.available_leverages["msg"]
-        else:
-            return False, None
+    def get_available_leverages(self, *args, **kwargs):
+        return super().get_available_leverages(*args, **kwargs)
 
-    def cancel_order(self, buy_order_id):
-        self.api.order_canceled_event.clear()
-        self.api.cancel_order(buy_order_id)
-        is_ready = self.api.order_canceled_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for order_canceled')
-            return False
-        return self.api.order_canceled.get("status") == 2000
+    def cancel_order(self, *args, **kwargs):
+        return super().cancel_order(*args, **kwargs)
 
-    @rate_limited("_order_bucket")
-    def close_position(self, position_id):
-        # BUG-STABILITY: Migrado a decorador
-        check, data = self.get_order(position_id)
-        if check and data.get("position_id") != None:
-            self.api.close_position_data_event.clear()
-            self.api.close_position(data["position_id"])
-            start_t = time.time()
-            while self.api.close_position_data == None and (time.time() - start_t < 15.0):
-                self.api.close_position_data_event.wait(timeout=1)
-                self.api.close_position_data_event.clear()
-            return self.api.close_position_data is not None and self.api.close_position_data.get("status") == 2000
-        return False
-
-    def close_position_v2(self, position_id):
-        _ts = time.time()
-        while self.get_async_order(position_id) == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for get_async_order(position_id)')
-                break
-            pass
-        position_changed = self.get_async_order(position_id)
-        self.api.close_position(position_changed["id"])
-        _ts = time.time()
-        while self.api.close_position_data == None:
-            time.sleep(0.05)
-            if time.time() - _ts >= 15:
-                get_logger(__name__).warning('Timeout (15s) waiting for close_position_data')
-                break
-            pass
-        if self.api.close_position_data["status"] == 2000:
-            return True
-        else:
+    def close_position(self, *args, **kwargs):
+        try:
+            if hasattr(self, "_order_bucket"):
+                self._order_bucket.consume()
+            return super().close_position(*args, **kwargs)
+        except RateLimitExceededError:
             return False
 
-    def get_overnight_fee(self, instrument_type, active):
-        self.api.overnight_fee_event.clear()
-        self.api.get_overnight_fee(instrument_type, OP_code.ACTIVES[active])
-        is_ready = self.api.overnight_fee_event.wait(timeout=15)
-        if not is_ready:
-            get_logger(__name__).warning('Timeout (15s) waiting for overnight_fee')
-            return False, None
-        if self.api.overnight_fee.get("status") == 2000:
-            return True, self.api.overnight_fee["msg"]
-        else:
-            return False, None
+    def close_position_v2(self, *args, **kwargs):
+        return super().close_position_v2(*args, **kwargs)
+
+    def get_overnight_fee(self, *args, **kwargs):
+        return super().get_overnight_fee(*args, **kwargs)
 
     def get_option_open_by_other_pc(self):
         return self.api.socket_option_opened
@@ -2321,41 +1788,8 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         final_success = all(results)
         return final_success, {"results": results}
 
-    def get_available_leverages(self, instrument_type, active_id):
-        """
-        Gets available leverages for a specific margin instrument.
-
-        Args:
-            instrument_type: "forex", "cfd", or "crypto"
-            active_id: Numeric active ID
-
-        Returns:
-            list of available leverages (e.g., [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000])
-            or empty list on error
-        """
-        # The API expects "forex", not "marginal-forex" for leverages endpoint
-        raw_type = instrument_type.lower()
-        if raw_type.startswith("marginal-"):
-            raw_type = raw_type.replace("marginal-", "")
-
-        self.api.available_leverages = None
-        self.api.available_leverages_event.clear()
-        self.api.get_available_leverages(raw_type, active_id)
-
-        is_ready = self.api.available_leverages_event.wait(timeout=10)
-        if not is_ready:
-            get_logger(__name__).warning("Timeout waiting for available_leverages")
-            return []
-
-        if self.api.available_leverages is not None:
-            msg = self.api.available_leverages.get("msg", {})
-            get_logger(__name__).info("RAW LEVERAGES MSG: %s", msg)
-            leverages = msg.get("leverages", [])
-            if isinstance(leverages, list):
-                # Extract just the multiplier or value
-                return [l.get("value", l.get("multiplier", l)) if isinstance(l, dict) else l for l in leverages]
-            return leverages
-        return []
+    def get_available_leverages(self, *args, **kwargs):
+        return super().get_available_leverages(*args, **kwargs)
 
     def get_min_leverage(self, instrument_type, active_id):
         """
@@ -2404,13 +1838,11 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
     # name:
     # "live-deal-binary-option-placed"
     # "live-deal-digital-option"
-    def subscribe_live_deal(self, name, active, _type, buffersize):
-        active_id = OP_code.ACTIVES[active]
-        self.api.Subscribe_Live_Deal(name, active_id, _type)
+    def subscribe_live_deal(self, *args, **kwargs):
+        return super().subscribe_live_deal(*args, **kwargs)
 
-    def unsubscribe_live_deal(self, name, active, _type):
-        active_id = OP_code.ACTIVES[active]
-        self.api.Unscribe_Live_Deal(name, active_id, _type)
+    def unsubscribe_live_deal(self, *args, **kwargs):
+        return super().unsubscribe_live_deal(*args, **kwargs)
 
     def unscribe_live_deal(self, name, active, _type):
         get_logger(__name__).warning(
@@ -2509,27 +1941,8 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
     #  SPRINT 1 — Portfolio Control
     # ══════════════════════════════════════════════════════════════════
 
-    def get_all_open_positions(self, timeout: float = 10.0) -> dict:
-        """
-        Retorna dict con posiciones abiertas por tipo de instrumento.
-        Llama en paralelo los 4 tipos para minimizar latencia.
-        """
-        import concurrent.futures
-        instrument_types = ["binary-option", "turbo-option", "digital-option", "blitz"]
-        result = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {
-                executor.submit(self.get_open_positions, itype, timeout): itype
-                for itype in instrument_types
-            }
-            for future in concurrent.futures.as_completed(futures):
-                itype = futures[future]
-                try:
-                    result[itype] = future.result()
-                except Exception as e:
-                    get_logger(__name__).error("get_all_open_positions error for %s: %s", itype, e)
-                    result[itype] = []
-        return result
+    def get_all_open_positions(self, *args, **kwargs):
+        return super().get_all_open_positions(*args, **kwargs)
 
     # ── S1-T2: Reconciler ──────────────────────────────────────────
 
@@ -2621,34 +2034,8 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         t = threading.Thread(target=_run, name="candle-maintenance", daemon=True)
         t.start()
 
-    def subscribe_candle_v2(
-        self,
-        active: str,
-        size: int,
-        buffer_max: int = 500,
-        on_candle: Callable[[dict], None] | None = None
-    ) -> bool:
-        """
-        Suscribe al stream de velas con buffer acotado y callback opcional.
-        """
-        active_id = OP_code.ACTIVES[active]
-        
-        # 1. Configurar maxlen para este key en el cache
-        if hasattr(self, 'candle_cache'):
-            self.candle_cache.set_maxlen(active_id, size, buffer_max)
-        
-        # 2. Registrar callback si fue provisto
-        if on_candle is not None:
-            key = (active_id, size)
-            self.api._candle_callbacks[key] = on_candle
-        
-        # 3. Iniciar stream (reusando lógica existente)
-        return self.start_candles_one_stream(active, size)
+    def subscribe_candle_v2(self, *args, **kwargs):
+        return super().subscribe_candle_v2(*args, **kwargs)
 
-    def unsubscribe_candle_v2(self, active: str, size: int) -> None:
-        """Cancela suscripción y limpia callback."""
-        active_id = OP_code.ACTIVES[active]
-        key = (active_id, size)
-        if hasattr(self.api, '_candle_callbacks'):
-            self.api._candle_callbacks.pop(key, None)
-        self.stop_candles_one_stream(active, size)
+    def unsubscribe_candle_v2(self, *args, **kwargs):
+        return super().unsubscribe_candle_v2(*args, **kwargs)

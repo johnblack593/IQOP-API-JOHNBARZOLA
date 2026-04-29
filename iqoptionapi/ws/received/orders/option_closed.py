@@ -2,7 +2,7 @@
 Handler para mensajes de cierre de opciones Binary/Turbo y confirmaciones "option".
 Maneja: "option" y "option-closed".
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -56,3 +56,4 @@ class OptionClosed:
 
         except Exception as e:
             logger.warning("option_closed handler error: %s", e)
+

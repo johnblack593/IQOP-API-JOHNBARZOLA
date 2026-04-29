@@ -1,8 +1,8 @@
 import pytest
 import time
 from unittest.mock import patch, MagicMock
-from iqoptionapi.ratelimit import TokenBucket, RateLimitExceededError
-from iqoptionapi.config import RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL
+from iqoptionapi.core.ratelimit import TokenBucket, RateLimitExceededError
+from iqoptionapi.core.config import RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL
 
 
 class MockTime:
@@ -87,3 +87,4 @@ class TestTokenBucketFromConfig:
         bucket = TokenBucket()
         assert bucket._capacity == RATE_LIMIT_CAPACITY
         assert bucket._refill_rate == RATE_LIMIT_REFILL
+

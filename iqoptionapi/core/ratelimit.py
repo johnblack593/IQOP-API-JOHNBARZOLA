@@ -6,8 +6,8 @@ Prevents runaway bots from flooding the API with orders.
 import threading
 import time
 import functools
-from iqoptionapi.logger import get_logger
-from iqoptionapi.config import (
+from iqoptionapi.core.logger import get_logger
+from iqoptionapi.core.config import (
     RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL
 )
 
@@ -100,5 +100,6 @@ def rate_limited(bucket_attr: str):
             return func(self, *args, **kwargs)
         return wrapper
     return decorator
+
 
 

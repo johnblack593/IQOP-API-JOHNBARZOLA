@@ -4,7 +4,7 @@ El robot evita operar activos altamente correlacionados simultáneamente.
 READ-ONLY: nunca modifica estado de la API.
 """
 import math
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 
 class CorrelationEngine:
@@ -82,3 +82,4 @@ class CorrelationEngine:
         if den_x == 0 or den_y == 0:
             return 0.0
         return num / (den_x * den_y)
+

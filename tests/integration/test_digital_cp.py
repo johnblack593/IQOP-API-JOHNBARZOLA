@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from iqoptionapi.stable_api import IQ_Option
 from iqoptionapi.expiration import get_expiration_time
-from iqoptionapi.constants import ACTIVES
+from iqoptionapi.core.constants import ACTIVES
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -64,3 +64,4 @@ def test_digital_buy(active, duration, action, amount):
 test_digital_buy("EURUSD-OTC", 1, "call", 1)
 
 api.close()
+

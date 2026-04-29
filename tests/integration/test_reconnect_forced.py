@@ -41,10 +41,11 @@ else:
 ot = api.get_all_open_time()
 turbo = [k for k,v in ot.get('turbo',{}).items() if v.get('open')]
 print(f"  Turbo activos post-reconexion: {len(turbo)}")
-from iqoptionapi.time_sync import _clock
+from iqoptionapi.core.time_sync import _clock
 print(f"  Clock offset post-reconexion: {_clock.offset_seconds():.3f}s")
 # Trade de verificación final
 if turbo:
     asset = turbo[0]
     ok, oid = api.buy(1.0, asset, 'call', 1)
     print(f"  Trade post-reconexion: status={ok} order={oid}")
+

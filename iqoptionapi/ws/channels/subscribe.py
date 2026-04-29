@@ -2,7 +2,7 @@
 
 from iqoptionapi.ws.channels.base import Base
 import datetime
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 
 
 class Subscribe(Base):
@@ -158,3 +158,4 @@ class SubscribeDigitalPriceSplitter(Base):
         }
 
         self.send_websocket_request(self.name, msg=data)
+

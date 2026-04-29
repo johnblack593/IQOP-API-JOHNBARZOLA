@@ -1,7 +1,7 @@
 """
 Module for IQ Option websocket received order-changed message.
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 class OrderChanged:
     """
@@ -38,3 +38,4 @@ class OrderChanged:
                             api.order_canceled_event[order_id].set()
                     else:
                         api.order_canceled_event.set()
+

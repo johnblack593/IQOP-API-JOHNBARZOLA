@@ -1,4 +1,4 @@
-# scratch/
+# tests/scratch/
 
 Directorio de trabajo temporal para scripts de exploración,
 capturas de WebSocket y herramientas de diagnóstico.

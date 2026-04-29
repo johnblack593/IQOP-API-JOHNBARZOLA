@@ -4,7 +4,7 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 from iqoptionapi.stable_api import IQ_Option
-from iqoptionapi.config import TIMEOUT_WS_DATA
+from iqoptionapi.core.config import TIMEOUT_WS_DATA
 
 class MockAPI:
     def __init__(self):
@@ -85,4 +85,5 @@ def test_get_order_success(api_instance):
     status, data = api_instance.get_order(123)
     assert status is True
     assert data == {"id": 123}
+
 

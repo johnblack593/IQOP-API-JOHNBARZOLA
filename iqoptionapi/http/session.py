@@ -5,7 +5,7 @@ HTTP/2 support, and Chrome 147 parity headers.
 """
 import httpx
 import certifi
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -55,3 +55,4 @@ def close_shared_session() -> None:
         _shared_client.close()
         _shared_client = None
         logger.info("HTTPX shared client closed.")
+

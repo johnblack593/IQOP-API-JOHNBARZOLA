@@ -1,9 +1,10 @@
-from iqoptionapi.logger import get_logger
-import iqoptionapi.constants as OP_code
+from iqoptionapi.core.logger import get_logger
+import iqoptionapi.core.constants as OP_code
 import time
+import threading
 from random import randint
 from datetime import datetime, timedelta
-from iqoptionapi.time_sync import _clock
+from iqoptionapi.core.time_sync import _clock
 from iqoptionapi.expiration import get_expiration_time
 
 class OrdersMixin:
@@ -50,6 +51,7 @@ class OrdersMixin:
         
         if id is None:
             get_logger(__name__).warning("buy TIMEOUT or NO ID: req_id=%s", req_id)
+            return False, None
         return self.api.result, id
 
     def buy_digital_spot(self, active, amount, action, duration):
@@ -207,3 +209,190 @@ class OrdersMixin:
             return True, self.api.result
             
         return False, "Timeout"
+
+    # --- Métodos migrados de stable_api.py ---
+    
+    def buy_multi(self, price, ACTIVES, ACTION, expirations):
+        self.api.buy_multi_option = {}
+        if len(price) == len(ACTIVES) == len(ACTION) == len(expirations):
+            buy_len = len(price)
+            for idx in range(buy_len):
+                self.api.buyv3(
+                    price[idx], OP_code.ACTIVES[ACTIVES[idx]], ACTION[idx], expirations[idx], idx)
+            start_multi_t = time.time()
+            while len(self.api.buy_multi_option) < buy_len and time.time() - start_multi_t < 30:
+                self.api.result_event.wait(timeout=0.1)
+                self.api.result_event.clear()
+            buy_id = []
+            for key in sorted(self.api.buy_multi_option.keys()):
+                try:
+                    value = self.api.buy_multi_option[str(key)]
+                    buy_id.append(value["id"])
+                except Exception:
+                    buy_id.append(None)
+
+            return buy_id
+        else:
+            get_logger(__name__).error('buy_multi error please input all same len')
+
+    def buy_by_raw_expirations(self, price, active, direction, option, expired):
+        self.api.buy_multi_option = {}
+        self.api.result_event.clear()
+        req_id = "raw_exp"
+        self.api.buy_multi_option[req_id] = {"id": None}
+        self.api.buyv3(float(price), OP_code.ACTIVES[active], str(direction), int(expired), req_id)
+        
+        start_t = time.time()
+        while time.time() - start_t < 30:
+            if self.api.buy_multi_option[req_id]["id"] is not None:
+                return True, self.api.buy_multi_option[req_id]["id"]
+            if self.api.result_event.wait(timeout=0.1):
+                self.api.result_event.clear()
+        return False, None
+
+    def sell_option(self, options_ids):
+        self.api.sell_option(options_ids)
+        self.api.result_event.clear()
+        if self.api.result_event.wait(timeout=10):
+            return self.api.result
+        return False
+
+    def sell_digital_option(self, order_id):
+        self.api.result_event.clear()
+        self.api.sell_digital_option(order_id)
+        if self.api.result_event.wait(timeout=10):
+            return self.api.result
+        return False
+
+    def buy_order(self,
+                  instrument_type, instrument_id,
+                  side, amount, leverage,
+                  type="market", limit_price=None, stop_price=None,
+                  stop_lose_kind=None, stop_lose_value=None,
+                  take_profit_kind=None, take_profit_value=None,
+                  use_trail_stop=False, auto_margin_call=False,
+                  use_token_for_commission=False):
+        self.api.buy_order_id = None
+        self.api.buy_order(
+            instrument_type=instrument_type, instrument_id=instrument_id,
+            side=side, amount=amount, leverage=leverage,
+            type=type, limit_price=limit_price, stop_price=stop_price,
+            stop_lose_kind=stop_lose_kind, stop_lose_value=stop_lose_value,
+            take_profit_kind=take_profit_kind, take_profit_value=take_profit_value,
+            use_trail_stop=use_trail_stop, auto_margin_call=auto_margin_call,
+            use_token_for_commission=use_token_for_commission
+        )
+        start_t = time.time()
+        while self.api.buy_order_id is None and time.time() - start_t < 30:
+            pass
+        if self.api.buy_order_id is not None:
+            return True, self.api.buy_order_id
+        else:
+            return False, None
+
+    def cancel_pending_order(self, order_id):
+        self.api.order_canceled_event.clear()
+        self.api.cancel_order(order_id)
+        is_ready = self.api.order_canceled_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for order_canceled')
+            return False
+        return self.api.order_canceled.get("status") == 2000
+
+    def get_pending_orders(self, instrument_type):
+        self.api.orders_state_event = threading.Event()
+        self.api.get_orders_state(instrument_type)
+        is_ready = self.api.orders_state_event.wait(timeout=10.0)
+        if is_ready:
+            return getattr(self.api, "orders_state_data", {})
+        return {}
+
+    def cancel_order(self, buy_order_id):
+        self.api.order_canceled_event.clear()
+        self.api.cancel_order(buy_order_id)
+        is_ready = self.api.order_canceled_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for order_canceled')
+            return False
+        return self.api.order_canceled.get("status") == 2000
+
+    def check_binary_order(self, order_id):
+        self.api.order_binary_id_event.clear()
+        self.api.get_binary_order_id(order_id)
+        if self.api.order_binary_id_event.wait(timeout=10):
+            return self.api.order_binary_id
+        return None
+
+    def check_win(self, id):
+        while True:
+            try:
+                return self.api.socket_option_closed[id]["msg"]["win"]
+            except Exception:
+                pass
+
+    def check_win_v2(self, id):
+        while True:
+            if id in self.api.socket_option_closed:
+                return self.api.socket_option_closed[id]["msg"]["win"]
+            time.sleep(0.1)
+
+    def check_win_v3(self, id):
+        start_t = time.time()
+        while time.time() - start_t < 60:
+            if id in self.api.socket_option_closed:
+                return True, self.api.socket_option_closed[id]["msg"]["win"]
+            time.sleep(0.1)
+        return False, None
+
+    def check_win_v4(self, id):
+        # SPRINT 4: Usar evento para evitar spinlock
+        if id in self.api.socket_option_closed:
+            return True, self.api.socket_option_closed[id]["msg"]["win"]
+        
+        is_ready = self.api.socket_option_closed_event.wait(timeout=60)
+        if is_ready:
+            if id in self.api.socket_option_closed:
+                return True, self.api.socket_option_closed[id]["msg"]["win"]
+        return False, None
+
+    def check_win_digital(self, order_id):
+        while True:
+            if order_id in self.api.digital_option_closed:
+                return self.api.digital_option_closed[order_id]
+            time.sleep(0.1)
+
+    def check_win_digital_v2(self, order_id):
+        start_t = time.time()
+        while time.time() - start_t < 60:
+            if order_id in self.api.digital_option_closed:
+                return True, self.api.digital_option_closed[order_id]
+            time.sleep(0.1)
+        return False, None
+
+    def get_betinfo(self, id):
+        self.api.game_betinfo.isSuccessful = None
+        self.api.game_betinfo.dict = None
+        self.api.get_betinfo(id)
+        start_t = time.time()
+        while self.api.game_betinfo.isSuccessful is None and time.time() - start_t < 30:
+            pass
+        if self.api.game_betinfo.isSuccessful is None:
+            get_logger(__name__).warning('**error** get_betinfo time out')
+            return False, None
+        return self.api.game_betinfo.isSuccessful, self.api.game_betinfo.dict
+
+    def get_optioninfo(self, limit):
+        self.api.api_game_getoptions_result_event.clear()
+        self.api.get_options(limit)
+        is_ready = self.api.api_game_getoptions_result_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for api_game_getoptions_result')
+        return self.api.api_game_getoptions_result
+
+    def get_optioninfo_v2(self, limit):
+        self.api.get_options_v2_data_event.clear()
+        self.api.get_options_v2(limit, "binary,turbo")
+        is_ready = self.api.get_options_v2_data_event.wait(timeout=15)
+        if not is_ready:
+            get_logger(__name__).warning('Timeout (15s) waiting for get_options_v2_data')
+        return self.api.get_options_v2_data

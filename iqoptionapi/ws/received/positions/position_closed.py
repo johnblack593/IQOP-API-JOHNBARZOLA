@@ -1,7 +1,7 @@
 """
 Module for IQ Option websocket received position-closed message.
 """
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 class PositionClosed:
     """
@@ -49,3 +49,4 @@ class PositionClosed:
                     )
                 except Exception as e:
                     get_logger(__name__).error("position_closed: journal record fail: %s", e)
+

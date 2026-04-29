@@ -4,7 +4,7 @@ import time
 from dotenv import load_dotenv
 from iqoptionapi.stable_api import IQ_Option
 from iqoptionapi.ws.client import WebsocketClient
-from iqoptionapi.constants import ACTIVES
+from iqoptionapi.core.constants import ACTIVES
 
 # Cargar credenciales
 load_dotenv()
@@ -114,3 +114,4 @@ print("Saved full ACTIVES map to examples/debug_actives_kyc_map.json")
 
 api.close()
 print("\nDone.")
+

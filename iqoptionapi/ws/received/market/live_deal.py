@@ -1,6 +1,6 @@
 """Module for IQ option websocket."""
 import logging
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 from threading import Thread
 
 logger = logging.getLogger(__name__)
@@ -22,3 +22,4 @@ def live_deal(api, message):
             livedeal = Thread(target=api.live_deal_cb, kwargs=cb_data)
             livedeal.daemon = True
             livedeal.start()
+

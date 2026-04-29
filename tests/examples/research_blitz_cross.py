@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 from iqoptionapi.stable_api import IQ_Option
-import iqoptionapi.constants as OP_code
+import iqoptionapi.core.constants as OP_code
 
 api = IQ_Option(os.getenv("IQ_EMAIL"), os.getenv("IQ_PASSWORD"))
 api.connect()
@@ -34,3 +34,4 @@ for asset in ["SOLUSD-OTC", "LTCUSD-OTC", "EURUSD-op", "EURUSD-OTC"]:
         print(f"    ID: {OP_code.ACTIVES[asset]}")
 
 api.close()
+

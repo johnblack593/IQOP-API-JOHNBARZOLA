@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from iqoptionapi.signal_consensus import SignalConsensus, ConsensusResult
+from iqoptionapi.strategy.signal_consensus import SignalConsensus, ConsensusResult
 from iqoptionapi.strategy.base import BaseStrategy
 from iqoptionapi.strategy.signal import Signal, Direction, AssetType
 
@@ -62,3 +62,4 @@ class TestSignalConsensus(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

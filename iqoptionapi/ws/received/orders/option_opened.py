@@ -1,5 +1,5 @@
 """Module for IQ option websocket."""
-from iqoptionapi.logger import get_logger
+from iqoptionapi.core.logger import get_logger
 
 def option_opened(api, message):
     if message["name"] == "option-opened":
@@ -18,3 +18,4 @@ def option_opened(api, message):
             if ev: ev.set()
         else:
             get_logger(__name__).debug("No pending req_id for option_id=%s", option_id)
+
