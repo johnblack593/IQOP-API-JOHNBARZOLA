@@ -337,61 +337,36 @@ class OrdersMixin:
 
     def check_win(self, id, timeout=60):
         """
-        Garantiza no bloqueo usando socket_option_closed_event (v9.0.000).
+        SPRINT 14: Usa _wait_result con result_event_store.
         """
-        # Verificación inmediata
-        if id in self.api.socket_option_closed:
-            return self.api.socket_option_closed[id]["msg"]["win"]
-            
-        # Espera reactiva
-        start_t = time.time()
-        while time.time() - start_t < timeout:
-            if self.api.socket_option_closed_event[id].wait(timeout=1):
-                if id in self.api.socket_option_closed:
-                    return self.api.socket_option_closed[id]["msg"]["win"]
-                self.api.socket_option_closed_event[id].clear()
-        return None
+        return self._wait_result(id, self.api.game_betinfo, self.api.result_event_store, timeout)
 
     def check_win_v2(self, id, timeout=60):
         return self.check_win(id, timeout=timeout)
 
     def check_win_v3(self, id):
-        start_t = time.time()
-        while time.time() - start_t < 60:
-            if id in self.api.socket_option_closed:
-                return True, self.api.socket_option_closed[id]["msg"]["win"]
-            time.sleep(0.1)
-        return False, None
+        """
+        Garantiza compatibilidad con v3 (retorna bool, result).
+        """
+        res = self.check_win(id)
+        return (True, res) if res else (False, None)
 
     def check_win_v4(self, id):
-        # SPRINT 4: Usar evento para evitar spinlock
-        if id in self.api.socket_option_closed:
-            return True, self.api.socket_option_closed[id]["msg"]["win"]
-        
-        is_ready = self.api.socket_option_closed_event.wait(timeout=60)
-        if is_ready:
-            if id in self.api.socket_option_closed:
-                return True, self.api.socket_option_closed[id]["msg"]["win"]
-        return False, None
+        return self.check_win_v3(id)
 
     def check_win_digital(self, order_id, timeout=60):
         """
-        Versión no bloqueante para opciones digitales.
+        SPRINT 14: Usa _wait_result con socket_option_closed_event.
         """
-        start_t = time.time()
-        while time.time() - start_t < timeout:
-            if order_id in self.api.digital_option_closed:
-                return self.api.digital_option_closed[order_id]
-            time.sleep(0.5)
-        return None
+        # Intentar obtener de socket_option_closed primero (digital usa este store en S14)
+        return self._wait_result(order_id, self.api.socket_option_closed, self.api.socket_option_closed_event, timeout)
 
     def check_win_digital_v2(self, order_id):
-        start_t = time.time()
-        while time.time() - start_t < 60:
-            if order_id in self.api.digital_option_closed:
-                return True, self.api.digital_option_closed[order_id]
-            time.sleep(0.1)
-        return False, None
+        """
+        SPRINT 14: Usa _wait_result con position_changed_event_store y listinfodata.
+        """
+        res = self._wait_result(order_id, self.api.listinfodata, self.api.position_changed_event_store, timeout=60)
+        return (True, res) if res else (False, None)
 
     def get_betinfo(self, id):
         self.api.game_betinfo.isSuccessful = None

@@ -73,11 +73,15 @@ class PositionChanged:
                 if ev_global:
                     ev_global.set()
 
-                if hasattr(api, "position_changed_event_store"):
-                    api.position_changed_event_store[order_id].set()
-                
-                if hasattr(api, "result_event_store"):
-                    api.result_event_store[order_id].set()
+                # SPRINT 14: WS Event Bridge — desbloquear _wait_result
+                if status in ("closed", "canceled", "expired", "cancelled"):
+                    ev_store = getattr(self, 'position_changed_event_store', None) or getattr(api, 'position_changed_event_store', None)
+                    if ev_store is not None and order_id:
+                        ev_store[order_id].set()
+                    
+                    ev_res = getattr(self, 'result_event_store', None) or getattr(api, 'result_event_store', None)
+                    if ev_res is not None and order_id:
+                        ev_res[order_id].set()
                     
                 logger.debug("position_changed: order_id=%s status=%s reason=%s signaled", order_id, status, change_reason)
 

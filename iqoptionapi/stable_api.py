@@ -136,6 +136,12 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         self.api.socket_option_closed_event = defaultdict(threading.Event)
         self.api.result_event_store = defaultdict(threading.Event)
         self.api.position_changed_event_store = defaultdict(threading.Event)
+        
+        # SPRINT 14: Inicializar result_stores si no existen
+        if not hasattr(self.api, "digital_option_closed"):
+            self.api.digital_option_closed = defaultdict(lambda: None)
+        if not hasattr(self.api, "game_betinfo"):
+            self.api.game_betinfo = defaultdict(dict)
         check = None
         if (sms_code is not None):
             self.api.setTokenSMS(self.resp_sms)

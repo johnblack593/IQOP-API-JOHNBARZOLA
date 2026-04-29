@@ -45,12 +45,16 @@ class OptionClosed:
                 if win_val is not None:
                     api.listinfodata.set(win_val, game_state, order_id)
 
-            if message.get("name") == "option-closed" or msg.get("win") is not None:
-                if hasattr(api, "result_event_store"):
-                    api.result_event_store[order_id].set()
+            # SPRINT 14: WS Event Bridge — desbloquear _wait_result
+            if msg.get("status") in ("win", "loose", "equal") or message.get("name") == "option-closed":
+                ev_store = getattr(self, 'result_event_store', None) or getattr(api, 'result_event_store', None)
+                if ev_store is not None and order_id:
+                    ev_store[order_id].set()
                 
-                if hasattr(api, "socket_option_closed_event"):
-                    api.socket_option_closed_event[order_id].set()
+                # Digital fallback compatibility
+                ev_sock = getattr(self, 'socket_option_closed_event', None) or getattr(api, 'socket_option_closed_event', None)
+                if ev_sock is not None and order_id:
+                    ev_sock[order_id].set()
 
             logger.debug("option_closed: order_id=%s result notified", order_id)
 
