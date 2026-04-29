@@ -18,7 +18,7 @@ jobs:
       - name: Install ruff
         run: pip install ruff
       - name: Run ruff
-        run: ruff check iqoptionapi/ --select E,F,W --ignore E501,W503
+        run: ruff check .
         # E501 ignorado: líneas largas en stable_api legacy son aceptables
         # W503 ignorado: line break before binary operator (estilo legacy)
 

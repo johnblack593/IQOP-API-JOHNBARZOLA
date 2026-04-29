@@ -6,10 +6,10 @@
 # ─────────────────────────────────────────────────────────────
 import sys, os, time, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from dotenv import load_dotenv
-load_dotenv()
 from iqoptionapi.stable_api import IQ_Option
 import iqoptionapi.core.constants as OP_code
+from dotenv import load_dotenv
+load_dotenv()
 
 api = IQ_Option(os.getenv("IQ_EMAIL"), os.getenv("IQ_PASSWORD"))
 api.connect()

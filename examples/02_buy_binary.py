@@ -21,7 +21,8 @@ if not EMAIL or not PASSWORD:
 api = IQ_Option(EMAIL, PASSWORD)
 status, reason = api.connect()
 if not status:
-    print(f"Falló la conexión: {reason}"); exit(1)
+    print(f"Falló la conexión: {reason}")
+    exit(1)
 
 api.change_balance("PRACTICE")
 print(f"Balance inicial: {api.get_balance():.2f}")
@@ -30,7 +31,8 @@ print(f"Balance inicial: {api.get_balance():.2f}")
 all_open = api.get_all_open_time()
 if not all_open.get("binary", {}).get("EURUSD", {}).get("open"):
     print("EURUSD no está disponible ahora. Intentar en horario de mercado o usar OTC.")
-    api.disconnect(); exit(0)
+    api.disconnect()
+    exit(0)
 
 # Ejecutar operación
 amount    = 1       # USD
@@ -43,7 +45,8 @@ success, order_id = api.buy(amount, asset, direction, duration)
 
 if not success:
     print(f"buy() falló. order_id={order_id}")
-    api.disconnect(); exit(1)
+    api.disconnect()
+    exit(1)
 
 print(f"Orden ejecutada: {order_id}")
 print("Esperando resultado (máx. 90s)...")

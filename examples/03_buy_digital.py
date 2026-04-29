@@ -19,7 +19,8 @@ if not EMAIL or not PASSWORD:
 api = IQ_Option(EMAIL, PASSWORD)
 status, reason = api.connect()
 if not status:
-    print(f"Falló la conexión: {reason}"); exit(1)
+    print(f"Falló la conexión: {reason}")
+    exit(1)
 
 api.change_balance("PRACTICE")
 

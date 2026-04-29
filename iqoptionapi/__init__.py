@@ -3,6 +3,9 @@
 __version__ = "9.1.000"
 
 import logging
+from iqoptionapi.core.logger import get_logger
+from iqoptionapi.core.constants import *
+import iqoptionapi.core.config as config
 
 def _prepare_logging():
     """Prepare logger for module IQ Option API."""
@@ -17,8 +20,3 @@ def _prepare_logging():
     websocket_logger.addHandler(logging.NullHandler())
 
 _prepare_logging()
-
-# Backward compatibility aliases for Sprint 10 refactor
-from iqoptionapi.core.logger import get_logger
-from iqoptionapi.core.constants import *
-import iqoptionapi.core.config as config

@@ -54,7 +54,8 @@ class TestCheckWin:
             
             # Simular que el WS handler dispara el evento con resultado
             def fire_event():
-                import time; time.sleep(0.05)
+                import time
+                time.sleep(0.05)
                 result_store[order_id] = expected_result
                 event.set()
             
