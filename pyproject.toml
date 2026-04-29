@@ -48,7 +48,7 @@ ignore = ["E501", "F401", "E711", "E712", "E701", "W291", "W293", "F821", "F841"
 # E711/E712 ignorado: comparaciones legacy (is None, == True) en código existente
 
 [tool.pytest.ini_options]
-testpaths = ["tests/unit"]
+testpaths = ["tests/unit", "tests/integration"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
