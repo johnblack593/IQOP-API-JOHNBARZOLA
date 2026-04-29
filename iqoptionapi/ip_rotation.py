@@ -15,13 +15,25 @@ NOTA DE ARQUITECTURA (v8.9.993):
   El geo-check se mantiene como DIAGNOSTICO (log informativo)
   pero NO bloquea la conexion.
 """
-import subprocess, logging, time, json
+import subprocess, logging, time, json, os, platform, sys
 from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
+# ── Feature Flag ──────────────────────────────────────────────
+# Solo activo si ENABLE_IP_ROTATION=true está en el entorno.
+# Útil en desarrollo Windows + WARP. En producción (Linux)
+# esta variable no existe → el módulo es un no-op.
+_WARP_ENABLED: bool = (
+    os.environ.get("ENABLE_IP_ROTATION", "false").lower() == "true"
+)
+
+# ── Cross-platform curl ───────────────────────────────────────
+# Windows usa curl.exe, Linux/macOS usa curl
+_CURL_CMD: str = "curl.exe" if platform.system() == "Windows" else "curl"
+
 _last_rotation_time: float = 0.0
-_MIN_ROTATION_COOLDOWN: float = 45.0  # segundos minimos entre rotaciones
+_MIN_ROTATION_COOLDOWN: float = 45.0
 
 # Senales de rate limit de IQ Option
 RATE_LIMIT_SIGNALS = [
@@ -41,7 +53,7 @@ def get_current_ip() -> Optional[str]:
     """Obtiene la IP publica actual."""
     try:
         result = subprocess.run(
-            ["curl.exe", "-s", "--max-time", "5", "https://api.ipify.org"],
+            [_CURL_CMD, "-s", "--max-time", "5", "https://api.ipify.org"],
             capture_output=True, text=True, timeout=8
         )
         return result.stdout.strip() if result.returncode == 0 else None
@@ -56,7 +68,7 @@ def get_ip_geo() -> Optional[Dict]:
     """
     try:
         result = subprocess.run(
-            ["curl.exe", "-s", "--max-time", "8", "https://ipinfo.io/json"],
+            [_CURL_CMD, "-s", "--max-time", "8", "https://ipinfo.io/json"],
             capture_output=True, text=True, timeout=12
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -93,7 +105,9 @@ def log_ip_diagnostic() -> Optional[Dict]:
 
 
 def is_warp_available() -> bool:
-    """Verifica si warp-cli esta instalado y accesible en el PATH."""
+    """Verifica warp-cli. Si ENABLE_IP_ROTATION=false → False."""
+    if not _WARP_ENABLED:
+        return False
     try:
         result = subprocess.run(
             ["warp-cli", "--version"],
@@ -159,17 +173,24 @@ def rotate_ip_warp(wait_seconds: int = 5) -> bool:
 
 def connect_with_rotation(connect_fn, max_attempts: int = 3, rotate_on_fail: bool = True):
     """
-    Wrapper para connect() que rota la IP ante rate limits.
-    
-    Flujo:
-      1. Log diagnostico de IP (solo informativo)
-      2. Intentar conectar
-      3. Si falla por rate limit → rotar IP y reintentar
-      4. Si falla por otra razon → retornar error sin rotar
-    
-    Uso:
-      ok, msg = connect_with_rotation(api.connect)
+    Wrapper de conexión con rotación de IP vía WARP.
+
+    ENTORNO DE DESARROLLO (Windows + WARP instalado):
+      Establece ENABLE_IP_ROTATION=true en .env
+      para activar la rotación automática de IP.
+
+    PRODUCCIÓN:
+      Sin esa variable, esta función es un pass-through
+      equivalente a llamar connect_fn() directamente.
+      No depende de warp-cli ni curl.
     """
+    if not _WARP_ENABLED:
+        logger.debug(
+            "ip_rotation: ENABLE_IP_ROTATION no activo, "
+            "usando connect directo sin rotación."
+        )
+        return connect_fn()
+
     # Diagnostico IP (solo log)
     log_ip_diagnostic()
 

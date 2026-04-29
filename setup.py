@@ -1,3 +1,3 @@
-# Kept for backward compatibility. Configuration moved to pyproject.toml
+# Compatibility shim — la configuración real está en pyproject.toml
 from setuptools import setup
 setup()
