@@ -65,6 +65,7 @@ Ver [docs/stealth-guide.md](docs/stealth-guide.md) para la guía completa.
 1. Las nuevas funcionalidades de trading deben ir en `iqoptionapi/mixins/`.
 2. Todo cambio debe ser validado con `pytest tests/unit/`.
 3. Ver [docs/testing-guide.md](docs/testing-guide.md) para más info.
+4. Para detalles de integración pública, ver [docs/integration.md](docs/integration.md).
 
 ## Changelog
 Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo.

@@ -5,6 +5,7 @@ HTTP/2 support, and Chrome 147 parity headers.
 """
 import httpx
 import certifi
+import ssl
 from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,6 +14,9 @@ logger = get_logger(__name__)
 Session = httpx.Client
 
 _shared_client: httpx.Client | None = None
+
+# Create a shared SSL context to avoid deprecation warnings when passing string paths to verify
+_ssl_ctx = ssl.create_default_context(cafile=certifi.where())
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -51,7 +55,7 @@ def get_shared_session() -> httpx.Client:
     if _shared_client is None:
         _shared_client = httpx.Client(
             http2=True,
-            verify=certifi.where(),
+            verify=_ssl_ctx,
             headers=CHROME_HEADERS,
             follow_redirects=True,
             timeout=15.0

@@ -27,11 +27,14 @@ class TestTokenBucketBasics:
 
     def test_consume_below_zero_raises(self):
         """cuando tokens=0, consume() lanza RateLimitExceededError"""
-        bucket = TokenBucket(capacity=1.0, refill_rate=0.5)
-        bucket.consume()
-        assert bucket.available_tokens == pytest.approx(0.0)
-        with pytest.raises(RateLimitExceededError):
+        mock_time = MockTime()
+        with patch('time.monotonic', side_effect=mock_time):
+            bucket = TokenBucket(capacity=1.0, refill_rate=0.5)
             bucket.consume()
+            # El tiempo NO avanza → available_tokens debe ser exactamente 0.0
+            assert bucket.available_tokens == pytest.approx(0.0)
+            with pytest.raises(RateLimitExceededError):
+                bucket.consume()
 
     def test_refill_over_time(self):
         """después de tiempo, tokens se han reabastecido"""
