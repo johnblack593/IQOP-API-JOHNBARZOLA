@@ -2,7 +2,6 @@
 
 import json
 import threading
-import logging
 from collections import defaultdict
 from iqoptionapi.core.logger import get_logger
 import websocket
@@ -187,7 +186,7 @@ class WebsocketClient(object):
                 while True:
                     try:
                         dic_size = len(dict[key1][key2])
-                    except Exception as e:
+                    except Exception:
                         dic_size = 0
                     if dic_size < maxdict:
                         dict[key1][key2][key3] = value

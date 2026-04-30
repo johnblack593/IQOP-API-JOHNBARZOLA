@@ -5,7 +5,6 @@ del browser de IQ Option para evitar rate-limiting y baneos.
 
 import threading
 import time
-import logging
 from collections import deque
 from iqoptionapi.core.logger import get_logger
 

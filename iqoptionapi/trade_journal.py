@@ -10,7 +10,7 @@ import threading
 import csv
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict, field
-from typing import Optional, List, Dict
+from typing import Optional, List
 from iqoptionapi.strategy.signal import Signal
 
 

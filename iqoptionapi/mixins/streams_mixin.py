@@ -1,5 +1,6 @@
 import iqoptionapi.core.constants as OP_code
 import time
+from iqoptionapi.core.logger import get_logger
 
 class StreamsMixin:
     def subscribe_candles(self, active, size):

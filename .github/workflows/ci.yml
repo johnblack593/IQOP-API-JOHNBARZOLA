@@ -32,6 +32,17 @@ jobs:
           python-version: "3.11"
       - name: Install deps
         run: pip install -e .[dev]
+
+      - name: Verify installation integrity
+        run: |
+          python -c "import certifi; print('certifi:', certifi.__version__)"
+          python -c "import httpx; print('httpx:', httpx.__version__)"
+          python -c "import iqoptionapi; print('sdk:', iqoptionapi.__version__)"
+
       - name: Run unit tests
-        run: python -m pytest tests/unit/ -v --tb=short
-        # Solo tests unitarios — sin internet, sin credenciales
+        run: |
+          python -m pytest tests/unit/ -v --tb=short \
+            -W error::DeprecationWarning \
+            -W error::PendingDeprecationWarning
+        # filterwarnings también declarados en pyproject.toml — explícito aquí
+        # para visibilidad en el log de CI sin necesidad de leer pyproject.toml

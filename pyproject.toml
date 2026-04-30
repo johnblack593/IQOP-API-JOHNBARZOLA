@@ -27,6 +27,7 @@ dependencies = [
     "httpx[http2]>=0.28.1",
     "h2>=4.3.0",
     "numpy>=1.26.0",
+    "certifi>=2024.0.0",
 ]
 
 [project.optional-dependencies]
@@ -48,9 +49,30 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W"]
-ignore = ["E501", "F401", "E711", "E712", "E701", "W291", "W293", "F821", "F841", "E741", "E721", "W191", "E722", "F811", "E401", "E731", "F405", "F403"]
-# F401 ignorado: imports legacy en __init__.py
-# E711/E712 ignorado: comparaciones legacy (is None, == True) en código existente
+# Solo ignorar reglas que son estilo o legacy irrecuperable:
+ignore = [
+    "E501",   # línea larga — aceptable en código legacy
+    "E711",   # comparison to None (legacy: x == None)
+    "E712",   # comparison to True/False (legacy)
+    "E701",   # multiple statements on one line (legacy)
+    "W291",   # trailing whitespace (cosmético)
+    "W293",   # whitespace before operator (cosmético)
+    "E741",   # ambiguous variable name (legacy: l, O, I)
+    "E721",   # type comparison (legacy: type(x) == int)
+    "W191",   # indentation contains tabs (legacy)
+    "E722",   # bare except (legacy)
+    "E401",   # multiple imports (legacy)
+    "E731",   # lambda assignment (legacy)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Solo para el código legacy que no podemos modificar ahora:
+"iqoptionapi/stable_api.py"   = ["F401", "F811", "F821", "F841", "F403", "F405"]
+"iqoptionapi/api.py"          = ["F403", "F405"]
+"iqoptionapi/core/__init__.py" = ["F403", "F405"]
+"iqoptionapi/__init__.py"     = ["F401", "F811", "F403", "F405"]
+# Tests: permitir wildcard imports y re-imports:
+"tests/**/*.py"               = ["F401", "F811"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/integration"]

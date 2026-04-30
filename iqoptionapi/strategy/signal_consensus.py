@@ -4,7 +4,7 @@ iqoptionapi/signal_consensus.py
 Combinador de señales de múltiples estrategias (Consenso M-de-N).
 """
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Optional
 import numpy as np
 from numpy.typing import NDArray
 import logging

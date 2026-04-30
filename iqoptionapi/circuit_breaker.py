@@ -114,11 +114,8 @@ class CircuitBreaker:
             return
 
         # 3. Drawdown from peak
-        if self._peak_balance > 0:
-            drawdown = (self._peak_balance - (self._peak_balance - self._session_loss_usd)) / self._peak_balance
-            # Note: simplified drawdown using session_loss_usd. 
-            # Real drawdown should use current_balance vs peak_balance.
-            pass
+        # Note: simplified drawdown using session_loss_usd. 
+        # Real drawdown should use current_balance vs peak_balance.
         
         # Real drawdown check
         if self._initial_balance and self._initial_balance > 0:

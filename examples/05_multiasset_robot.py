@@ -6,7 +6,6 @@
 # ─────────────────────────────────────────────────────────────
 import sys
 import os
-import time
 import logging
 
 # Ensure iqoptionapi can be imported from the root directory

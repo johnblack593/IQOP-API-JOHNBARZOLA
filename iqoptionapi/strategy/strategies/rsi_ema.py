@@ -21,7 +21,7 @@ con dinero real sin backtesting riguroso.
 import numpy as np
 from numpy.typing import NDArray
 from iqoptionapi.strategy.base import BaseStrategy
-from iqoptionapi.strategy.signal import Signal, Direction, AssetType
+from iqoptionapi.strategy.signal import Signal, Direction
 from iqoptionapi.strategy.indicators import rsi, ema
 from iqoptionapi.strategy.registry import StrategyRegistry
 

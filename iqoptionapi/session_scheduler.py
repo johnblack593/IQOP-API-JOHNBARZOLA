@@ -5,7 +5,7 @@ Controla cuándo opera el bot según horarios de mercado UTC.
 """
 from enum import Enum
 from dataclasses import dataclass
-from datetime import datetime, timezone, time
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 

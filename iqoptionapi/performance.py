@@ -5,7 +5,7 @@ Calculadora de métricas de rendimiento profesionales.
 """
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Dict, Tuple, Optional
+from typing import List, Tuple
 import numpy as np
 from iqoptionapi.trade_journal import TradeRecord
 
@@ -129,7 +129,6 @@ class PerformanceAnalyzer:
     @staticmethod
     def max_drawdown(trades: List[TradeRecord]) -> Tuple[float, float]:
         if not trades: return 0.0, 0.0
-        equity = 0.0
         peak = 0.0
         max_dd_usd = 0.0
         max_dd_pct = 0.0
@@ -228,7 +227,6 @@ class PerformanceAnalyzer:
         gross_profit = sum(t.profit_usd for t in wins)
         gross_loss = abs(sum(t.profit_usd for t in losses))
 
-        avg_win_amount = sum(t.amount for t in wins) / win_count if win_count else 0.0
         avg_payout = (gross_profit / sum(t.amount for t in wins)) if (wins and sum(t.amount for t in wins) > 0) else 0.0
 
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else (

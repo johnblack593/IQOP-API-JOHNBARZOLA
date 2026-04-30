@@ -1,5 +1,15 @@
 # CHANGELOG — JCBV-NEXUS SDK
 
+## [9.1.000] — 2026-04-30
+### Sprint 17 — Final Cleanup
+- Restructured tests/, created examples/, bumped version to 9.1.000
+### Sprint 18 — Security & Repo Surgery
+- Removed PII from repository, consolidated integration suite
+### Sprint 19 — Technical Debt Zero
+- Fixed flaky test, removed legacy build files, fixed httpx SSL warning
+
+NOTE: El commit message "v9.0.000 Beta 003" fue un error tipográfico. La versión correcta es 9.1.000.
+
 ## [9.0.000] — 2026-04-29 — RELEASE OFICIAL
 
 ### Breaking Changes

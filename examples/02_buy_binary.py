@@ -3,7 +3,7 @@ JCBV-NEXUS SDK v9.1.000 — Example 02: Buy Binary + Check Win
 Ejecuta una operación binaria en EURUSD y espera el resultado.
 Usa cuenta PRACTICE — seguro para pruebas.
 """
-import os, time
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 from iqoptionapi.stable_api import IQ_Option

@@ -436,7 +436,7 @@ class OrdersMixin:
             self._cfd_order_capable = False
             return False
         self.api.order_data_event.clear()
-        is_ready = self.api.order_data_event.wait(timeout=3)
+        self.api.order_data_event.wait(timeout=3)
         if (self.api.buy_order_id is not None):
             get_logger(__name__).info('CFD orders SUPPORTED — probe order_id=%s', self.api.buy_order_id)
             try:

@@ -4,7 +4,7 @@ iqoptionapi/martingale_guard.py
 Control seguro de estrategias de gestión de capital.
 """
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import Optional
 
 
 class MoneyManagement(str, Enum):

@@ -15,7 +15,7 @@ NOTA DE ARQUITECTURA (v8.9.993):
   El geo-check se mantiene como DIAGNOSTICO (log informativo)
   pero NO bloquea la conexion.
 """
-import subprocess, logging, time, json, os, platform, sys
+import subprocess, logging, time, json, os, platform
 from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)

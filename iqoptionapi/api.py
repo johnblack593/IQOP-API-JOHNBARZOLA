@@ -25,7 +25,6 @@ from iqoptionapi.http.changebalance import Changebalance
 from iqoptionapi.http.events import Events
 from iqoptionapi.ws.client import WebsocketClient
 from iqoptionapi.ws.channels.get_balances import *
-from iqoptionapi.http.session import get_shared_session
 
 from iqoptionapi.ws.channels.ssid import Ssid
 from iqoptionapi.ws.channels.subscribe import *
@@ -74,8 +73,6 @@ from iqoptionapi.ws.objects.timesync import TimeSync
 from iqoptionapi.ws.objects.profile import Profile
 from iqoptionapi.ws.objects.candles import Candles
 from iqoptionapi.ws.objects.listinfodata import ListInfoData
-from iqoptionapi.ws.objects.betinfo import Game_betinfo_data
-from collections import defaultdict
 from iqoptionapi.core.utils import nested_dict
 from iqoptionapi.http.session import CHROME_HEADERS
 
@@ -672,7 +669,6 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         # Main name:"unsubscribeMessage"/"subscribeMessage"/"sendMessage"(only for portfolio.get-positions")
         # name:"portfolio.order-changed"/"portfolio.get-positions"/"portfolio.position-changed"
         # instrument_type="cfd"/"forex"/"crypto"/"digital-option"/"turbo-option"/"binary-option"
-        logger = get_logger(__name__)
         M_name = Main_Name
         request_id = str(request_id)
         if name == "portfolio.order-changed":
@@ -1062,7 +1058,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         return response
 
     def send_ssid(self) -> bool:
-        from iqoptionapi.core.config import TIMEOUT_SSID_AUTH, POLLING_INTERVAL_FAST
+        from iqoptionapi.core.config import TIMEOUT_SSID_AUTH
         logger = get_logger(__name__)
         logger.info("Sending SSID for authentication: %s", self.SSID[:10] + "..." if self.SSID else "None")
         
@@ -1148,7 +1144,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                 response = self.get_ssid(password)
                 try:
                     self.SSID = response.cookies["ssid"]
-                except Exception as e:
+                except Exception:
                     return False, response.text if hasattr(response, "text") else str(response)
                 atexit.register(self.logout)
                 self.start_websocket()
@@ -1159,7 +1155,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             response = self.get_ssid(password)
             try:
                 self.SSID = response.cookies["ssid"]
-            except Exception as e:
+            except Exception:
                 self.close()
                 return False, response.text if hasattr(response, "text") else str(response)
             atexit.register(self.logout)
@@ -1226,7 +1222,5 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     def unsubscribe_digital_price_splitter(self):
         return UnsubscribeDigitalPriceSplitter(self)
 
-    @property
-    def place_digital_option_v2(self):
-        return DigitalOptionsPlaceDigitalOptionV2(self)
+
 

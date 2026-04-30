@@ -23,7 +23,6 @@ class Strike_list(Base):
         exp=int(self.api.timesync.server_timestamp)
         value = datetime.datetime.fromtimestamp(exp)
         minute = int(value.strftime('%M'))
-        second=int(value.strftime('%S'))
         ans=exp-exp%60#delete second
         ans=ans+(duration-minute%duration)*60
         if exp>ans-10:

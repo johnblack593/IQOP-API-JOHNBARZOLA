@@ -4,7 +4,7 @@
 # Requiere: .env con IQ_EMAIL y IQ_PASSWORD
 # Uso: python examples/06_research_blitz.py
 # ─────────────────────────────────────────────────────────────
-import sys, os, time, json
+import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from iqoptionapi.stable_api import IQ_Option
 import iqoptionapi.core.constants as OP_code

@@ -1,3 +1,5 @@
+from iqoptionapi.core.logger import get_logger
+
 def instruments(api, message):
     name = message.get("name")
     msg = message.get("msg")
