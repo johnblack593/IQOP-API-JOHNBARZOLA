@@ -167,7 +167,7 @@ _MESSAGE_ROUTER: dict = {
 class WebsocketClient(object):
     """Class for work with IQ option websocket."""
 
-    def __init__(self, api):
+    def __init__(self, api, header=None):
         """
         :param api: The instance of :class:`IQOptionAPI
             <iqoptionapi.api.IQOptionAPI>`.
@@ -177,7 +177,7 @@ class WebsocketClient(object):
         self.wss = websocket.WebSocketApp(
             self.api.wss_url, on_message=self.on_message,
             on_error=self.on_error, on_close=self.on_close,
-            on_open=self.on_open)
+            on_open=self.on_open, header=header)
 
     def dict_queue_add(self, dict, maxdict, key1, key2, key3, value):
         with getattr(self, 'dict_lock', __import__('contextlib').nullcontext()):

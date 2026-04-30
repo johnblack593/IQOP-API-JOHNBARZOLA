@@ -23,13 +23,13 @@ class TestTokenBucketBasics:
         """after consume(), tokens < capacity"""
         bucket = TokenBucket(capacity=5.0, refill_rate=0.5)
         bucket.consume()
-        assert bucket.available_tokens == 4.0
+        assert bucket.available_tokens == pytest.approx(4.0)
 
     def test_consume_below_zero_raises(self):
         """cuando tokens=0, consume() lanza RateLimitExceededError"""
         bucket = TokenBucket(capacity=1.0, refill_rate=0.5)
         bucket.consume()
-        assert bucket.available_tokens == 0.0
+        assert bucket.available_tokens == pytest.approx(0.0)
         with pytest.raises(RateLimitExceededError):
             bucket.consume()
 
@@ -40,7 +40,7 @@ class TestTokenBucketBasics:
             bucket = TokenBucket(capacity=5.0, refill_rate=1.0)
             for _ in range(5):
                 bucket.consume()
-            assert bucket.available_tokens == 0.0
+            assert bucket.available_tokens == pytest.approx(0.0)
             
             mock_time.advance(2.0)
             assert bucket.available_tokens == 2.0

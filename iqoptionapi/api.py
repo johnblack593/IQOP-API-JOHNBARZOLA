@@ -972,13 +972,12 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.check_websocket_if_error = False
         self.websocket_error_reason = None
 
-        self.websocket_client = WebsocketClient(self)
-        
         # SPRINT 11/13: Inyectar headers de browser en el handshake del WebSocket
         ws_headers = [
             f"User-Agent: {WS_USER_AGENT}",
             f"Origin: {WS_ORIGIN}"
         ]
+        self.websocket_client = WebsocketClient(self, header=ws_headers)
         
         self.websocket_thread = threading.Thread(
             target=self.websocket_client.wss.run_forever, 
@@ -987,8 +986,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                     "check_hostname": True, 
                     "cert_reqs": ssl.CERT_REQUIRED, 
                     "ca_certs": certifi.where()
-                },
-                'header': ws_headers
+                }
             }
         )
         self.websocket_thread.daemon = True
