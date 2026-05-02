@@ -44,6 +44,7 @@ class CircuitBreaker:
         self._session_loss_usd = 0.0
         self._initial_balance: Optional[float] = None
         self._peak_balance: float = 0.0
+        self._current_balance: float = 0.0
         self._trips_today = 0
         self._last_trip_time: float = 0.0
         self._half_open_test_done = False
@@ -98,6 +99,8 @@ class CircuitBreaker:
         
         if balance > self._peak_balance:
             self._peak_balance = balance
+        
+        self._current_balance = balance
 
     def _check_thresholds(self) -> None:
         if self._state != CircuitBreakerState.CLOSED:
@@ -113,17 +116,14 @@ class CircuitBreaker:
             self._trip("Max session loss reached")
             return
 
-        # 3. Drawdown from peak
-        # Note: simplified drawdown using session_loss_usd. 
-        # Real drawdown should use current_balance vs peak_balance.
-        
-        # Real drawdown check
-        if self._initial_balance and self._initial_balance > 0:
-            current_drawdown = (self._initial_balance - (self._initial_balance - self._session_loss_usd)) / self._initial_balance
+        # 3. Peak-to-trough drawdown real
+        if self._peak_balance > 0 and self._current_balance > 0:
+            current_drawdown = (self._peak_balance - self._current_balance) / self._peak_balance
             if current_drawdown >= self.max_drawdown_pct:
-                self._trip("Max drawdown reached")
+                self._trip(f"Max drawdown reached: {current_drawdown:.1%} >= {self.max_drawdown_pct:.1%}")
 
     def _trip(self, reason: str = "") -> None:
+        self.logger.warning("CircuitBreaker TRIP → %s", reason)
         self._state = CircuitBreakerState.OPEN
         self._last_trip_time = time.time()
         self._trips_today += 1
@@ -167,5 +167,7 @@ class CircuitBreaker:
             "consecutive_losses": self._consecutive_losses,
             "session_loss_usd": self._session_loss_usd,
             "trips_today": self._trips_today,
+            "peak_balance": self._peak_balance,
+            "current_drawdown_pct": round((self._peak_balance - self._current_balance) / self._peak_balance, 4) if self._peak_balance > 0 else 0.0,
             "can_trade": self.can_trade()
         }
