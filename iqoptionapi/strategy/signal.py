@@ -23,6 +23,7 @@ class AssetType(str, Enum):
     BINARY  = "binary-option"
     DIGITAL = "digital-option"
     TURBO   = "turbo-option"
+    CFD     = "cfd"           # Margen: Forex, Acciones, Cripto, Índices, Fondos
 
 
 @dataclass(frozen=True)
@@ -65,9 +66,9 @@ class Signal:
             raise ValueError(
                 f"amount debe ser > 0, recibido: {self.amount}"
             )
-        if self.duration <= 0:
+        if self.duration < 0:
             raise ValueError(
-                f"duration debe ser > 0, recibido: {self.duration}"
+                f"duration debe ser >= 0, recibido: {self.duration}"
             )
 
     @property
