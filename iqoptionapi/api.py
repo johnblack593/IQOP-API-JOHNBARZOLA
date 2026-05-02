@@ -198,6 +198,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         # Sprint 4 — WS Sequence Debug Logger (TAREA 1)
         self._connect_time: float = 0.0
         self._ws_debug_logger = None
+        self._ws_debug_file = None
         if os.environ.get("JCBV_WS_DEBUG") == "1":
             self._init_ws_debug_logger()
 
@@ -1177,6 +1178,15 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         return True, None
 
     def close(self) -> None:
+        # BUG-API-03: Cerrar debug file handle para evitar fd leak
+        if getattr(self, '_ws_debug_file', None) is not None:
+            try:
+                self._ws_debug_file.close()
+            except Exception:
+                pass
+            finally:
+                self._ws_debug_file = None
+        
         from iqoptionapi.core.config import TIMEOUT_THREAD_JOIN
         if self.websocket:
             try:
