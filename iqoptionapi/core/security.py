@@ -38,6 +38,6 @@ class CredentialStore:
         return cls(email, password)
 
 def generate_user_agent() -> str:
-    # SPRINT 10: Modernized UA range
-    version = random.choice([121, 122, 123, 124, 125])
+    # Chrome stable range active in 2026 (v124–v132)
+    version = random.choice([124, 125, 126, 127, 128, 129, 130, 131, 132])
     return f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version}.0.0.0 Safari/537.36"
