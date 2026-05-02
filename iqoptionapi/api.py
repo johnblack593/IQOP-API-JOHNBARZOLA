@@ -99,7 +99,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         """
         self.https_url = "https://iqoption.com/api"
 
-        # --- Estado de datos de instancia (BUG-API-01 fix) ---
+        # Instance data state
         self.socket_option_opened = {}
         self.socket_option_closed = {}
         self.timesync = TimeSync()
@@ -186,16 +186,16 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.balance_id = None
         self.blitz_instruments = {}
         
-        # S3-T2: Incremental request_id for stealth
+        # Incremental request_id counter for per-connection uniqueness
         self._request_id_counter = 0
         self._request_id_lock = threading.Lock()
         
-        # S3-T2: Guard for session data initialization
+        # Guard: tracks whether session initialization data has arrived
         self._init_data_received = False
-        # S3-T3: Dynamic candle callbacks
+        # Dynamic candle stream callbacks keyed by (active, size)
         self._candle_callbacks = {}
 
-        # Sprint 4 — WS Sequence Debug Logger (TAREA 1)
+        # WS sequence debug logger (active only when JCBV_WS_DEBUG=1)
         self._connect_time: float = 0.0
         self._ws_debug_logger = None
         self._ws_debug_file = None
@@ -207,7 +207,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.instruments_event = threading.Event()
         self.authenticated_event = threading.Event()
         
-        # --- SPRINT 7: Reactive Event Stores (defaultdict) ---
+        # --- Reactive event stores (defaultdict) ---
         self.socket_option_closed_event = defaultdict(threading.Event)
         self.result_event_store = defaultdict(threading.Event)
         self.position_changed_event_store = defaultdict(threading.Event)
@@ -237,7 +237,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.ws_connected_event = threading.Event()
         self.balance_changed_event = threading.Event()
         
-        # Additional events for S1-03b
+        # Additional async events
         self.position_history_event = threading.Event()
         self.position_history_v2_event = threading.Event()
         self.available_leverages_event = threading.Event()
@@ -267,11 +267,11 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.margin_positions = {}
         self.trading_group_params = None
         
-        # Callbacks for S1-03 Resilience
+        # Lifecycle callbacks
         self._reconnect_callback: callable | None = None
         self._heartbeat_callback: callable | None = None
 
-    # ── Sprint 4 TAREA 1: WS Debug Sequence Logger ──
+
     def _init_ws_debug_logger(self):
         """Initialize file-based WS debug logger. Only called if JCBV_WS_DEBUG=1."""
         import pathlib
@@ -375,7 +375,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             return self.websocket_client.wss
         return None
 
-    def send_websocket_request(self, name, msg, request_id=None, no_force_send=True):
+    def send_websocket_request(self, name, msg, request_id=None):
         """Send websocket request to IQ Option server.
 
         :param str name: The websocket request name.
@@ -385,7 +385,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
         logger = get_logger(__name__)
         
-        # Auto-generate request_id if not provided (Stealth Sprint 3)
+        # Auto-generate request_id if not provided
         if request_id is None:
             with self._request_id_lock:
                 self._request_id_counter += 1
@@ -956,12 +956,12 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.session.cookies.update(cookies)
 
     def start_websocket(self):
-        self._connect_time = time.time()  # Sprint 4: timestamp for debug logger
+        self._connect_time = time.time()  # Record connection time for debug timestamp calculations
         self.check_websocket_if_connect = None
         self.check_websocket_if_error = False
         self.websocket_error_reason = None
 
-        # SPRINT 11/13: Inyectar headers de browser en el handshake del WebSocket
+        # Inject browser-like headers into the WebSocket handshake
         ws_headers = [
             f"User-Agent: {WS_USER_AGENT}",
             f"Origin: {WS_ORIGIN}"
@@ -981,7 +981,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self.websocket_thread.daemon = True
         self.websocket_thread.start()
         
-        # Sprint 6: STEALTH MODE Heartbeat Ping Loop
+        # Start stealth heartbeat ping loop
         self._start_heartbeat_loop()
 
         from iqoptionapi.core.config import TIMEOUT_WS_CONNECT
@@ -1061,7 +1061,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             
         self.ssid(self.SSID)  # sends 'authenticate'
         
-        # Sprint 6: Mimetizar el browser: esperar `authenticated` ANTES de enviar `core.get-profile`
+        # Wait for server authentication confirmation before proceeding
         if hasattr(self, 'authenticated_event'):
             is_auth = self.authenticated_event.wait(timeout=TIMEOUT_SSID_AUTH)
             if not is_auth:
@@ -1071,7 +1071,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         if hasattr(self, 'profile_msg_event'):
             self.profile_msg_event.clear()
 
-        # Sprint 6: Mimetizar el browser explícitamente pidiendo el profile
+        # Request profile explicitly after authentication
         self.send_websocket_request("core.get-profile", {})
         
         if hasattr(self, 'profile_msg_event'):
@@ -1079,7 +1079,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             if not is_ready or self.profile.msg is None:
                 get_logger(__name__).debug("send_ssid: no profile response within 2s, but authentication succeeded.")
 
-        # Sprint 6 SP1: Request balances if balance_id is still None
+        # If balance_id is still unknown, request balances explicitly
         # The modern authenticate protocol does not auto-push profile/balances.
         if self.balance_id is None:
             get_logger(__name__).debug("send_ssid: balance_id is None, requesting internal-billing.get-balances")
