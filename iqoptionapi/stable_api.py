@@ -469,13 +469,13 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         return self.api.traders_mood
 
     def get_technical_indicators(self, ACTIVES):
-        self.api.technical_indicators[str(ACTIVES)] = None
         self.api.technical_indicators_event.clear()
-        self.api.get_technical_indicators(OP_code.ACTIVES[ACTIVES])
+        request_id = self.api.get_Technical_indicators(OP_code.ACTIVES[ACTIVES])
         is_ready = self.api.technical_indicators_event.wait(timeout=config.TIMEOUT_WS_DATA)
-        if (not is_ready):
+        if not is_ready:
             get_logger(__name__).warning('Timeout waiting for technical_indicators: %s', ACTIVES)
-        return self.api.technical_indicators.get(str(ACTIVES))
+            return None
+        return self.api.technical_indicators.get(request_id)
 
     def _wait_result(self, order_id: (int | str), result_store, event_store: dict, timeout: float=120.0) -> (dict | None):
         'Espera el resultado de un trade sin bloquear el thread forever.\n        \n        Retorna el dict del resultado, o None si vence el timeout.\n        '
