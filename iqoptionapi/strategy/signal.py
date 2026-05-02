@@ -23,7 +23,12 @@ class AssetType(str, Enum):
     BINARY  = "binary-option"
     DIGITAL = "digital-option"
     TURBO   = "turbo-option"
-    CFD     = "cfd"           # Margen: Forex, Acciones, Cripto, Índices, Fondos
+    FOREX       = "forex"
+    CRYPTO      = "crypto"
+    STOCKS      = "stocks"
+    COMMODITIES = "commodities"
+    INDICES     = "indices"
+    ETF         = "etf"
 
 
 @dataclass(frozen=True)
