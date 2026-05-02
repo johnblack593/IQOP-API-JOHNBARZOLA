@@ -89,79 +89,6 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
     """Class for communication with IQ Option API."""
 
     # pylint: disable=too-many-public-methods
-    socket_option_opened = {}
-    socket_option_closed = {}
-    timesync = TimeSync()
-    profile = Profile()
-    candles = Candles()
-    listinfodata = ListInfoData()
-    api_option_init_all_result = None
-    api_option_init_all_result_v2 = None
-    # for digital
-    underlying_list_data = None
-    position_changed = None
-    instrument_quotes_generated_data = nested_dict(2, dict)
-    instrument_quotes_generated_raw_data = nested_dict(2, dict)
-    instrument_quotes_generated_timestamp = nested_dict(2, dict)
-    strike_list = None
-    leaderboard_deals_client = None
-    #position_changed_data = nested_dict(2, dict)
-    # microserviceName_binary_options_name_option=nested_dict(2,dict)
-    order_async = nested_dict(2, dict)
-    order_binary = {}
-    game_betinfo = defaultdict(dict)
-    instruments = None
-    financial_information = None
-    buy_id = None
-    buy_order_id = None
-    traders_mood = {}  # get hight(put) %
-    technical_indicators = {}
-    order_data = None
-    positions = None
-    position = None
-    deferred_orders = None
-    position_history = None
-    position_history_v2 = None
-    available_leverages = None
-    order_canceled = None
-    close_position_data = None
-    overnight_fee = None
-    margin_order_result = None
-    # ---for real time
-    digital_option_placed_id = {}
-    live_deal_data = nested_dict(3, deque)
-
-    subscribe_commission_changed_data = nested_dict(2, dict)
-    real_time_candles = nested_dict(3, dict)
-    real_time_candles_maxdict_table = nested_dict(2, dict)
-    candle_generated_check = nested_dict(2, dict)
-    candle_generated_all_size_check = nested_dict(1, dict)
-    # ---for api_game_getoptions_result
-    api_game_getoptions_result = None
-    sold_options_respond = None
-    sold_digital_options_respond = None
-    tpsl_changed_respond = None
-    auto_margin_call_changed_respond = None
-    top_assets_updated_data = {}
-    get_options_v2_data = None
-    # --for binary option multi buy
-    buy_multi_result = None
-    buy_multi_option = {}
-    pending_buy_ids = deque()
-    #
-    result = None
-    training_balance_reset_request = None
-    balances_raw = None
-    user_profile_client = None
-    leaderboard_userinfo_deals_client = None
-    users_availability = None
-    # ------------------
-    digital_payout = None
-    
-    short_active_info_data = {}
-    exchange_rates = {}
-    trading_params_data = {}
-    position_changed_data = {}
 
     def __init__(self, host, username, proxies=None):
         """
@@ -171,6 +98,71 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         :param dict proxies: (optional) The http request proxies.
         """
         self.https_url = "https://iqoption.com/api"
+
+        # --- Estado de datos de instancia (BUG-API-01 fix) ---
+        self.socket_option_opened = {}
+        self.socket_option_closed = {}
+        self.timesync = TimeSync()
+        self.profile = Profile()
+        self.candles = Candles()
+        self.listinfodata = ListInfoData()
+        self.api_option_init_all_result = None
+        self.api_option_init_all_result_v2 = None
+        self.underlying_list_data = None
+        self.position_changed = None
+        self.instrument_quotes_generated_data = nested_dict(2, dict)
+        self.instrument_quotes_generated_raw_data = nested_dict(2, dict)
+        self.instrument_quotes_generated_timestamp = nested_dict(2, dict)
+        self.strike_list = None
+        self.leaderboard_deals_client = None
+        self.order_async = nested_dict(2, dict)
+        self.order_binary = {}
+        self.game_betinfo = defaultdict(dict)
+        self.instruments = None
+        self.financial_information = None
+        self.buy_id = None
+        self.buy_order_id = None
+        self.traders_mood = {}
+        self.technical_indicators = {}
+        self.order_data = None
+        self.positions = None
+        self.position = None
+        self.deferred_orders = None
+        self.position_history = None
+        self.position_history_v2 = None
+        self.available_leverages = None
+        self.order_canceled = None
+        self.close_position_data = None
+        self.overnight_fee = None
+        self.margin_order_result = None
+        self.digital_option_placed_id = {}
+        self.live_deal_data = nested_dict(3, deque)
+        self.subscribe_commission_changed_data = nested_dict(2, dict)
+        self.real_time_candles = nested_dict(3, dict)
+        self.real_time_candles_maxdict_table = nested_dict(2, dict)
+        self.candle_generated_check = nested_dict(2, dict)
+        self.candle_generated_all_size_check = nested_dict(1, dict)
+        self.api_game_getoptions_result = None
+        self.sold_options_respond = None
+        self.sold_digital_options_respond = None
+        self.tpsl_changed_respond = None
+        self.auto_margin_call_changed_respond = None
+        self.top_assets_updated_data = {}
+        self.get_options_v2_data = None
+        self.buy_multi_result = None
+        self.buy_multi_option = {}
+        self.pending_buy_ids = deque()
+        self.result = None
+        self.training_balance_reset_request = None
+        self.balances_raw = None
+        self.user_profile_client = None
+        self.leaderboard_userinfo_deals_client = None
+        self.users_availability = None
+        self.digital_payout = None
+        self.short_active_info_data = {}
+        self.exchange_rates = {}
+        self.trading_params_data = {}
+        self.position_changed_data = {}
         self.wss_url = "wss://{host}/echo/websocket".format(host=host)
         self.websocket_client = None
         self.session = get_shared_session()
