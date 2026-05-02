@@ -27,6 +27,9 @@ class ConsensusResult:
 class SignalConsensus:
     """
     Agrega señales de múltiples estrategias y retorna el consenso.
+
+    Uso con señales del servidor:
+    result = consensus.evaluate_with_server(candles, server_indicators)
     """
 
     def __init__(
@@ -34,12 +37,14 @@ class SignalConsensus:
         strategies: Optional[List[BaseStrategy]] = None,
         min_agreement: float = 0.66,
         min_score: float = 0.60,
+        server_signal_boost: float = 0.10,
     ) -> None:
         self.strategies = strategies or []
         if strategies is not None and 0 < len(self.strategies) < 2:
              raise ValueError("SignalConsensus requires at least 2 strategies")
         self.min_agreement = min_agreement
         self.min_score = min_score
+        self.server_signal_boost = server_signal_boost
         self._logger = logging.getLogger(__name__)
 
 
@@ -112,6 +117,94 @@ class SignalConsensus:
             signals=signals or (),
             is_actionable=False
         )
+
+    def _parse_server_direction(
+        self, server_indicators: dict
+    ) -> Direction:
+        """
+        Interpreta el dict de indicadores del servidor IQ Option y
+        retorna la dirección dominante (CALL, PUT o HOLD).
+
+        El servidor retorna un dict con claves como 'ma', 'ema', 'rsi',
+        'macd', 'stochastic', 'bollinger' donde cada valor tiene
+        {'signal': 'BUY'|'SELL'|'NEUTRAL', ...}.
+
+        Voting: cuenta BUY vs SELL entre todos los indicadores presentes.
+        """
+        if not server_indicators:
+            return Direction.HOLD
+        buy_votes = 0
+        sell_votes = 0
+        for key, data in server_indicators.items():
+            if not isinstance(data, dict):
+                continue
+            sig = str(data.get("signal", "")).upper()
+            if sig == "BUY":
+                buy_votes += 1
+            elif sig == "SELL":
+                sell_votes += 1
+        if buy_votes > sell_votes:
+            return Direction.CALL
+        elif sell_votes > buy_votes:
+            return Direction.PUT
+        return Direction.HOLD
+
+    def evaluate_with_server(
+        self,
+        candles: NDArray[np.float64],
+        server_indicators: dict | None = None,
+    ) -> ConsensusResult:
+        """
+        Evalúa el consenso local y aplica un boost al composite_score
+        si las señales del servidor confirman la misma dirección.
+
+        Args:
+            candles:           Array numpy de velas para las estrategias locales.
+            server_indicators: Dict de indicadores del servidor IQ Option,
+                               tal como retorna get_technical_indicators().
+                               Si es None, equivale a llamar evaluate() directamente.
+
+        Returns:
+            ConsensusResult con composite_score potencialmente boosteado.
+            El campo `signals` incluye metadata indicando si el servidor confirmó.
+        """
+        result = self.evaluate(candles)
+
+        if not server_indicators or result.direction == Direction.HOLD:
+            return result
+
+        server_dir = self._parse_server_direction(server_indicators)
+        server_confirmed = (server_dir == result.direction)
+
+        if server_confirmed:
+            boosted_score = min(1.0, result.composite_score + self.server_signal_boost)
+            boosted_actionable = (
+                result.agreement_ratio >= self.min_agreement
+                and boosted_score >= self.min_score
+            )
+            self._logger.debug(
+                "Server confirmed %s: composite_score %.2f → %.2f",
+                result.direction, result.composite_score, boosted_score
+            )
+            # Reconstruir ConsensusResult con score boosteado
+            # (frozen dataclass → crear nuevo)
+            result = ConsensusResult(
+                direction=result.direction,
+                agreement_ratio=result.agreement_ratio,
+                avg_confidence=result.avg_confidence,
+                composite_score=round(boosted_score, 2),
+                participating=result.participating,
+                agreeing=result.agreeing,
+                signals=result.signals,
+                is_actionable=boosted_actionable,
+            )
+        else:
+            self._logger.debug(
+                "Server direction %s conflicts with local %s — no boost applied",
+                server_dir, result.direction
+            )
+
+        return result
 
     def add_strategy(self, strategy: BaseStrategy) -> None:
         self.strategies.append(strategy)

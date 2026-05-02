@@ -60,6 +60,66 @@ class TestSignalConsensus(unittest.TestCase):
         self.assertEqual(res.direction, Direction.CALL)
         self.assertEqual(len(res.participating), 1)
 
+class TestSignalConsensusServerBoost:
+    """Tests para evaluate_with_server()."""
+
+    def _make_consensus(self):
+        from iqoptionapi.strategy.signal_consensus import SignalConsensus
+        from iqoptionapi.strategy.base import BaseStrategy
+        from iqoptionapi.strategy.signal import Signal, Direction, AssetType
+        from unittest.mock import MagicMock
+        import numpy as np
+
+        s1 = MagicMock(spec=BaseStrategy)
+        s1.name = "strat_a"
+        s1.analyze.return_value = Signal(
+            asset="EURUSD", direction=Direction.CALL,
+            duration=60, amount=1.0,
+            asset_type=AssetType.BINARY, confidence=0.8,
+            strategy_id="strat_a"
+        )
+        s2 = MagicMock(spec=BaseStrategy)
+        s2.name = "strat_b"
+        s2.analyze.return_value = Signal(
+            asset="EURUSD", direction=Direction.CALL,
+            duration=60, amount=1.0,
+            asset_type=AssetType.BINARY, confidence=0.7,
+            strategy_id="strat_b"
+        )
+        return SignalConsensus(
+            strategies=[s1, s2],
+            min_agreement=0.60,
+            min_score=0.50,
+            server_signal_boost=0.10
+        ), np.zeros(50)
+
+    def test_boost_applied_when_server_confirms(self):
+        consensus, candles = self._make_consensus()
+        base = consensus.evaluate(candles)
+        server = {"ma": {"signal": "BUY"}, "rsi": {"signal": "BUY"}}
+        boosted = consensus.evaluate_with_server(candles, server)
+        assert boosted.composite_score >= base.composite_score
+
+    def test_no_boost_when_server_conflicts(self):
+        consensus, candles = self._make_consensus()
+        base = consensus.evaluate(candles)
+        server = {"ma": {"signal": "SELL"}, "rsi": {"signal": "SELL"}}
+        result = consensus.evaluate_with_server(candles, server)
+        assert result.composite_score == base.composite_score
+
+    def test_no_boost_when_server_is_none(self):
+        consensus, candles = self._make_consensus()
+        base = consensus.evaluate(candles)
+        result = consensus.evaluate_with_server(candles, None)
+        assert result.composite_score == base.composite_score
+
+    def test_composite_score_capped_at_one(self):
+        consensus, candles = self._make_consensus()
+        consensus.server_signal_boost = 0.99  # boost exagerado
+        server = {"ma": {"signal": "BUY"}}
+        result = consensus.evaluate_with_server(candles, server)
+        assert result.composite_score <= 1.0
+
 if __name__ == '__main__':
     unittest.main()
 
