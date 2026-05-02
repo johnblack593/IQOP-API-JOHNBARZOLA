@@ -794,7 +794,6 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         get_logger(__name__).warning('get_order_status: no data found for order_id=%s type=%s', order_id, instrument_type)
         return None
 
-    @rate_limited('_order_bucket')
     def _start_maintenance_thread(self):
 
         def _run():
