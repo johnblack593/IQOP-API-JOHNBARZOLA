@@ -198,6 +198,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         # WS sequence debug logger (active only when JCBV_WS_DEBUG=1)
         self._connect_time: float = 0.0
         self._ws_debug_logger = None
+        
+        from iqoptionapi.core.orchestrator import ConnectionOrchestrator
+        self.orchestrator = ConnectionOrchestrator(self)
         self._ws_debug_file = None
         self.last_heartbeat_timestamp = time.time()
         if os.environ.get("JCBV_WS_DEBUG") == "1":
@@ -1117,48 +1120,30 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
 
         return True
 
-    def connect(self, password):
-        """Method for connection to IQ Option API."""
-        try:
-            self.close()
-        except websocket.WebSocketException as e:
-            get_logger(__name__).error("WebSocket close failed: %s", e)
-        except Exception as e:
-            get_logger(__name__).error("Connection close failed: %s", e)
-        check_websocket, websocket_reason = self.start_websocket()
+    def connect(self, password=None):
+        """Method for connection to IQ Option server with orchestrated stealth."""
+        # 1. Ejecutar secuencia pre-handshake (HTTP appinit, check-session)
+        self.orchestrator.pre_handshake_sequence()
+        
+        # 2. Si no hay SSID (vía check-session), intentar login tradicional
+        if not self.SSID and password:
+            get_logger(__name__).info("No active session found. Attempting manual login...")
+            login_resp = self.login(self.username, password)
+            if login_resp and login_resp.status_code == 200:
+                self.SSID = login_resp.cookies.get("ssid")
+                get_logger(__name__).info("Manual login successful. SSID: %s...", self.SSID[:8] if self.SSID else "None")
+            else:
+                get_logger(__name__).error("Manual login failed.")
 
-        if check_websocket == False:
+        # 3. Iniciar WebSocket
+        check_websocket, websocket_reason = self.start_websocket()
+        if not check_websocket:
             return check_websocket, websocket_reason
 
-        # doing temp ssid reconnect for speed up
-        if self.SSID != None:
+        # 3. Ejecutar secuencia post-connect (send_ssid con jitter)
+        self.orchestrator.post_websocket_connect()
 
-            check_ssid = self.send_ssid()
-
-            if check_ssid == False:
-                # ssdi time out need reget,if sent error ssid,the weksocket will close by iqoption server
-                response = self.get_ssid(password)
-                try:
-                    self.SSID = response.cookies["ssid"]
-                except Exception:
-                    return False, response.text if hasattr(response, "text") else str(response)
-                atexit.register(self.logout)
-                self.start_websocket()
-                self.send_ssid()
-
-        # the ssid is None need get ssid
-        else:
-            response = self.get_ssid(password)
-            try:
-                self.SSID = response.cookies["ssid"]
-            except Exception:
-                self.close()
-                return False, response.text if hasattr(response, "text") else str(response)
-            atexit.register(self.logout)
-            self.send_ssid()
-
-        self.session.cookies.set("ssid", self.SSID, domain="iqoption.com")
-
+        # 4. Sincronizar estado base
         self._init_data_received = False
         self.timesync.server_timestamp = None
         start_t = time.time()
@@ -1166,6 +1151,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
             time.sleep(0.05)
             if time.time() - start_t >= 15:
                 return False, "Timeout waiting for server timestamp"
+        
         return True, None
 
     def connect2fa(self, sms_code):

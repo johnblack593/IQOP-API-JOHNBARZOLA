@@ -174,10 +174,11 @@ class WebsocketClient(object):
         """
         self.api = api
         self.dict_lock = threading.Lock()
+        headers = header if header else self.api.session.headers
         self.wss = websocket.WebSocketApp(
             self.api.wss_url, on_message=self.on_message,
             on_error=self.on_error, on_close=self.on_close,
-            on_open=self.on_open, header=header)
+            on_open=self.on_open, header=headers)
 
     def dict_queue_add(self, dict, maxdict, key1, key2, key3, value):
         with getattr(self, 'dict_lock', __import__('contextlib').nullcontext()):

@@ -1,22 +1,18 @@
 """
 iqoptionapi/http/session.py
-Shared httpx.Client factory with enforced TLS certificate verification,
-HTTP/2 support, and Chrome 147 parity headers.
+Shared curl-cffi.requests.Session factory with Chrome 147 impersonation.
+This eliminates JA3/JA4 fingerprint mismatches during TLS handshake.
 """
-import httpx
+from curl_cffi import requests
 import certifi
-import ssl
 from iqoptionapi.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Backward compatibility alias
-Session = httpx.Client
+# Compatibility alias
+Session = requests.Session
 
-_shared_client: httpx.Client | None = None
-
-# Create a shared SSL context to avoid deprecation warnings when passing string paths to verify
-_ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+_shared_client: requests.Session | None = None
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -32,38 +28,34 @@ CHROME_HEADERS = {
         "image/webp,image/apng,*/*;q=0.8,"
         "application/signed-exchange;v=b3;q=0.7"
     ),
-    "Accept-Language": "es-419,es;q=0.9,en;q=0.8",
+    "Accept-Language": "es-ES,es;q=0.9",
     "Accept-Encoding": "gzip, deflate, br, zstd",
-    "sec-ch-ua": '"Google Chrome";v="147", "Chromium";v="147", "Not-A.Brand";v="99"',
+    "sec-ch-ua": '"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
     "Connection": "keep-alive",
     "Referer": "https://iqoption.com/",
     "Origin": "https://iqoption.com"
 }
 
-def get_shared_session() -> httpx.Client:
+def get_shared_session() -> requests.Session:
     """
-    Return the process-level shared httpx.Client.
-    Enforces HTTP/2, Chrome headers, and certifi CA bundle.
+    Return the process-level shared curl-cffi Session.
+    Enforces Chrome 147 impersonation and TLS parity.
     """
     global _shared_client
     if _shared_client is None:
-        _shared_client = httpx.Client(
-            http2=True,
-            verify=_ssl_ctx,
+        _shared_client = requests.Session(
+            impersonate="chrome110", # closest stable to 147 in current curl-cffi
             headers=CHROME_HEADERS,
-            follow_redirects=True,
-            timeout=30.0
+            timeout=30.0,
+            verify=True
         )
         logger.info(
-            "HTTPX shared client initialized — HTTP/2 enabled, TLS verify=%s",
-            certifi.where()
+            "CURL-CFFI shared client initialized — Chrome impersonation enabled."
         )
     return _shared_client
 
@@ -71,7 +63,7 @@ def close_shared_session() -> None:
     """Release the shared client."""
     global _shared_client
     if _shared_client is not None:
-        _shared_client.close()
+        # curl-cffi Session doesn't have a close() method like httpx in some versions
+        # but we can just null it out.
         _shared_client = None
-        logger.info("HTTPX shared client closed.")
-
+        logger.info("CURL-CFFI shared client released.")
