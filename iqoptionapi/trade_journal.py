@@ -196,4 +196,78 @@ class TradeJournal:
                 session_id=self.session_id
             )
             self._persist(record)
+    def export_parquet(self, filepath: Optional[str] = None, compression: str = "snappy") -> str:
+        """
+        Exports the trade journal to Parquet format.
 
+        Args:
+            filepath: Destination path. If None, uses the same
+                      directory as the CSV export with extension .parquet.
+            compression: Parquet compression codec.
+                         Accepted: "snappy", "gzip", "zstd", "none".
+                         Default: "snappy".
+        Returns:
+            Absolute path of the written Parquet file.
+        Raises:
+            ImportError: If pyarrow is not installed.
+            ValueError: If the journal is empty (no trades recorded).
+        """
+        try:
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+        except ImportError:
+            raise ImportError(
+                "pyarrow is required for Parquet export. "
+                "Install with: pip install pyarrow>=14.0"
+            )
+
+        trades = self.get_trades_today()
+        if not trades:
+            raise ValueError("No trades recorded today to export.")
+
+        if filepath is None:
+            # Reutilizar lógica de _get_filename pero cambiar extensión
+            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            filepath = os.path.join(self.journal_dir, f"trades_{date_str}.parquet")
+
+        filepath = os.path.abspath(filepath)
+        
+        # Prepare data for Arrow
+        data = []
+        for t in trades:
+            d = asdict(t)
+            # metadata must be JSON string for Arrow if we want to keep it simple
+            if isinstance(d.get("metadata"), dict):
+                d["metadata"] = json.dumps(d["metadata"])
+            data.append(d)
+
+        # Build Table
+        # We define schema explicitly to ensure correct types as requested
+        schema = pa.schema([
+            ("trade_id", pa.string()),
+            ("asset", pa.string()),
+            ("direction", pa.string()),
+            ("amount", pa.float64()),
+            ("duration_secs", pa.int64()),
+            ("asset_type", pa.string()),
+            ("strategy_id", pa.string()),
+            ("signal_confidence", pa.float64()),
+            ("open_time", pa.string()),
+            ("close_time", pa.string()),
+            ("open_price", pa.float64()),
+            ("close_price", pa.float64()),
+            ("result", pa.string()),
+            ("profit_usd", pa.float64()),
+            ("metadata", pa.string()),
+            ("session_id", pa.string()),
+        ])
+
+        table = pa.Table.from_pylist(data, schema=schema)
+        
+        pq.write_table(table, filepath, compression=compression)
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("TradeJournal exported to Parquet: %s (%d records)", filepath, len(trades))
+        
+        return filepath
