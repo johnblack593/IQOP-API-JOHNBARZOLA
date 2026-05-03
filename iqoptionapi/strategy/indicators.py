@@ -216,3 +216,71 @@ def atr(
         
     # ATR is the EMA of TR
     return ema(np.array(tr_values, dtype=np.float64), period)
+
+
+def vwap(
+    highs: NDArray[np.float64],
+    lows: NDArray[np.float64],
+    closes: NDArray[np.float64],
+    volumes: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """
+    Volume Weighted Average Price.
+    VWAP = sum(TypicalPrice * Volume) / sum(Volume)
+    TypicalPrice = (High + Low + Close) / 3
+    Retorna array de nan si longitudes no coinciden.
+    """
+    h = np.asarray(highs, dtype=np.float64)
+    l = np.asarray(lows, dtype=np.float64)
+    c = np.asarray(closes, dtype=np.float64)
+    v = np.asarray(volumes, dtype=np.float64)
+
+    if len(c) < 1:
+        return np.array([], dtype=np.float64)
+
+    if not (len(h) == len(l) == len(c) == len(v)):
+        return np.full(len(c), np.nan, dtype=np.float64)
+
+    typical_price = (h + l + c) / 3.0
+    tp_v = typical_price * v
+
+    cum_tp_v = np.cumsum(tp_v)
+    cum_v = np.cumsum(v)
+
+    # Avoid division by zero
+    with np.errstate(divide="ignore", invalid="ignore"):
+        res = cum_tp_v / cum_v
+        res[cum_v == 0] = np.nan
+
+    return res
+
+
+def obv(
+    closes: NDArray[np.float64],
+    volumes: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """
+    On-Balance Volume.
+    OBV[i] = OBV[i-1] + Volume[i] if close[i] > close[i-1]
+    OBV[i] = OBV[i-1] - Volume[i] if close[i] < close[i-1]
+    Retorna array de nan si longitudes no coinciden.
+    """
+    c = np.asarray(closes, dtype=np.float64)
+    v = np.asarray(volumes, dtype=np.float64)
+
+    if len(c) < 1:
+        return np.array([], dtype=np.float64)
+    if len(c) == 1:
+        return np.array([0.0], dtype=np.float64)
+
+    if len(c) != len(v):
+        return np.full(len(c), np.nan, dtype=np.float64)
+
+    diff = np.diff(c)
+    direction = np.sign(diff)
+
+    # OBV start at 0
+    res = np.zeros(len(c), dtype=np.float64)
+    res[1:] = np.cumsum(direction * v[1:])
+
+    return res
