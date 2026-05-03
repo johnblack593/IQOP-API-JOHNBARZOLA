@@ -25,7 +25,7 @@ class ServerIndicatorBridge:
 
     def is_empty(self) -> bool:
         """Retorna True si el bridge no contiene datos válidos del servidor."""
-        if not self._raw:
+        if not self._raw or not isinstance(self._raw, dict):
             return True
 
         # El servidor a veces retorna un error explícito en el dict

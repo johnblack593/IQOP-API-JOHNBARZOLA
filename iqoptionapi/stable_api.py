@@ -291,7 +291,18 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         instruments = self.get_instruments(type)
         if (instruments and isinstance(instruments, dict) and ('instruments' in instruments)):
             for ins in instruments['instruments']:
-                OP_code.ACTIVES[ins['id']] = ins['active_id']
+                # safer access to id and active_id
+                ins_id = ins.get('id') or ins.get('active_id')
+                active_id = ins.get('active_id') or ins.get('id')
+                if ins_id:
+                    OP_code.ACTIVES[ins_id] = active_id
+                
+                # Also try to map by name if available
+                if 'name' in ins:
+                    name = str(ins['name'])
+                    if '.' in name:
+                        name = name.split('.')[1]
+                    OP_code.ACTIVES[name] = active_id
 
     def instruments_input_all_in_ACTIVES(self):
         self.instruments_input_to_ACTIVES('crypto')
@@ -304,8 +315,17 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             return
         for dirr in ['binary', 'turbo', 'blitz']:
             if (dirr in init_info):
-                for i in init_info[dirr]['actives']:
-                    OP_code.ACTIVES[init_info[dirr]['actives'][i]['name'].split('.')[1]] = int(i)
+                actives = init_info[dirr].get('actives', {})
+                for i in actives:
+                    try:
+                        name_raw = actives[i].get('name', '')
+                        if '.' in name_raw:
+                            name = name_raw.split('.')[1]
+                            OP_code.ACTIVES[name] = int(i)
+                        else:
+                            OP_code.ACTIVES[name_raw] = int(i)
+                    except Exception:
+                        continue
 
     def get_blitz_instruments(self):
         '\n        Returns the catalog of Blitz instruments extracted from the\n        initialization-data WebSocket message. Structure:\n        { "ASSET_NAME": { "id": int, "ticker": str, "enabled": bool,\n                          "is_suspended": bool, "open": bool,\n                          "expirations": [30, 45, ...] } }\n\n        Blitz instruments are NOT available via get_instruments() —\n        the server rejects type="blitz" with error 4000.\n        '
