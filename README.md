@@ -1,71 +1,168 @@
-# JCBV-NEXUS IQ Option API SDK (v9.1.000)
+# JCBV-NEXUS — IQ Option Trading Bot SDK
 
-**IQ Option API con esteroides para robots de trading.**
+![Python](https://img.shields.io/badge/python-3.11.9-blue)
+![Tests](https://img.shields.io/badge/tests-381%20passed-green)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-API wrapper de IQ Option diseñada para sistemas de trading algorítmico que requieren control absoluto del protocolo, resiliencia ante fallos y mecanismos avanzados de evasión de detección (Stealth).
+JCBV-NEXUS is a professional-grade IQ Option API SDK designed for high-frequency algorithmic trading and resilient market interaction. It provides a robust infrastructure for building, testing, and deploying trading bots with a focus on security, performance, and risk management.
 
----
+Designed primarily for **PRACTICE** accounts, the SDK includes sophisticated mechanisms for signal consensus, circuit breaking, and asynchronous journaling, ensuring that your trading strategies are executed safely and documented thoroughly.
 
-## ¿Qué es esto?
-Este SDK es una evolución del wrapper estándar, optimizado para:
-1. **Baja Latencia**: Gestión eficiente de hilos y WebSocket.
-2. **Alta Disponibilidad**: Reconexión inteligente y gestión de sesiones.
-3. **Seguridad (Stealth)**: Emulación de comportamiento humano y fingerprint de browser real.
+## Architecture
 
-## Características Principales
-- **Conexión Stealth**: Emulación de Chrome 124 (Headers, Jitter, Fingerprinting).
-- **Arquitectura Modular**: Lógica dividida en Mixins (Orders, Positions, Streams, Management).
-- **Gestión de Streams**: `SubscriptionManager` que limita y humaniza las peticiones de datos.
-- **Protección de Capital**: `CircuitBreaker` integrado para detener el bot ante anomalías o pérdidas excesivas.
-- **Inteligencia de Mercado**: Motores de calidad de mercado, patrones de velas y régimen de mercado.
+The SDK follows a modular design, decoupling connection handling from trading logic and risk management:
 
-## Instalación
+```text
+  IQ Option Server
+        │ WebSocket
+        ▼
+  ┌─────────────┐    ┌──────────────────┐
+  │  stable_api │───▶│ BotOrchestrator  │
+  └─────────────┘    └────────┬─────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+      ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+      │SignalConsensus│ │CircuitBreaker│ │ TradeJournal │
+      └──────┬───────┘ └──────────────┘ └──────────────┘
+             │
+      ┌──────▼───────────────────────┐
+      │  indicators.py (12 indicators)│
+      │  VWAP·OBV·ADX·%R·CCI·...    │
+      └──────────────────────────────┘
+```
+
+## Requirements
+
+- **Python**: 3.11.9+
+- **Core Dependencies**:
+  - `websocket-client`: Real-time data streaming.
+  - `requests` & `httpx`: REST API interactions.
+  - `numpy`: Fast numerical analysis for indicators and backtesting.
+  - `PyYAML`: Configuration management.
+
+## Installation
+
+### From Source
 ```bash
 git clone https://github.com/johnblack593/IQOP-API-JOHNBARZOLA.git
 cd IQOP-API-JOHNBARZOLA
-pip install -e .
-cp .env.example .env   # Completar con credenciales reales
+pip install -e ".[dev]"
 ```
 
-## Ejemplos de Uso
-La carpeta `examples/` contiene scripts listos para usar:
-- `01_basic_connection.py`: Conexión y balance.
-- `02_buy_binary.py`: Compra de opciones binarias.
-- `03_buy_digital.py`: Compra de opciones digitales.
-- `05_multiasset_robot.py`: Ejemplo de robot multi-activo.
+### Verify Installation
+```bash
+python -c "from iqoptionapi.stable_api import IQ_Option; print('OK')"
+iqopt version
+```
 
-## Inicio Rápido (Quick Start)
+## Quick Start
+
+### 1. Create Config File
+```bash
+cp config.yaml.example config.yaml
+# Edit config.yaml with your email and password
+```
+
+### 2. Run in Simulation (Dry-Run)
+```bash
+iqopt run --config config.yaml --dry-run
+```
+
+### 3. Run Backtest
+```bash
+iqopt backtest --config config.yaml --data data/eurusd_1m.csv
+```
+
+### 4. Check Status
+```bash
+iqopt status
+```
+
+## CLI Reference
+
+| Command | Description | Key Flags |
+|---------|-------------|-----------|
+| `iqopt run` | Launch trading bot | `--config`, `--dry-run` |
+| `iqopt backtest` | Offline strategy test | `--config`, `--data`, `--output` |
+| `iqopt status` | Show bot process state | `--state-file` |
+| `iqopt version` | Print version info | — |
+
+## Indicators Available
+
+The SDK provides a rich set of 12 technical indicators implemented in `iqoptionapi/strategy/indicators.py`:
+
+| Indicator | Category | Description |
+|-----------|----------|-------------|
+| SMA | Trend | Simple Moving Average |
+| EMA | Trend | Exponential Moving Average |
+| RSI | Momentum | Relative Strength Index |
+| MACD | Momentum | Moving Average Convergence Divergence |
+| Bollinger Bands | Volatility | Standard deviation bands |
+| Stochastic | Momentum | %K/%D oscillator |
+| ATR | Volatility | Average True Range |
+| VWAP | Volume | Volume Weighted Average Price |
+| OBV | Volume | On-Balance Volume |
+| ADX | Trend | Average Directional Index |
+| Williams %R | Momentum | Williams Percent Range |
+| CCI | Momentum | Commodity Channel Index |
+
+## BacktestEngine Usage
+
+You can use the `BacktestEngine` directly in your Python scripts for custom simulation workflows:
+
 ```python
-from iqoptionapi.stable_api import IQ_Option
-import os
+from iqoptionapi.backtest.engine import BacktestEngine
+from iqoptionapi.strategy.base import BaseStrategy
+import numpy as np
 
-iq = IQ_Option(os.getenv("IQ_EMAIL"), os.getenv("IQ_PASSWORD"))
-check, reason = iq.connect()
+# Load your historical data
+candles = np.loadtxt("data.csv", delimiter=",", skiprows=1, dtype=float)
 
-if check:
-    print("Conexión exitosa")
-    iq.change_balance("PRACTICE")
-    # Comprar $1 en EURUSD a 1 minuto
-    iq.buy(1, "EURUSD", "call", 1)
-else:
-    print(f"Error: {reason}")
+# Initialize engine
+engine = BacktestEngine(
+    strategy=MyCustomStrategy(...),
+    candles=candles,
+    initial_balance=1000.0,
+    trade_amount=10.0,
+    payout=0.82,
+)
+
+# Run simulation
+result = engine.run()
+
+print(f"Win Rate: {result.win_rate:.1%}")
+print(f"Sharpe Ratio: {result.sharpe_ratio:.2f}")
+print(f"Max Drawdown: {result.max_drawdown_pct:.1f}%")
 ```
 
-## Configuración (.env)
-Ver [.env.example](.env.example) para todas las variables disponibles.
+## Safety Features
 
-## Arquitectura del SDK
-El SDK utiliza un patrón de **Fachada** (`IQ_Option`) que hereda de múltiples **Mixins** especializados. 
-Para más detalles, ver [docs/architecture.md](docs/architecture.md).
+- **Circuit Breaker**: Automatically halts the bot if drawdown thresholds or consecutive loss limits are exceeded.
+- **Dry-Run Mode**: Defaults to `True`. The bot will never place real trades unless explicitly configured.
+- **Asynchronous Journaling**: Records all trade results (including post-expiration verification) without blocking the main execution loop.
+- **Input Validation**: Robust handling of `NaN` and edge cases across all technical indicators.
+- **Comprehensive Testing**: 381+ unit tests ensuring stability and correctness.
 
-## Notas de Seguridad (Stealth / Anti-ban)
-Ver [docs/stealth-guide.md](docs/stealth-guide.md) para la guía completa.
+## Project Structure
 
-## Guía de Desarrollo
-1. Las nuevas funcionalidades de trading deben ir en `iqoptionapi/mixins/`.
-2. Todo cambio debe ser validado con `pytest tests/unit/`.
-3. Ver [docs/testing-guide.md](docs/testing-guide.md) para más info.
-4. Para detalles de integración pública, ver [docs/integration.md](docs/integration.md).
+```text
+IQOP-API-JOHNBARZOLA/
+├── iqoptionapi/
+│   ├── backtest/          # BacktestEngine + metrics
+│   ├── bot/               # BotOrchestrator
+│   ├── cli/               # CLI (main.py, config_loader.py)
+│   ├── strategy/          # indicators, signals, consensus
+│   │   ├── indicators.py  # 12 technical indicators
+│   │   ├── signal_consensus.py
+│   │   └── server_indicator_bridge.py
+│   └── ws/                # WebSocket receivers
+├── tests/
+│   └── unit/              # 381+ tests
+├── config.yaml.example
+└── pyproject.toml
+```
 
-## Changelog
-Ver [CHANGELOG.md](CHANGELOG.md) para el historial completo.
+## License
+
+This project is licensed under the MIT License - see the [pyproject.toml](pyproject.toml) file for details.

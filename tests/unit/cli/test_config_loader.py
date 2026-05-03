@@ -167,3 +167,23 @@ def test_load_config_dry_run_default_true(minimal_yaml):
 def test_load_config_practice_account_default(minimal_yaml):
     config = load_config(minimal_yaml)
     assert config.iqoption.account_type == "PRACTICE"
+
+
+# 13. Example config is valid
+def test_example_config_is_valid(tmp_path):
+    from pathlib import Path
+    example_path = Path("config.yaml.example")
+    if not example_path.exists():
+        pytest.skip("config.yaml.example not found")
+
+    content = example_path.read_text()
+    content = content.replace("your_email@example.com", "test@test.com")
+    content = content.replace("your_password", "testpass123")
+
+    d = tmp_path / "config.yaml"
+    d.write_text(content)
+
+    config = load_config(str(d))
+    assert isinstance(config, BotConfig)
+    assert config.iqoption.email == "test@test.com"
+    assert config.bot.asset == "EURUSD"

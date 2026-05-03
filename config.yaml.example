@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────
+# JCBV-NEXUS — Bot Configuration Template
+# Copy to config.yaml and fill in your credentials.
+# NEVER commit config.yaml to version control.
+# ─────────────────────────────────────────────────────
+
+iqoption:
+  email: "your_email@example.com"
+  password: "your_password"
+  account_type: "PRACTICE"   # PRACTICE | REAL
+
+bot:
+  asset: "EURUSD"
+  timeframe: 60       # seconds: 1,5,10,15,30,60,...,3600
+  trade_amount: 1.0   # minimum 1.0 USD
+  candles_window: 100 # historical candles to load
+  dry_run: true       # IMPORTANT: set false only for live trading
+
+circuit_breaker:
+  enabled: true
+  max_daily_loss_pct: 10.0       # stop at 10% daily drawdown
+  max_consecutive_losses: 5      # stop after 5 losses in a row
+
+strategies:
+  - name: "MACrossover"
+    enabled: true
+  - name: "RSIReversion"
+    enabled: false
+
+logging:
+  level: "INFO"   # DEBUG | INFO | WARNING | ERROR
+  file: null      # null = stdout only; or "bot.log"
