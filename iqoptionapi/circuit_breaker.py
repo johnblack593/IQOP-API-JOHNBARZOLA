@@ -128,6 +128,10 @@ class CircuitBreaker:
         self._last_trip_time = time.time()
         self._trips_today += 1
 
+    def is_open(self) -> bool:
+        """True si el estado es estrictamente OPEN."""
+        return self.state == CircuitBreakerState.OPEN
+
     def can_trade(self) -> bool:
         """True si el estado es CLOSED o HALF."""
         state = self.state

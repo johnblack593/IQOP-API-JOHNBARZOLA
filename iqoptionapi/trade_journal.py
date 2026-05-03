@@ -170,29 +170,29 @@ class TradeJournal:
         active_id: Optional[int] = None,
         amount: Optional[float] = None,
         profit: Optional[float] = None,
+        **kwargs
     ) -> None:
         """
         Registra o actualiza el resultado de una operación.
-        Wrapper sobre close_trade si el trade ya existe, o persistencia directa.
+        Soporta argumentos extendidos para compatibilidad con orquestadores.
         """
         try:
-            self.close_trade(str(order_id), result, profit or 0.0)
+            self.close_trade(str(order_id), result, profit or kwargs.get("profit_usd", 0.0))
         except KeyError:
-            # Si el trade no fue abierto con open_trade (ej: legacy o crash), 
-            # creamos un record mínimo para no perder la estadística.
+            # Si el trade no fue abierto con open_trade, creamos un record completo
             record = TradeRecord(
                 trade_id=str(order_id),
-                asset=str(active_id or "unknown"),
-                direction="unknown",
-                amount=amount or 0.0,
-                duration_secs=0,
-                asset_type="unknown",
-                strategy_id="manual",
-                signal_confidence=0.0,
+                asset=kwargs.get("asset", str(active_id or "unknown")),
+                direction=kwargs.get("direction", "unknown"),
+                amount=amount or kwargs.get("amount", 0.0),
+                duration_secs=kwargs.get("duration_secs", 0),
+                asset_type=kwargs.get("asset_type", "unknown"),
+                strategy_id=kwargs.get("strategy_id", "manual"),
+                signal_confidence=kwargs.get("signal_confidence", 0.0),
                 open_time=datetime.now(timezone.utc).isoformat(),
                 close_time=datetime.now(timezone.utc).isoformat(),
                 result=result,
-                profit_usd=profit,
+                profit_usd=profit or kwargs.get("profit_usd", 0.0),
                 session_id=self.session_id
             )
             self._persist(record)
