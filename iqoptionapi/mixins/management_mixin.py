@@ -165,12 +165,17 @@ class ManagementMixin:
                     if not self.check_connect():
                         continue
                     
-                    elapsed = time.time() - self._last_heartbeat
+                    # SPRINT 14: Sincronizar con timestamp de la API interna
+                    api_hb = getattr(self.api, 'last_heartbeat_timestamp', self._last_heartbeat)
+                    elapsed = time.time() - api_hb
+                    
                     if elapsed > config.HEARTBEAT_TIMEOUT_SECS:
                         get_logger(__name__).warning(
                             "Heartbeat watchdog: %.0fs sin heartbeat — forzando reconexión",
                             elapsed
                         )
+                        # Actualizar para evitar spam de reconexión
+                        setattr(self.api, 'last_heartbeat_timestamp', time.time())
                         self._last_heartbeat = time.time()
                         t = threading.Thread(
                             target=self._auto_reconnect, daemon=True,

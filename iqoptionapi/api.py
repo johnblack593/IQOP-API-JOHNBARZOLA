@@ -199,6 +199,7 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
         self._connect_time: float = 0.0
         self._ws_debug_logger = None
         self._ws_debug_file = None
+        self.last_heartbeat_timestamp = time.time()
         if os.environ.get("JCBV_WS_DEBUG") == "1":
             self._init_ws_debug_logger()
 
@@ -869,7 +870,9 @@ class IQOptionAPI(object):  # pylint: disable=too-many-instance-attributes
                 "user_balance_id": int(self.balance_id)
             }
         }
-        return self.send_websocket_request(name="sendMessage", msg=data)
+        request_id = str(randint(0, 100000))
+        self.send_websocket_request(name="sendMessage", msg=data, request_id=request_id)
+        return request_id
 
     @property
     def close_digital_option(self):

@@ -21,8 +21,8 @@ class Ssid(Base):
             "msg": {
                 "ssid": ssid,
                 "protocol": 3,
-                "session_id": "",
-                "client_session_id": ""
+                "session_id": "".join(__import__('random').choices(__import__('string').ascii_lowercase + __import__('string').digits, k=16)),
+                "client_session_id": "".join(__import__('random').choices(__import__('string').ascii_lowercase + __import__('string').digits, k=16))
             },
             "request_id": str(request_id)
         }

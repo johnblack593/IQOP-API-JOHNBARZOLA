@@ -3,6 +3,22 @@ import time
 from iqoptionapi.core.logger import get_logger
 
 class StreamsMixin:
+    def subscribe_short_active_info(self, active):
+        """
+        Subscribes to short-active-info stream for real-time quotes.
+        """
+        active_id = OP_code.ACTIVES.get(active, active)
+        self.api.subscribe_short_active_info(active_id)
+
+    def unsubscribe_short_active_info(self, active):
+        """
+        Unsubscribes from short-active-info stream.
+        """
+        active_id = OP_code.ACTIVES.get(active, active)
+        # Note: Unsubscribe channel might not be implemented, but we try anyway if it exists
+        if hasattr(self.api, "unsubscribe_short_active_info"):
+            self.api.unsubscribe_short_active_info(active_id)
+
     def subscribe_candles(self, active, size):
         """
         SPRINT 11: Delegar al subscription_manager para emulación de browser.

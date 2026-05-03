@@ -13,4 +13,4 @@ class SubscribeShortActiveInfo(Base):
                 "active_id": int(active_id)
             }
         }
-        self.send_packet(data)
+        self.send_websocket_request(self.name, data)

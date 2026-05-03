@@ -131,6 +131,14 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             except Exception:
                 pass
         self.api = IQOptionAPI('ws.iqoption.com', self.email)
+        
+        # S15-T4: Auto-debug if requested
+        if getattr(config, 'WS_DEBUG_AUTO', False):
+            try:
+                self.api._ws_debug_file = open("ws_debug.log", "a", encoding="utf-8", buffering=1)
+                self.api._ws_debug_logger = True
+                self.api._connect_time = time.time()
+            except Exception: pass
         if (hasattr(self, 'ssid') and self.ssid):
             self.api.SSID = self.ssid
         self.api.socket_option_closed_event = defaultdict(threading.Event)

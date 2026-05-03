@@ -21,7 +21,7 @@ _ssl_ctx = ssl.create_default_context(cafile=certifi.where())
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
+    "Chrome/147.0.0.0 Safari/537.36"
 )
 
 CHROME_HEADERS = {
@@ -29,11 +29,12 @@ CHROME_HEADERS = {
     "Accept": (
         "text/html,application/xhtml+xml,"
         "application/xml;q=0.9,image/avif,"
-        "image/webp,*/*;q=0.8"
+        "image/webp,image/apng,*/*;q=0.8,"
+        "application/signed-exchange;v=b3;q=0.7"
     ),
     "Accept-Language": "es-419,es;q=0.9,en;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
-    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "sec-ch-ua": '"Google Chrome";v="147", "Chromium";v="147", "Not-A.Brand";v="99"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
     "Sec-Fetch-Dest": "document",
@@ -58,7 +59,7 @@ def get_shared_session() -> httpx.Client:
             verify=_ssl_ctx,
             headers=CHROME_HEADERS,
             follow_redirects=True,
-            timeout=15.0
+            timeout=30.0
         )
         logger.info(
             "HTTPX shared client initialized — HTTP/2 enabled, TLS verify=%s",

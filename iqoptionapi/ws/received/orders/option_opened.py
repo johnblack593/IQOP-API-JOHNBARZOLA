@@ -12,10 +12,9 @@ def option_opened(api, message):
             if req_id not in api.buy_multi_option:
                 api.buy_multi_option[req_id] = {}
             api.buy_multi_option[req_id]["id"] = option_id
-            get_logger(__name__).debug("Correlated req_id=%s with option_id=%s", req_id, option_id)
+            get_logger(__name__).info("Correlated req_id=%s with option_id=%s", req_id, option_id)
             # También disparamos el evento para que buy() despierte si aún no lo hizo
             ev = getattr(api, "result_event", None)
             if ev: ev.set()
         else:
-            get_logger(__name__).debug("No pending req_id for option_id=%s", option_id)
-
+            get_logger(__name__).warning("No pending req_id for option_id=%s", option_id)

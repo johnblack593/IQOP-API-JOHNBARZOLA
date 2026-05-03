@@ -97,6 +97,7 @@ _MESSAGE_ROUTER: dict = {
     'auto-margin-call-changed': [auto_margin_call_changed],
     'available-leverages': [available_leverages],
     'authenticated': [__import__('iqoptionapi.ws.received.auth.authenticated', fromlist=['authenticated']).authenticated],
+    'heartbeat': [lambda api, msg: setattr(api, 'last_heartbeat_timestamp', time.time())],
     'balances': [balances],
     'balance-changed': [balance_changed],
     'buyComplete': [buy_complete],
@@ -206,7 +207,12 @@ class WebsocketClient(object):
         """Method to process websocket messages."""
         logger = get_logger(__name__)
         # Sprint 4 TAREA 1: WS debug sequence capture
-        if hasattr(self.api, '_log_ws_debug'):
+        if hasattr(self.api, '_ws_debug_file'):
+            try:
+                self.api._ws_debug_file.write(f"{message}\n")
+                # print(f"DEBUG: WS message logged ({len(message)} chars)")
+            except Exception: pass
+        elif hasattr(self.api, '_log_ws_debug'):
             self.api._log_ws_debug(message)
         with self.api._ws_lock:
             try:

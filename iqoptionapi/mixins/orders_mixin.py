@@ -34,6 +34,10 @@ class OrdersMixin:
         self.api.result_event.clear()
         req_id = str(randint(0, 10000))
         self.api.buy_multi_option[req_id] = {"id": None}
+        
+        # S15-T3: Registrar req_id para correlación en option_opened
+        self.api.pending_buy_ids.append(req_id)
+        
         self.api.buyv3(
             float(price), OP_code.ACTIVES[ACTIVES], str(ACTION), int(expirations), req_id)
         
@@ -152,14 +156,14 @@ class OrdersMixin:
         return False, None
 
     @rate_limited("_order_bucket", on_limit=(False, None))
-    def buy_blitz(self, active, amount, action, current_price, duration=5):
+    def buy_blitz(self, active, amount, action, current_price, expiration_size=180):
         active_id = OP_code.ACTIVES.get(active)
         if not active_id:
             raise ValueError(f"Unknown active '{active}'")
         
         self.api.result = None
         self.api.result_event.clear()
-        self.api.buy_blitz(active_id, action, amount, current_price, duration)
+        self.api.buy_blitz(active_id, action, amount, current_price, expiration_size)
         
         if self.api.result_event.wait(timeout=10):
             if self.api.result:

@@ -11,7 +11,8 @@ con parámetros explícitos:
 
 NUNCA importar constantes de este módulo en tests unitarios que
 requieran valores distintos — pasa los valores como parámetros.
-"""
+"""# S15-T4: Debug global de WS
+WS_DEBUG_AUTO = False
 import os
 
 # --- Timeouts (segundos) ---
