@@ -284,3 +284,140 @@ def obv(
     res[1:] = np.cumsum(direction * v[1:])
 
     return res
+
+
+def adx(
+    highs: NDArray[np.float64],
+    lows: NDArray[np.float64],
+    closes: NDArray[np.float64],
+    period: int = 14,
+) -> NDArray[np.float64]:
+    """
+    Average Directional Index (Wilder's).
+    Measure trend strength. Rango: 0-100.
+    Retorna array de nan si datos insuficientes (requiere 2*period).
+    """
+    h = np.asarray(highs, dtype=np.float64)
+    l = np.asarray(lows, dtype=np.float64)
+    c = np.asarray(closes, dtype=np.float64)
+
+    if len(c) < period * 2:
+        return np.full(len(c), np.nan, dtype=np.float64)
+
+    if not (len(h) == len(l) == len(c)):
+        return np.full(len(c), np.nan, dtype=np.float64)
+
+    # 1. True Range
+    tr = np.zeros(len(c))
+    tr[0] = h[0] - l[0]
+    tr[1:] = np.maximum(
+        h[1:] - l[1:], np.maximum(np.abs(h[1:] - c[:-1]), np.abs(l[1:] - c[:-1]))
+    )
+
+    # 2. Directional Movement
+    up_move = h[1:] - h[:-1]
+    down_move = l[:-1] - l[1:]
+
+    plus_dm = np.zeros(len(c))
+    minus_dm = np.zeros(len(c))
+
+    plus_dm[1:] = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    minus_dm[1:] = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+
+    # 3. Smoothed TR, +DM, -DM (Wilder's Smoothing)
+    def _wilder(vals: NDArray[np.float64], n: int) -> NDArray[np.float64]:
+        res = np.full(len(vals), np.nan)
+        res[n] = np.sum(vals[1 : n + 1])  # Start at period index
+        for i in range(n + 1, len(vals)):
+            res[i] = res[i - 1] - (res[i - 1] / n) + vals[i]
+        return res
+
+    atr_w = _wilder(tr, period)
+    plus_di_w = _wilder(plus_dm, period)
+    minus_di_w = _wilder(minus_dm, period)
+
+    # 4. DI
+    plus_di = 100 * plus_di_w / atr_w
+    minus_di = 100 * minus_di_w / atr_w
+
+    # 5. DX
+    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
+
+    # 6. ADX (Smoothing of DX)
+    # The first valid DX is at index period. We smooth it starting from there.
+    # Wilder smoothing for ADX typically starts at period*2 - 1
+    adx_res = np.full(len(c), np.nan)
+    start_idx = period * 2 - 1
+    if len(dx) > start_idx:
+        valid_dx = dx[period : start_idx + 1]
+        adx_res[start_idx] = np.mean(valid_dx)
+        for i in range(start_idx + 1, len(c)):
+            adx_res[i] = (adx_res[i - 1] * (period - 1) + dx[i]) / period
+
+    return adx_res
+
+
+def williams_r(
+    highs: NDArray[np.float64],
+    lows: NDArray[np.float64],
+    closes: NDArray[np.float64],
+    period: int = 14,
+) -> NDArray[np.float64]:
+    """
+    Williams %R.
+    %R = (HighestHigh - Close) / (HighestHigh - LowestLow) * -100
+    Retorna nan si rango es 0.
+    """
+    h = np.asarray(highs, dtype=np.float64)
+    l = np.asarray(lows, dtype=np.float64)
+    c = np.asarray(closes, dtype=np.float64)
+
+    if len(c) < period:
+        return np.full(len(c), np.nan, dtype=np.float64)
+
+    if not (len(h) == len(l) == len(c)):
+        return np.full(len(c), np.nan, dtype=np.float64)
+
+    res = np.full(len(c), np.nan)
+
+    for i in range(period - 1, len(c)):
+        hh = np.max(h[i - period + 1 : i + 1])
+        ll = np.min(l[i - period + 1 : i + 1])
+        diff = hh - ll
+        if diff != 0:
+            res[i] = (hh - c[i]) / diff * -100.0
+
+    return res
+
+
+def cci(
+    highs: NDArray[np.float64],
+    lows: NDArray[np.float64],
+    closes: NDArray[np.float64],
+    period: int = 20,
+) -> NDArray[np.float64]:
+    """
+    Commodity Channel Index.
+    CCI = (TypicalPrice - SMA_TP) / (0.015 * MeanDeviation)
+    """
+    h = np.asarray(highs, dtype=np.float64)
+    l = np.asarray(lows, dtype=np.float64)
+    c = np.asarray(closes, dtype=np.float64)
+
+    if len(c) < period:
+        return np.full(len(c), np.nan, dtype=np.float64)
+
+    if not (len(h) == len(l) == len(c)):
+        return np.full(len(c), np.nan, dtype=np.float64)
+
+    tp = (h + l + c) / 3.0
+    res = np.full(len(c), np.nan)
+
+    for i in range(period - 1, len(c)):
+        window = tp[i - period + 1 : i + 1]
+        sma_tp = np.mean(window)
+        mean_dev = np.mean(np.abs(window - sma_tp))
+        if mean_dev != 0:
+            res[i] = (tp[i] - sma_tp) / (0.015 * mean_dev)
+
+    return res
