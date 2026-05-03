@@ -75,3 +75,24 @@ jobs:
 
       - name: Run pip-audit
         run: pip-audit --strict --desc
+
+  integration-test:
+    name: Integration tests (IQ Option live)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: pip install -e .[dev]
+      - name: Run integration tests
+        env:
+          IQOP_EMAIL: ${{ secrets.IQOP_EMAIL }}
+          IQOP_PASSWORD: ${{ secrets.IQOP_PASSWORD }}
+        run: |
+          python -m pytest tests/integration/ -v \
+            --tb=short \
+            -m integration \
+            --timeout=60

@@ -39,6 +39,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-mock>=3.12.0",
     "pytest-cov>=4.1.0",
+    "pytest-timeout>=2.2.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -86,6 +87,9 @@ filterwarnings = [
     "error::DeprecationWarning",
     "error::PendingDeprecationWarning",
 ]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m not integration')",
+]
 
 [tool.coverage.run]
 source = ["iqoptionapi"]
@@ -95,7 +99,8 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Baseline: 55.47% — 2026-05-03
-# Umbral de enforcement activo en S5-T4 (post integration tests)
-# fail_under = 70
+# Baseline: 55.47% — 2026-05-03 (unit tests only)
+# Integration tests run separately (job: integration-test)
+# fail_under activation: S6 — after indicators coverage added
+# fail_under = 70  ← descomentar en S6
 show_missing = true
