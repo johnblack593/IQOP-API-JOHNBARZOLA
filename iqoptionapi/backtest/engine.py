@@ -74,6 +74,140 @@ class BacktestRun:
     def total_profit(self) -> float:
         return sum(t.profit for t in self.trades)
 
+    # -- métricas avanzadas (S7-T2) ------------------------------------
+
+    @property
+    def sharpe_ratio(self) -> float:
+        """
+        Sharpe Ratio simplificado: mean(profits) / std(profits).
+        Retorna 0.0 si std == 0 o total_trades < 2.
+        """
+        try:
+            if self.total_trades < 2:
+                return 0.0
+            profits = np.array([t.profit for t in self.trades])
+            std = float(np.std(profits, ddof=1))
+            if std == 0:
+                return 0.0
+            return float(np.mean(profits) / std)
+        except Exception:
+            return 0.0
+
+    @property
+    def max_drawdown(self) -> float:
+        """
+        Máximo drawdown absoluto (peak-to-trough) en USD.
+        Valor positivo; 0.0 si no hay trades.
+        """
+        try:
+            if not self.trades:
+                return 0.0
+            balances = np.array(
+                [self.initial_balance] + [t.balance_after for t in self.trades]
+            )
+            peak = np.maximum.accumulate(balances)
+            drawdowns = peak - balances
+            return float(np.max(drawdowns))
+        except Exception:
+            return 0.0
+
+    @property
+    def max_drawdown_pct(self) -> float:
+        """
+        Máximo drawdown como porcentaje del balance peak.
+        Retorna 0.0 si peak == 0 o no hay trades.
+        """
+        try:
+            if not self.trades:
+                return 0.0
+            balances = np.array(
+                [self.initial_balance] + [t.balance_after for t in self.trades]
+            )
+            peak = np.maximum.accumulate(balances)
+            drawdowns = peak - balances
+            dd_idx = int(np.argmax(drawdowns))
+            peak_val = float(peak[dd_idx])
+            if peak_val == 0:
+                return 0.0
+            return float(drawdowns[dd_idx] / peak_val * 100)
+        except Exception:
+            return 0.0
+
+    @property
+    def profit_factor(self) -> float:
+        """
+        Profit Factor = gross_profit / |gross_loss|.
+        inf si solo hay ganancias; 0.0 si no hay trades.
+        """
+        try:
+            if not self.trades:
+                return 0.0
+            profits = np.array([t.profit for t in self.trades])
+            gross_profit = float(np.sum(profits[profits > 0]))
+            gross_loss = float(np.abs(np.sum(profits[profits < 0])))
+            if gross_loss == 0:
+                return float("inf") if gross_profit > 0 else 0.0
+            return gross_profit / gross_loss
+        except Exception:
+            return 0.0
+
+    @property
+    def expectancy(self) -> float:
+        """
+        Expectancy = (win_rate * avg_win) + ((1 - win_rate) * avg_loss).
+        Retorna 0.0 si no hay trades.
+        """
+        try:
+            if not self.trades:
+                return 0.0
+            profits = np.array([t.profit for t in self.trades])
+            wins = profits[profits > 0]
+            losses = profits[profits < 0]
+            avg_win = float(np.mean(wins)) if len(wins) > 0 else 0.0
+            avg_loss = float(np.mean(losses)) if len(losses) > 0 else 0.0
+            wr = self.win_rate
+            return wr * avg_win + (1 - wr) * avg_loss
+        except Exception:
+            return 0.0
+
+    @property
+    def max_consecutive_wins(self) -> int:
+        """Máxima racha de wins consecutivos."""
+        try:
+            if not self.trades:
+                return 0
+            results = np.array([1 if t.result == "WIN" else 0 for t in self.trades])
+            max_streak = 0
+            current = 0
+            for r in results:
+                if r == 1:
+                    current += 1
+                    max_streak = max(max_streak, current)
+                else:
+                    current = 0
+            return max_streak
+        except Exception:
+            return 0
+
+    @property
+    def max_consecutive_losses(self) -> int:
+        """Máxima racha de losses consecutivos."""
+        try:
+            if not self.trades:
+                return 0
+            results = np.array([1 if t.result == "LOSS" else 0 for t in self.trades])
+            max_streak = 0
+            current = 0
+            for r in results:
+                if r == 1:
+                    current += 1
+                    max_streak = max(max_streak, current)
+                else:
+                    current = 0
+            return max_streak
+        except Exception:
+            return 0
+
 
 # ── Motor de backtesting ─────────────────────────────────────────
 class BacktestEngine:
