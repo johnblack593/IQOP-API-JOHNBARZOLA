@@ -28,7 +28,11 @@ dependencies = [
     "h2>=4.3.0",
     "numpy>=1.26.0",
     "certifi>=2024.0.0",
+    "PyYAML>=6.0.0",
 ]
+
+[project.scripts]
+iqopt = "iqoptionapi.cli.main:main"
 
 [project.optional-dependencies]
 analytics = ["pyarrow>=14.0"]
