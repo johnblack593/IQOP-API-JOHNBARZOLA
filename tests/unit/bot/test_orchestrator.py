@@ -5,6 +5,7 @@ Pruebas unitarias del BotOrchestrator scaffold (S8-T1).
 """
 from __future__ import annotations
 
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -180,4 +181,4 @@ def test_real_trade_execution(mock_iq, mock_consensus):
     mock_iq.buy.assert_called_once_with(1.0, "EURUSD", "put", 60)
 
 
-import threading
+

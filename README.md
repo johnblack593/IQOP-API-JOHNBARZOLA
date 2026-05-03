@@ -1,7 +1,7 @@
 # JCBV-NEXUS — IQ Option Trading Bot SDK
 
 ![Python](https://img.shields.io/badge/python-3.11.9-blue)
-![Tests](https://img.shields.io/badge/tests-381%20passed-green)
+![Tests](https://img.shields.io/badge/tests-382%20passed-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 JCBV-NEXUS is a professional-grade IQ Option API SDK designed for high-frequency algorithmic trading and resilient market interaction. It provides a robust infrastructure for building, testing, and deploying trading bots with a focus on security, performance, and risk management.

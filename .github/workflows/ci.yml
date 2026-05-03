@@ -74,7 +74,7 @@ jobs:
         run: pip install -e ".[dev]" || pip install -e . || pip install -r requirements.txt
 
       - name: Run pip-audit
-        run: pip-audit --strict --desc
+        run: pip-audit --strict --desc --skip-editable
 
   integration-test:
     name: Integration tests (IQ Option live)
