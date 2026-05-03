@@ -43,9 +43,18 @@ jobs:
         run: |
           python -m pytest tests/unit/ -v --tb=short \
             -W error::DeprecationWarning \
-            -W error::PendingDeprecationWarning
-        # filterwarnings también declarados en pyproject.toml — explícito aquí
-        # para visibilidad en el log de CI sin necesidad de leer pyproject.toml
+            -W error::PendingDeprecationWarning \
+            --cov=iqoptionapi \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: warn
 
   security-audit:
     name: Security Audit (pip-audit)
