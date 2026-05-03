@@ -62,3 +62,6 @@ tests/reports/*.json
 # Scratch — capturas grandes de sesión (no versionar)
 tests/scratch/*.json
 tests/scratch/logs/
+
+# Live Validation Reports
+tests/live/reports/

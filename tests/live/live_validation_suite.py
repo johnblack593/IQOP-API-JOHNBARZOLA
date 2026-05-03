@@ -326,7 +326,7 @@ class LiveValidationSuite:
             md += f"| {r.group} | {r.sub_test} | {r.result} | {r.value} |\n"
         
         try:
-            with open("tests/live/LIVE_VALIDATION_REPORT.md", "w", encoding="utf-8") as f:
+            with open("tests/live/reports/LIVE_VALIDATION_REPORT.md", "w", encoding="utf-8") as f:
                 f.write(md)
         except Exception as e:
             print(f"Error writing report: {e}")

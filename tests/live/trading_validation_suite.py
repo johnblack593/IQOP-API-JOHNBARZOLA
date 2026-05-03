@@ -89,11 +89,11 @@ class TradingValidationSuite:
 
         # 4. GRUPO A: OPCIONES
         self.run_group_a()
-        self.report.build("tests/live/TRADING_VALIDATION_REPORT_A.md")
+        self.report.build("tests/live/reports/TRADING_VALIDATION_REPORT_A.md")
 
         # 5. GRUPO B: MARGEN
         self.run_group_b()
-        self.report.build("tests/live/TRADING_VALIDATION_REPORT_B.md")
+        self.report.build("tests/live/reports/TRADING_VALIDATION_REPORT_B.md")
 
         # 6. Finalización
         self.final_balance = self.api.get_balance()
