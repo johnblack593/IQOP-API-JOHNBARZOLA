@@ -96,15 +96,15 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
                 size = int(sp[1])
                 self.subscription_manager.subscribe_candle(active, size)
             for ac in self.subscribe_candle_all_size:
-                self.start_candles_all_size_stream(ac)
+                self.subscription_manager.subscribe_candle(ac, "all")
             for ac in self.subscribe_mood:
                 self.start_mood_stream(ac)
         else:
             for ac in self.subscribe_candle:
                 sp = ac.split(',')
-                self.start_candles_one_stream(sp[0], sp[1])
+                self.subscribe_candles(sp[0], sp[1])
             for ac in self.subscribe_candle_all_size:
-                self.start_candles_all_size_stream(ac)
+                self.subscribe_candles(ac, "all")
             for ac in self.subscribe_mood:
                 self.start_mood_stream(ac)
 
@@ -372,9 +372,9 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         return self.api.balance_id
 
     def get_balance(self):
-        balances_raw = self.get_balances()
-        if (balances_raw and ('msg' in balances_raw)):
-            for balance in balances_raw['msg']:
+        balances = self.get_balances()
+        if balances:
+            for balance in balances:
                 if (balance['id'] == self.api.balance_id):
                     return balance['amount']
         return 0
@@ -413,12 +413,7 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
             self.api.portfolio(Main_Name=Main_Name, name='portfolio.order-changed', instrument_type=ins)
 
     def stop_candles_stream(self, ACTIVE, size):
-        if (size == 'all'):
-            self.stop_candles_all_size_stream(ACTIVE)
-        elif (size in self.size):
-            self.stop_candles_one_stream(ACTIVE, size)
-        else:
-            get_logger(__name__).error('**error** start_candles_stream please input right size')
+        self.unsubscribe_candles(ACTIVE, size)
 
     def get_all_realtime_candles(self):
         return self.api.real_time_candles
@@ -668,7 +663,7 @@ class IQ_Option(OrdersMixin, PositionsMixin, StreamsMixin, ManagementMixin):
         full_type = self._MARGIN_TYPE_MAP.get(instrument_type.lower(), instrument_type)
         if (not full_type.startswith('marginal-')):
             full_type = f'marginal-{full_type}'
-        self.get_open_positions(instrument_type=full_type, timeout=5.0)
+        self.get_open_positions(instrument_type=full_type)
         instrument_data = self._get_instrument_data(full_type, active_id)
         if (not instrument_data):
             return 1

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iqoptionapi"
-version = "10.0.0"
+version = "9.3.636"
 description = "IQ Option API wrapper with market intelligence for trading robots"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -106,5 +106,5 @@ omit = [
 # Baseline: 55.47% — 2026-05-03 (unit tests only)
 # Integration tests run separately (job: integration-test)
 # fail_under activation: S6 — after indicators coverage added
-# fail_under = 70  ← descomentar en S6
+fail_under = 70
 show_missing = true

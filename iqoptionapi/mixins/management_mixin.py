@@ -187,9 +187,9 @@ class ManagementMixin:
         self._watchdog_thread.start()
 
     def _stop_heartbeat_watchdog(self):
-        if hasattr(self, '_watchdog_stop'):
+        if hasattr(self, '_watchdog_stop') and self._watchdog_stop:
             self._watchdog_stop.set()
-        if hasattr(self, '_watchdog_thread'):
+        if hasattr(self, '_watchdog_thread') and self._watchdog_thread:
             self._watchdog_thread.join(timeout=2.0)
         self._heartbeat_watchdog_active = False
 

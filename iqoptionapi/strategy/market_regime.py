@@ -24,7 +24,6 @@ class MarketRegime:
         candles = self._cache.get_candles(active_id, size, required + 10)
         if len(candles) < required:
             return -1.0
-        candles = list(reversed(candles))
         highs, lows, closes = [], [], []
         for c in candles:
             try:
@@ -98,7 +97,6 @@ class MarketRegime:
         candles = self._cache.get_candles(active_id, size, required + 10)
         if len(candles) < required:
             return "neutral"
-        candles = list(reversed(candles))
         highs, lows, closes = [], [], []
         for c in candles:
             try:

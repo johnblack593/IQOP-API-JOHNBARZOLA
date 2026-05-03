@@ -25,7 +25,7 @@ def instruments(api, message):
         itype = msg.get("type")
         get_logger(__name__).info("WS instruments-list-changed: type=%s", itype)
         
-        from iqoptionapi import constants
+        from iqoptionapi.core import constants
         
         for ins in msg.get("instruments", []):
             active_name = ins.get("name")

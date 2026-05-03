@@ -104,11 +104,11 @@ class SubscriptionManager:
                 action, active, size = item
                 try:
                     if action == "subscribe":
-                        self._api.subscribe_instruments_candles(active, size)
+                        self._api.subscribe(active, size)
                         with self._lock:
                             self._active_subs[(active, size)] = time.time()
                     elif action == "unsubscribe":
-                        self._api.unsubscribe_instruments_candles(active, size)
+                        self._api.unsubscribe(active, size)
                         with self._lock:
                             self._active_subs.pop((active, size), None)
                     elif action == "subscribe_positions":

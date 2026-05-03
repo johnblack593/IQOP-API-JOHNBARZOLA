@@ -23,7 +23,7 @@ class TestSubscriptionManager:
         time.sleep(2)
         
         # Verificamos que se hayan llamado a la API pero respetando el flujo
-        assert mock_api.subscribe_instruments_candles.call_count >= 1
+        assert mock_api.subscribe.call_count >= 1
         assert len(manager._active_subs) <= 10 # El límite de 15 es mayor que 10
         
         manager.stop()
